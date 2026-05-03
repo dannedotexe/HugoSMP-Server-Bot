@@ -23,14 +23,15 @@ const client = new Client({
 
 const TOKEN = process.env.DISCORD_TOKEN;
 
+// EINSTELLUNGEN
 const REQUIRED_INVITES = 8;
 const REWARD = '$1m on HugoSMP';
-
-// PRÜFE DIESE IDs NOCHMAL!
 const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_CHANNEL_ID = '1500479671031169144';
 const RULES_CHANNEL_ID = '1499135456133255239';
 
+// SICHERUNG: Account muss mindestens 24 Stunden alt sein
+const MIN_ACCOUNT_AGE = 1 * 24 * 60 * 60 * 1000; 
 const DATA_FILE = './data.json';
 
 // ───────────────── DATA MANAGEMENT ─────────────────
@@ -40,9 +41,7 @@ function loadData() {
     if (fs.existsSync(DATA_FILE)) {
       return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     }
-  } catch (err) {
-    console.log("Fehler beim Laden der data.json - erstelle neue Struktur.");
-  }
+  } catch (err) {}
   return { invites: {}, pending: {}, countedUsers: {}, usedByInviter: {} };
 }
 
@@ -59,7 +58,12 @@ function addInvite(inviterId, joinedUserId) {
     data.usedByInviter[inviterId] = [];
   }
 
-  // TEST-MODUS: Die Sperre für doppelte Personen ist hier DEAKTIVIERT, damit du testen kannst!
+  // SICHERUNG: Prüfen, ob dieser User für diesen Inviter schon mal gezählt wurde
+  if (data.usedByInviter[inviterId].includes(joinedUserId)) {
+    console.log(`❌ Invite von ${joinedUserId} für ${inviterId} abgelehnt (bereits genutzt).`);
+    return false;
+  }
+
   data.invites[inviterId] = (data.invites[inviterId] || 0) + 1;
   data.usedByInviter[inviterId].push(joinedUserId);
   
@@ -83,7 +87,7 @@ async function registerCommands(guild) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands.map(c => c.toJSON()) });
-  } catch (e) { console.log("Command Register Error"); }
+  } catch (e) {}
 }
 
 // ───────────────── PANEL BUILDER ─────────────────
@@ -116,8 +120,7 @@ async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
     invites.forEach(i => cachedInvites.set(i.code, { inviterId: i.inviter?.id || null, uses: i.uses || 0 }));
-    console.log(`Cache für ${guild.name} geladen.`);
-  } catch (e) { console.log("Invite Fetch Error"); }
+  } catch (e) {}
 }
 
 // ───────────────── EVENTS ─────────────────
@@ -131,8 +134,13 @@ client.once('ready', async () => {
 });
 
 client.on('guildMemberAdd', async member => {
-  console.log(`➡️ User beigetreten: ${member.user.tag}`);
   try {
+    // SICHERUNG: Account-Alter prüfen
+    if ((Date.now() - member.user.createdTimestamp) < MIN_ACCOUNT_AGE) {
+      console.log(`⚠️ User ${member.user.tag} ist zu jung, wird nicht gezählt.`);
+      return;
+    }
+
     const invites = await member.guild.invites.fetch();
     let inviterId = null;
 
@@ -143,16 +151,13 @@ client.on('guildMemberAdd', async member => {
       }
     });
 
-    // Cache erneuern
     invites.forEach(i => cachedInvites.set(i.code, { inviterId: i.inviter?.id, uses: i.uses || 0 }));
 
-    if (inviterId) {
+    if (inviterId && inviterId !== member.id) {
       const data = loadData();
       data.pending[member.id] = inviterId;
       saveData(data);
-      console.log(`📍 Inviter gefunden: <@${inviterId}> hat ${member.user.tag} eingeladen.`);
-    } else {
-      console.log(`❓ Konnte Inviter für ${member.user.tag} nicht bestimmen.`);
+      console.log(`📍 Pending Invite: ${member.user.tag} durch ${inviterId}`);
     }
   } catch (err) { console.error(err); }
 });
@@ -166,12 +171,12 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
   const verifiedNow = !oldMember.roles.cache.has(VERIFY_ROLE_ID) && newMember.roles.cache.has(VERIFY_ROLE_ID);
   
   if (verifiedNow) {
-    console.log(`⭐ Rolle erkannt für ${newMember.user.tag}. Zähle Invite für ${inviterId}...`);
-    addInvite(inviterId, newMember.id);
-    
+    const success = addInvite(inviterId, newMember.id);
+    if (success) {
+        console.log(`✅ Punkt vergeben an ${inviterId} für ${newMember.user.tag}`);
+    }
     delete data.pending[newMember.id];
     saveData(data);
-    console.log(`✅ Invite erfolgreich gespeichert.`);
   }
 });
 
@@ -187,7 +192,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'inviterewards') {
       const data = loadData();
       const count = data.invites[interaction.user.id] || 0;
-      return interaction.reply({ content: `📊 Aktueller Stand: **${count}/${REQUIRED_INVITES}** Invites.`, ephemeral: true });
+      return interaction.reply({ content: `📊 Dein Stand: **${count}/${REQUIRED_INVITES}**`, ephemeral: true });
     }
   }
 
@@ -195,16 +200,18 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.customId === 'gen_invite') {
     await interaction.deferReply({ ephemeral: true });
-    const channel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID);
-    const invite = await channel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
-    cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
-    return interaction.editReply(`✅ Link: https://discord.gg/${invite.code}`);
+    try {
+      const channel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID);
+      const invite = await channel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
+      cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
+      return interaction.editReply(`✅ Dein Link: https://discord.gg/${invite.code}`);
+    } catch (e) { return interaction.editReply('❌ Fehler beim Erstellen.'); }
   }
 
   if (interaction.customId === 'check_inv') {
     const data = loadData();
     const count = data.invites[interaction.user.id] || 0;
-    return interaction.reply({ content: `📊 Du hast **${count}/${REQUIRED_INVITES}** Invites gesammelt.`, ephemeral: true });
+    return interaction.reply({ content: `📊 Du hast **${count}/${REQUIRED_INVITES}** verifizierte Invites.`, ephemeral: true });
   }
 
   if (interaction.customId === 'claim') {
@@ -212,16 +219,17 @@ client.on('interactionCreate', async interaction => {
     const count = data.invites[interaction.user.id] || 0;
     
     if (count < REQUIRED_INVITES) {
-      return interaction.reply({ content: `❌ Du brauchst 8 Invites (du hast ${count}).`, ephemeral: true });
+      return interaction.reply({ content: `❌ Du brauchst 8 Invites (aktuell: ${count}).`, ephemeral: true });
     }
 
+    // Zähler zurücksetzen
     data.invites[interaction.user.id] = 0;
     saveData(data);
 
     const log = interaction.guild.channels.cache.get(REWARD_LOG_CHANNEL_ID);
-    if (log) log.send(`💰 **${interaction.user.tag}** hat die Belohnung geclaimt!`);
+    if (log) log.send(`💰 **${interaction.user.tag}** hat 1M geclaimt! (Counter auf 0 gesetzt)`);
     
-    return interaction.reply({ content: `✅ Erfolg! Dein Counter wurde auf 0 gesetzt.`, ephemeral: true });
+    return interaction.reply({ content: `✅ Erfolg! Dein Zähler wurde auf 0/8 zurückgesetzt.`, ephemeral: true });
   }
 });
 
