@@ -30,6 +30,7 @@ const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_CHANNEL_ID = '1500479671031169144';
 const RULES_CHANNEL_ID = '1499135456133255239';
 
+// SICHERHEIT: Account-Alter (1 Tag) und Datei
 const MIN_ACCOUNT_AGE = 1 * 24 * 60 * 60 * 1000; 
 const DATA_FILE = './data.json';
 
@@ -57,6 +58,7 @@ function addInvite(inviterId, joinedUserId) {
     data.usedByInviter[inviterId] = [];
   }
 
+  // SICHERUNG: Dieselbe Person zählt pro Inviter nur einmal (Anti-Farming)
   if (data.usedByInviter[inviterId].includes(joinedUserId)) {
     return false;
   }
@@ -132,6 +134,7 @@ client.once('ready', async () => {
 
 client.on('guildMemberAdd', async member => {
   try {
+    // SICHERUNG: Account muss mind. 1 Tag alt sein
     if ((Date.now() - member.user.createdTimestamp) < MIN_ACCOUNT_AGE) return;
 
     const invites = await member.guild.invites.fetch();
@@ -207,7 +210,7 @@ client.on('interactionCreate', async interaction => {
     const data = loadData();
     const count = data.invites[interaction.user.id] || 0;
     
-    // Geänderte Fehlermeldung auf deinen Wunsch
+    // HIER DIE GEÄNDERTE MELDUNG:
     if (count < REQUIRED_INVITES) {
       return interaction.reply({ 
         content: `❌ Du hast **${count}/${REQUIRED_INVITES}** Invites.`, 
@@ -215,6 +218,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
+    // Reset auf 0 passiert nur hier, wenn man 8 voll hat
     data.invites[interaction.user.id] = 0;
     saveData(data);
 
