@@ -26,11 +26,11 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const REQUIRED_INVITES = 8;
 const REWARD = '$1m on HugoSMP';
 
+// PRÜFE DIESE IDs NOCHMAL!
 const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_CHANNEL_ID = '1500479671031169144';
 const RULES_CHANNEL_ID = '1499135456133255239';
 
-const MIN_ACCOUNT_AGE = 1 * 24 * 60 * 60 * 1000; 
 const DATA_FILE = './data.json';
 
 // ───────────────── DATA MANAGEMENT ─────────────────
@@ -38,17 +38,12 @@ const DATA_FILE = './data.json';
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      const content = fs.readFileSync(DATA_FILE, 'utf8');
-      return JSON.parse(content);
+      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     }
-  } catch (err) {}
-  // Struktur erweitert um 'usedByInviter'
-  return { 
-    invites: {}, 
-    pending: {}, 
-    countedUsers: {},
-    usedByInviter: {} // Speichert: { inviterId: [userId1, userId2] }
-  };
+  } catch (err) {
+    console.log("Fehler beim Laden der data.json - erstelle neue Struktur.");
+  }
+  return { invites: {}, pending: {}, countedUsers: {}, usedByInviter: {} };
 }
 
 function saveData(data) {
@@ -57,58 +52,19 @@ function saveData(data) {
 
 // ───────────────── INVITE LOGIC ─────────────────
 
-function getInvites(userId) {
-  const data = loadData();
-  return data.invites[userId] || 0;
-}
-
 function addInvite(inviterId, joinedUserId) {
   const data = loadData();
   
-  // Initialisiere Tracker für diesen Inviter, falls nicht vorhanden
   if (!data.usedByInviter[inviterId]) {
     data.usedByInviter[inviterId] = [];
   }
 
-  // PRÜFUNG: Wurde dieser User schon mal von diesem Inviter benutzt?
-  if (data.usedByInviter[inviterId].includes(joinedUserId)) {
-    console.log(`Invite von ${joinedUserId} für ${inviterId} ignoriert (bereits früher genutzt).`);
-    return false; 
-  }
-
-  // Erhöhe Counter und füge User zur "Benutzt"-Liste hinzu
+  // TEST-MODUS: Die Sperre für doppelte Personen ist hier DEAKTIVIERT, damit du testen kannst!
   data.invites[inviterId] = (data.invites[inviterId] || 0) + 1;
   data.usedByInviter[inviterId].push(joinedUserId);
   
   saveData(data);
   return true;
-}
-
-function resetInvites(userId) {
-  const data = loadData();
-  data.invites[userId] = 0;
-  // Hinweis: data.usedByInviter[userId] wird NICHT gelöscht, 
-  // damit die Personen für immer "verbraucht" bleiben.
-  saveData(data);
-}
-
-// ───────────────── PENDING & COUNTED ─────────────────
-
-function setPending(memberId, inviterId) {
-  const data = loadData();
-  data.pending[memberId] = inviterId;
-  saveData(data);
-}
-
-function getPending(memberId) {
-  const data = loadData();
-  return data.pending[memberId];
-}
-
-function removePending(memberId) {
-  const data = loadData();
-  delete data.pending[memberId];
-  saveData(data);
 }
 
 // ───────────────── SLASH COMMANDS ─────────────────
@@ -118,7 +74,6 @@ const commands = [
     .setName('setupinviterewards')
     .setDescription('Sendet das Invite-Rewards Panel.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
   new SlashCommandBuilder()
     .setName('inviterewards')
     .setDescription('Zeigt deine Statistiken.')
@@ -127,11 +82,8 @@ const commands = [
 async function registerCommands(guild) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, guild.id),
-      { body: commands.map(c => c.toJSON()) }
-    );
-  } catch (error) {}
+    await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands.map(c => c.toJSON()) });
+  } catch (e) { console.log("Command Register Error"); }
 }
 
 // ───────────────── PANEL BUILDER ─────────────────
@@ -148,23 +100,9 @@ function buildPanel() {
     );
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('gen_invite')
-      .setLabel('Generate Invite')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('check_inv')
-      .setLabel('Check Invites')
-      .setEmoji('📊')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('claim')
-      .setLabel('Claim 1M')
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId('gen_invite').setLabel('Generate Invite').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('check_inv').setLabel('Check Invites').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('claim').setLabel('Claim 1M').setEmoji('💰').setStyle(ButtonStyle.Success)
   );
 
   return { embeds: [embed], components: [row] };
@@ -177,19 +115,15 @@ const cachedInvites = new Map();
 async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
-    invites.forEach(invite => {
-      cachedInvites.set(invite.code, {
-        inviterId: invite.inviter?.id || null,
-        uses: invite.uses || 0
-      });
-    });
-  } catch {}
+    invites.forEach(i => cachedInvites.set(i.code, { inviterId: i.inviter?.id || null, uses: i.uses || 0 }));
+    console.log(`Cache für ${guild.name} geladen.`);
+  } catch (e) { console.log("Invite Fetch Error"); }
 }
 
 // ───────────────── EVENTS ─────────────────
 
 client.once('ready', async () => {
-  console.log(`Bot ist online: ${client.user.tag}`);
+  console.log(`✅ Bot online: ${client.user.tag}`);
   for (const guild of client.guilds.cache.values()) {
     await registerCommands(guild);
     await cacheInvites(guild);
@@ -197,6 +131,7 @@ client.once('ready', async () => {
 });
 
 client.on('guildMemberAdd', async member => {
+  console.log(`➡️ User beigetreten: ${member.user.tag}`);
   try {
     const invites = await member.guild.invites.fetch();
     let inviterId = null;
@@ -208,37 +143,36 @@ client.on('guildMemberAdd', async member => {
       }
     });
 
-    invites.forEach(invite => {
-      cachedInvites.set(invite.code, {
-        inviterId: invite.inviter?.id,
-        uses: invite.uses || 0
-      });
-    });
+    // Cache erneuern
+    invites.forEach(i => cachedInvites.set(i.code, { inviterId: i.inviter?.id, uses: i.uses || 0 }));
 
-    if (!inviterId || inviterId === member.id) return;
-    if ((Date.now() - member.user.createdTimestamp) < MIN_ACCOUNT_AGE) return;
-
-    setPending(member.id, inviterId);
-  } catch (err) {
-    console.error(err);
-  }
+    if (inviterId) {
+      const data = loadData();
+      data.pending[member.id] = inviterId;
+      saveData(data);
+      console.log(`📍 Inviter gefunden: <@${inviterId}> hat ${member.user.tag} eingeladen.`);
+    } else {
+      console.log(`❓ Konnte Inviter für ${member.user.tag} nicht bestimmen.`);
+    }
+  } catch (err) { console.error(err); }
 });
 
 client.on('guildMemberUpdate', (oldMember, newMember) => {
-  const inviterId = getPending(newMember.id);
+  const data = loadData();
+  const inviterId = data.pending[newMember.id];
+  
   if (!inviterId) return;
 
   const verifiedNow = !oldMember.roles.cache.has(VERIFY_ROLE_ID) && newMember.roles.cache.has(VERIFY_ROLE_ID);
-  if (!verifiedNow) return;
-
-  // Versuche Invite hinzuzufügen (prüft auf Duplikate)
-  const success = addInvite(inviterId, newMember.id);
   
-  if (success) {
-    console.log(`Invite von ${newMember.user.tag} für ${inviterId} gezählt.`);
+  if (verifiedNow) {
+    console.log(`⭐ Rolle erkannt für ${newMember.user.tag}. Zähle Invite für ${inviterId}...`);
+    addInvite(inviterId, newMember.id);
+    
+    delete data.pending[newMember.id];
+    saveData(data);
+    console.log(`✅ Invite erfolgreich gespeichert.`);
   }
-  
-  removePending(newMember.id);
 });
 
 // ───────────────── INTERACTIONS ─────────────────
@@ -247,20 +181,13 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'setupinviterewards') {
       await interaction.deferReply({ ephemeral: true });
-      try {
-        await interaction.channel.send(buildPanel());
-        return interaction.editReply('✅ Panel erfolgreich gesendet.');
-      } catch (e) {
-        return interaction.editReply('❌ Fehler beim Senden.');
-      }
+      await interaction.channel.send(buildPanel());
+      return interaction.editReply('✅ Panel gesendet.');
     }
-
     if (interaction.commandName === 'inviterewards') {
-      const count = getInvites(interaction.user.id);
-      return interaction.reply({ 
-        content: `📊 Du hast aktuell **${count}/${REQUIRED_INVITES}** neue verifizierte Invites.`, 
-        ephemeral: true 
-      });
+      const data = loadData();
+      const count = data.invites[interaction.user.id] || 0;
+      return interaction.reply({ content: `📊 Aktueller Stand: **${count}/${REQUIRED_INVITES}** Invites.`, ephemeral: true });
     }
   }
 
@@ -269,40 +196,32 @@ client.on('interactionCreate', async interaction => {
   if (interaction.customId === 'gen_invite') {
     await interaction.deferReply({ ephemeral: true });
     const channel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID);
-    if (!channel) return interaction.editReply('❌ Rules Channel nicht gefunden.');
-
-    try {
-      const invite = await channel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
-      cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
-      return interaction.editReply(`✅ Dein Link: https://discord.gg/${invite.code}`);
-    } catch (e) {
-      return interaction.editReply('❌ Fehler beim Erstellen des Invites.');
-    }
+    const invite = await channel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
+    cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
+    return interaction.editReply(`✅ Link: https://discord.gg/${invite.code}`);
   }
 
   if (interaction.customId === 'check_inv') {
-    const count = getInvites(interaction.user.id);
-    return interaction.reply({ 
-      content: `📊 Du hast **${count}/${REQUIRED_INVITES}** verifizierte Invites für die nächste Belohnung.`, 
-      ephemeral: true 
-    });
+    const data = loadData();
+    const count = data.invites[interaction.user.id] || 0;
+    return interaction.reply({ content: `📊 Du hast **${count}/${REQUIRED_INVITES}** Invites gesammelt.`, ephemeral: true });
   }
 
   if (interaction.customId === 'claim') {
-    const count = getInvites(interaction.user.id);
+    const data = loadData();
+    const count = data.invites[interaction.user.id] || 0;
+    
     if (count < REQUIRED_INVITES) {
-      return interaction.reply({ 
-        content: `❌ Dir fehlen noch ${REQUIRED_INVITES - count} neue verifizierte Invites.`, 
-        ephemeral: true 
-      });
+      return interaction.reply({ content: `❌ Du brauchst 8 Invites (du hast ${count}).`, ephemeral: true });
     }
 
-    resetInvites(interaction.user.id);
+    data.invites[interaction.user.id] = 0;
+    saveData(data);
+
     const log = interaction.guild.channels.cache.get(REWARD_LOG_CHANNEL_ID);
-    if (log) {
-      await log.send(`💰 **${interaction.user.tag}** hat **${REWARD}** geclaimt! Sein Counter wurde auf 0 zurückgesetzt.`);
-    }
-    return interaction.reply({ content: `✅ Belohnung geclaimt! Dein Zähler steht wieder bei 0/8. Beachte: Du kannst dieselben Freunde nicht zweimal einladen!`, ephemeral: true });
+    if (log) log.send(`💰 **${interaction.user.tag}** hat die Belohnung geclaimt!`);
+    
+    return interaction.reply({ content: `✅ Erfolg! Dein Counter wurde auf 0 gesetzt.`, ephemeral: true });
   }
 });
 
