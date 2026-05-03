@@ -30,7 +30,8 @@ const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_CHANNEL_ID = '1500479671031169144';
 const RULES_CHANNEL_ID = '1499135456133255239';
 
-const MIN_ACCOUNT_AGE = 7 * 24 * 60 * 60 * 1000;
+// GEÄNDERT: Von 7 Tage auf 1 Tag
+const MIN_ACCOUNT_AGE = 1 * 24 * 60 * 60 * 1000; 
 const DATA_FILE = './data.json';
 
 // ───────────────── DATA MANAGEMENT ─────────────────
@@ -226,12 +227,9 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
 // ───────────────── INTERACTIONS ─────────────────
 
 client.on('interactionCreate', async interaction => {
-  // Slash Commands
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'setupinviterewards') {
-      // Wichtig: Sofort antworten, damit "Anwendung reagiert nicht" verschwindet
       await interaction.deferReply({ ephemeral: true });
-      
       try {
         await interaction.channel.send(buildPanel());
         return interaction.editReply('✅ Panel erfolgreich gesendet.');
@@ -249,7 +247,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // Buttons
   if (!interaction.isButton()) return;
 
   if (interaction.customId === 'gen_invite') {
