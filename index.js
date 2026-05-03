@@ -158,7 +158,7 @@ client.once('ready', async () => {
     try {
       await registerCommands(guild.id);
       await cacheInvites(guild);
-    } catch (e) { console.error(`Guild error (${guild.name}):`, e.message); }
+    } catch (e) { console.error(`Guild error (${guild.name}):`, e); }
   }
 });
 
