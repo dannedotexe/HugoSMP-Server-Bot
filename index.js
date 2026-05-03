@@ -1,7 +1,7 @@
 const {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
-  REST, Routes, SlashCommandBuilder
+  REST, Routes, SlashCommandBuilder, PermissionFlagsBits
 } = require('discord.js');
 const fs = require('fs');
 
@@ -42,7 +42,7 @@ function resetInvites(userId) {
   saveData(data);
 }
 
-// ── Invite cache (code -> { inviterId, uses }) ────────────────────
+// ── Invite cache ──────────────────────────────────────────────────
 const cachedInvites = new Map();
 
 async function cacheInvites(guild) {
@@ -55,16 +55,44 @@ async function cacheInvites(guild) {
   });
 }
 
+// ── Panel builder ─────────────────────────────────────────────────
+function buildPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x1e1f22)
+    .setTitle('🎁 Invite Rewards')
+    .setDescription(
+      'Invite your friends to the server to earn rewards!\n\n' +
+      `**Goal:** ${REQUIRED_INVITES} Verified Invites\n` +
+      `**Reward:** ${REWARD}\n\n` +
+      'Click the buttons below to generate your personal link or check your progress.'
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('gen_invite').setLabel('Generate Invite Link').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('check_inv').setLabel('Check Invites').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('claim').setLabel(`Claim ${REWARD}`).setEmoji('💰').setStyle(ButtonStyle.Success),
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 // ── Ready ─────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   const commands = [
     new SlashCommandBuilder()
+      .setName('setupinviterewards')
+      .setDescription('Send the invite rewards panel to this channel. (Admin only)')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName('inviterewards')
       .setDescription('Invite your friends to earn rewards!')
-      .toJSON()
+      .toJSON(),
   ];
+
   for (const guild of client.guilds.cache.values()) {
     try {
       await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
@@ -81,7 +109,7 @@ client.on('inviteCreate', inv => {
 });
 client.on('inviteDelete', inv => cachedInvites.delete(inv.code));
 
-// ── Member joins: detect which invite was used ────────────────────
+// ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
   try {
     const newInvites = await member.guild.invites.fetch();
@@ -94,7 +122,6 @@ client.on('guildMemberAdd', async member => {
       }
     });
 
-    // Update cache
     newInvites.forEach(inv => {
       cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
     });
@@ -102,14 +129,14 @@ client.on('guildMemberAdd', async member => {
     if (usedInviterId) {
       if (!client.pendingVerify) client.pendingVerify = new Map();
       client.pendingVerify.set(member.id, usedInviterId);
-      console.log(`📥 ${member.user.tag} joined via ${usedInviterId} (pending verify)`);
+      console.log(`📥 ${member.user.tag} joined via ${usedInviterId}`);
     }
   } catch (e) {
     console.error('guildMemberAdd error:', e.message);
   }
 });
 
-// ── Member gets verified (role added) → count invite ─────────────
+// ── Member gets verified (role added) ────────────────────────────
 client.on('guildMemberUpdate', (oldMember, newMember) => {
   if (!client.pendingVerify) return;
   const inviterId = client.pendingVerify.get(newMember.id);
@@ -118,29 +145,28 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
   if (addedRoles.size > 0) {
     addInvite(inviterId);
     client.pendingVerify.delete(newMember.id);
-    console.log(`✅ Counted invite for ${inviterId}: now ${getInvites(inviterId)} total`);
+    console.log(`✅ Invite counted for ${inviterId}: now ${getInvites(inviterId)} total`);
   }
 });
 
 // ── Interactions ──────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
 
-  if (interaction.isChatInputCommand() && interaction.commandName === 'inviterewards') {
-    const embed = new EmbedBuilder()
-      .setColor(0x1e1f22)
-      .setTitle('🎁 Invite Rewards')
-      .setDescription(
-        'Invite your friends to the server to earn rewards!\n\n' +
-        `**Goal:** ${REQUIRED_INVITES} Verified Invites\n` +
-        `**Reward:** ${REWARD}\n\n` +
-        'Click the buttons below to generate your personal link or check your progress.'
-      );
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('gen_invite').setLabel('Generate Invite Link').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('check_inv').setLabel('Check Invites').setEmoji('📊').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('claim').setLabel(`Claim ${REWARD}`).setEmoji('💰').setStyle(ButtonStyle.Success),
-    );
-    return interaction.reply({ embeds: [embed], components: [row] });
+  if (interaction.isChatInputCommand()) {
+
+    // /setupinviterewards
+    if (interaction.commandName === 'setupinviterewards') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
+      }
+      await interaction.channel.send(buildPanel());
+      return interaction.reply({ content: '✅ Invite Rewards panel sent!', ephemeral: true });
+    }
+
+    // /inviterewards
+    if (interaction.commandName === 'inviterewards') {
+      return interaction.reply(buildPanel());
+    }
   }
 
   if (interaction.isButton()) {
