@@ -8,8 +8,7 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType
+  PermissionFlagsBits
 } = require('discord.js');
 
 const fs = require('fs');
@@ -29,6 +28,7 @@ const REWARD = '$1m on HugoSMP';
 
 const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_CHANNEL_ID = '1500479671031169144';
+const RULES_CHANNEL_ID = '1499135456133255239';
 
 const MIN_ACCOUNT_AGE =
   7 * 24 * 60 * 60 * 1000;
@@ -36,7 +36,7 @@ const MIN_ACCOUNT_AGE =
 const DATA_FILE = './data.json';
 
 
-// ───────────────────────── DATA ─────────────────────────
+// ───────────────── DATA ─────────────────
 
 function loadData() {
   try {
@@ -62,7 +62,7 @@ function saveData(data) {
 }
 
 
-// ───────────────────────── INVITES ─────────────────────────
+// ───────────────── INVITES ─────────────────
 
 function addInvite(userId) {
   const data = loadData();
@@ -88,7 +88,7 @@ function resetInvites(userId) {
 }
 
 
-// ───────────────────────── PENDING ─────────────────────────
+// ───────────────── PENDING ─────────────────
 
 function setPending(memberId, inviterId) {
   const data = loadData();
@@ -114,7 +114,7 @@ function removePending(memberId) {
 }
 
 
-// ───────────────────────── COUNTED ─────────────────────────
+// ───────────────── COUNTED ─────────────────
 
 function isAlreadyCounted(userId) {
   const data = loadData();
@@ -125,14 +125,13 @@ function isAlreadyCounted(userId) {
 function markAsCounted(userId) {
   const data = loadData();
 
-  data.countedUsers[userId] =
-    true;
+  data.countedUsers[userId] = true;
 
   saveData(data);
 }
 
 
-// ───────────────────────── COMMANDS ─────────────────────────
+// ───────────────── COMMANDS ─────────────────
 
 const commands = [
 
@@ -189,7 +188,7 @@ async function registerCommands(
 }
 
 
-// ───────────────────────── PANEL ─────────────────────────
+// ───────────────── PANEL ─────────────────
 
 function buildPanel() {
 
@@ -236,8 +235,7 @@ function buildPanel() {
           )
 
           .setStyle(
-            ButtonStyle
-              .Secondary
+            ButtonStyle.Secondary
           ),
 
 
@@ -256,8 +254,7 @@ function buildPanel() {
           )
 
           .setStyle(
-            ButtonStyle
-              .Secondary
+            ButtonStyle.Secondary
           ),
 
 
@@ -276,8 +273,7 @@ function buildPanel() {
           )
 
           .setStyle(
-            ButtonStyle
-              .Success
+            ButtonStyle.Success
           )
       );
 
@@ -293,7 +289,7 @@ function buildPanel() {
 }
 
 
-// ───────────────────────── CACHE ─────────────────────────
+// ───────────────── CACHE ─────────────────
 
 const cachedInvites =
   new Map();
@@ -310,21 +306,18 @@ async function cacheInvites(
 
 
   invites.forEach(
-    inv => {
+    invite => {
 
       cachedInvites.set(
 
-        inv.code,
+        invite.code,
 
         {
           inviterId:
-            inv
-              .inviter
-              ?.id || null,
+            invite.inviter?.id || null,
 
           uses:
-            inv
-              .uses || 0
+            invite.uses || 0
         }
       );
     }
@@ -332,7 +325,7 @@ async function cacheInvites(
 }
 
 
-// ───────────────────────── READY ─────────────────────────
+// ───────────────── READY ─────────────────
 
 client.once(
   'ready',
@@ -348,10 +341,7 @@ client.once(
 
       const guild
 
-      of client
-        .guilds
-        .cache
-        .values()
+      of client.guilds.cache.values()
 
     ) {
 
@@ -367,7 +357,7 @@ client.once(
 );
 
 
-// ───────────────────────── NEW GUILD ─────────────────────────
+// ───────────────── NEW GUILD ─────────────────
 
 client.on(
   'guildCreate',
@@ -385,7 +375,7 @@ client.on(
 );
 
 
-// ───────────────────────── INVITE EVENTS ─────────────────────────
+// ───────────────── INVITE EVENTS ─────────────────
 
 client.on(
   'inviteCreate',
@@ -398,13 +388,10 @@ client.on(
 
       {
         inviterId:
-          invite
-            .inviter
-            ?.id,
+          invite.inviter?.id,
 
         uses:
-          invite
-            .uses || 0
+          invite.uses || 0
       }
     );
   }
@@ -423,7 +410,7 @@ client.on(
 );
 
 
-// ───────────────────────── JOIN ─────────────────────────
+// ───────────────── JOIN ─────────────────
 
 client.on(
   'guildMemberAdd',
@@ -433,47 +420,34 @@ client.on(
     try {
 
       const invites =
-
-        await member
-          .guild
-          .invites
-          .fetch();
-
+        await member.guild.invites.fetch();
 
       let inviterId =
         null;
 
 
       invites.forEach(
-
         invite => {
 
           const cached =
-
             cachedInvites.get(
               invite.code
             );
 
-
           if (
-
             cached &&
-
             invite.uses >
             cached.uses
-
           ) {
 
             inviterId =
-              cached
-                .inviterId;
+              cached.inviterId;
           }
         }
       );
 
 
       invites.forEach(
-
         invite => {
 
           cachedInvites.set(
@@ -482,27 +456,20 @@ client.on(
 
             {
               inviterId:
-                invite
-                  .inviter
-                  ?.id,
+                invite.inviter?.id,
 
               uses:
-                invite
-                  .uses || 0
+                invite.uses || 0
             }
           );
         }
       );
 
 
-      if (
-        !inviterId
-      ) return;
-
+      if (!inviterId) return;
 
       if (
-        inviterId ===
-        member.id
+        inviterId === member.id
       ) return;
 
 
@@ -519,48 +486,30 @@ client.on(
       if (
         age <
         MIN_ACCOUNT_AGE
-      ) {
-
-        console.log(
-          'Blocked alt account'
-        );
-
-        return;
-      }
+      ) return;
 
 
       if (
-
         isAlreadyCounted(
           member.id
         )
-
       ) return;
 
 
       setPending(
-
         member.id,
-
         inviterId
-      );
-
-
-      console.log(
-        `${member.user.tag} pending verification`
       );
 
     } catch (err) {
 
-      console.error(
-        err
-      );
+      console.error(err);
     }
   }
 );
 
 
-// ───────────────────────── VERIFY ─────────────────────────
+// ───────────────── VERIFY ─────────────────
 
 client.on(
   'guildMemberUpdate',
@@ -571,11 +520,9 @@ client.on(
   ) => {
 
     const inviterId =
-
       getPending(
         newMember.id
       );
-
 
     if (
       !inviterId
@@ -584,21 +531,15 @@ client.on(
 
     const verifiedNow =
 
-      !oldMember
-        .roles
-        .cache
-        .has(
-          VERIFY_ROLE_ID
-        )
+      !oldMember.roles.cache.has(
+        VERIFY_ROLE_ID
+      )
 
       &&
 
-      newMember
-        .roles
-        .cache
-        .has(
-          VERIFY_ROLE_ID
-        );
+      newMember.roles.cache.has(
+        VERIFY_ROLE_ID
+      );
 
 
     if (
@@ -617,26 +558,19 @@ client.on(
     removePending(
       newMember.id
     );
-
-
-    console.log(
-      `Invite counted for ${inviterId}`
-    );
   }
 );
 
 
-// ───────────────────────── INTERACTIONS ─────────────────────────
+// ───────────────── INTERACTIONS ─────────────────
 
 client.on(
   'interactionCreate',
 
   async interaction => {
 
-    // Slash commands
     if (
-      interaction
-        .isChatInputCommand()
+      interaction.isChatInputCommand()
     ) {
 
       if (
@@ -644,21 +578,18 @@ client.on(
         'setupinviterewards'
       ) {
 
-        await interaction
-          .channel
-          .send(
-            buildPanel()
-          );
+        await interaction.channel.send(
+          buildPanel()
+        );
 
-        return interaction
-          .reply({
+        return interaction.reply({
 
-            content:
-              '✅ Panel sent.',
+          content:
+            '✅ Panel sent.',
 
-            ephemeral:
-              true
-          });
+          ephemeral:
+            true
+        });
       }
 
 
@@ -667,80 +598,54 @@ client.on(
         'inviterewards'
       ) {
 
-        return interaction
-          .reply(
-            buildPanel()
-          );
+        return interaction.reply(
+          buildPanel()
+        );
       }
     }
 
 
-    // Buttons
     if (
-      !interaction
-        .isButton()
+      !interaction.isButton()
     ) return;
 
 
-    // Generate
+    // Generate Invite
     if (
       interaction.customId ===
       'gen_invite'
     ) {
 
-      await interaction
-        .deferReply({
-          ephemeral:
-            true
-        });
+      await interaction.deferReply({
+        ephemeral:
+          true
+      });
 
 
       const channel =
 
-        interaction
-          .guild
-          .channels
-          .cache
-          .find(
-
-            c =>
-
-              c.type ===
-              ChannelType
-                .GuildText
-
-              &&
-
-              c.permissionsFor(
-                client.user
-              )
-                .has(
-                  PermissionFlagsBits
-                    .CreateInstantInvite
-                )
-          );
+        interaction.guild.channels.cache.get(
+          RULES_CHANNEL_ID
+        );
 
 
       if (
         !channel
       ) {
 
-        return interaction
-          .editReply(
-            '❌ No invite permissions.'
-          );
+        return interaction.editReply(
+          '❌ Rules channel not found.'
+        );
       }
 
 
       const invite =
+        await channel.createInvite({
 
-        await channel
-          .createInvite({
-
-            maxAge: 0,
-            maxUses: 0,
-            unique: true
-          });
+          maxAge: 0,
+          maxUses: 0,
+          unique: true
+        });
 
 
       cachedInvites.set(
@@ -749,20 +654,17 @@ client.on(
 
         {
           inviterId:
-            interaction
-              .user
-              .id,
+            interaction.user.id,
 
           uses: 0
         }
       );
 
 
-      return interaction
-        .editReply(
+      return interaction.editReply(
 
-          `✅ https://discord.gg/${invite.code}`
-        );
+        `✅ https://discord.gg/${invite.code}`
+      );
     }
 
 
@@ -773,23 +675,19 @@ client.on(
     ) {
 
       const count =
-
         getInvites(
-          interaction
-            .user
-            .id
+          interaction.user.id
         );
 
 
-      return interaction
-        .reply({
+      return interaction.reply({
 
-          content:
-            `📊 ${count}/${REQUIRED_INVITES} invites`,
+        content:
+          `📊 ${count}/${REQUIRED_INVITES} invites`,
 
-          ephemeral:
-            true
-        });
+        ephemeral:
+          true
+      });
     }
 
 
@@ -800,11 +698,8 @@ client.on(
     ) {
 
       const count =
-
         getInvites(
-          interaction
-            .user
-            .id
+          interaction.user.id
         );
 
 
@@ -813,34 +708,27 @@ client.on(
         REQUIRED_INVITES
       ) {
 
-        return interaction
-          .reply({
+        return interaction.reply({
 
-            content:
-              `❌ You need ${REQUIRED_INVITES - count} more invites.`,
+          content:
+            `❌ You need ${REQUIRED_INVITES - count} more invites.`,
 
-            ephemeral:
-              true
-          });
+          ephemeral:
+            true
+        });
       }
 
 
       resetInvites(
-        interaction
-          .user
-          .id
+        interaction.user.id
       );
 
 
       const log =
 
-        interaction
-          .guild
-          .channels
-          .cache
-          .get(
-            REWARD_LOG_CHANNEL_ID
-          );
+        interaction.guild.channels.cache.get(
+          REWARD_LOG_CHANNEL_ID
+        );
 
 
       if (
@@ -854,20 +742,17 @@ client.on(
       }
 
 
-      return interaction
-        .reply({
+      return interaction.reply({
 
-          content:
-            `✅ Reward claimed!`,
+        content:
+          `✅ Reward claimed!`,
 
-          ephemeral:
-            true
-        });
+        ephemeral:
+          true
+      });
     }
   }
 );
 
 
-client.login(
-  TOKEN
-);
+client.login(TOKEN);
