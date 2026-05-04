@@ -496,18 +496,120 @@ if (interaction.customId === 'claim') {
       );
 
 
+  await ticket.send({if (interaction.customId === 'claim') {
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const count = getInvites(interaction.user.id);
+
+  if (count < REQUIRED_INVITES) {
+    return interaction.editReply(
+      `❌ You need ${REQUIRED_INVITES - count} more invites.`
+    );
+  }
+
+  const ticketName =
+    `1m-${interaction.user.username}`
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]/g, '');
+
+  const existingTicket =
+    interaction.guild.channels.cache.find(
+      c => c.name === ticketName
+    );
+
+  if (existingTicket) {
+    return interaction.editReply(
+      `❌ You already have an open ticket: <#${existingTicket.id}>`
+    );
+  }
+
+  const ticket =
+    await interaction.guild.channels.create({
+
+      name: ticketName,
+
+      type: 0,
+
+      parent: '1499147835528974356',
+
+      permissionOverwrites: [
+
+        {
+          id: interaction.guild.id,
+          deny: ['ViewChannel']
+        },
+
+        {
+          id: interaction.user.id,
+          allow: [
+            'ViewChannel',
+            'SendMessages',
+            'ReadMessageHistory'
+          ]
+        },
+
+        {
+          id: '1499146219946250241',
+          allow: [
+            'ViewChannel',
+            'SendMessages',
+            'ReadMessageHistory'
+          ]
+        },
+
+        {
+          id: '1499159379902074880',
+          allow: [
+            'ViewChannel',
+            'SendMessages',
+            'ReadMessageHistory'
+          ]
+        }
+      ]
+    });
+
+
+  const closeRow =
+    new ActionRowBuilder()
+      .addComponents(
+
+        new ButtonBuilder()
+          .setCustomId('close_ticket')
+          .setLabel('Close Ticket')
+          .setEmoji('🔒')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+
   await ticket.send({
 
     content:
-
       `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
+      `<@&1499146219946250241> <@&1499159379902074880>`,
 
-      `<@&1499146219946250241> <@&1499159379902074880>\n\n` +
+    components: [closeRow]
+  });
 
-      `Please process this reward.`,
 
-    components:
-      [closeRow]
+  resetInvites(interaction.user.id);
+
+
+  const log =
+    interaction.guild.channels.cache.get(
+      REWARD_LOG_ID
+    );
+
+  if (log) {
+    await log.send(
+      `💰 ${interaction.user.tag} claimed ${REWARD}\n🎫 <#${ticket.id}>`
+    );
+  }
+
+  return interaction.editReply(
+    `✅ Ticket created: <#${ticket.id}>`
+  );
+}
   });
 
 
