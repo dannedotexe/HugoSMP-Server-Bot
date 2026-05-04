@@ -381,15 +381,12 @@ if (interaction.customId === 'claim') {
 
     `1m-${interaction.user.username}`
       .toLowerCase()
-
-
       .replace(
         /[^a-z0-9-_]/g,
         ''
       );
 
 
-  // Already exists?
   const existingTicket =
 
     interaction.guild.channels.cache.find(
@@ -412,7 +409,6 @@ if (interaction.customId === 'claim') {
   }
 
 
-  // Create ticket
   const ticket =
 
     await interaction.guild.channels.create({
@@ -474,56 +470,52 @@ if (interaction.customId === 'claim') {
     });
 
 
-  // Reset only after success
+  const closeRow =
+
+    new ActionRowBuilder()
+
+      .addComponents(
+
+        new ButtonBuilder()
+
+          .setCustomId(
+            'close_ticket'
+          )
+
+          .setLabel(
+            'Close Ticket'
+          )
+
+          .setEmoji(
+            '🔒'
+          )
+
+          .setStyle(
+            ButtonStyle.Danger
+          )
+      );
+
+
+  await ticket.send({
+
+    content:
+
+      `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
+
+      `<@&1499146219946250241> <@&1499159379902074880>\n\n` +
+
+      `Please process this reward.`,
+
+    components:
+      [closeRow]
+  });
+
+
   resetInvites(
     interaction.user.id
   );
 
 
-  // Ticket message
-  await ticket.send(const closeRow =
-
-  new ActionRowBuilder()
-
-    .addComponents(
-
-      new ButtonBuilder()
-
-        .setCustomId(
-          'close_ticket'
-        )
-
-        .setLabel(
-          'Close Ticket'
-        )
-
-        .setEmoji(
-          '🔒'
-        )
-
-        .setStyle(
-          ButtonStyle.Danger
-        )
-    );
-
-
-await ticket.send({
-
-  content:
-
-    `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
-
-    `<@&1499146219946250241> <@&1499159379902074880>\n\n` +
-
-    `Please process this reward.`,
-
-  components:
-    [closeRow]
-});
-  );
-
-
-  // Reward logs
   const log =
 
     interaction.guild.channels.cache.get(
@@ -541,6 +533,14 @@ await ticket.send({
 
       `🎫 Ticket: <#${ticket.id}>`
     );
+  }
+
+
+  return interaction.editReply(
+
+    `✅ Ticket created: <#${ticket.id}>`
+  );
+}
   }
 
 
