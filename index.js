@@ -44,6 +44,12 @@ function getInvites(userId) {
   return loadData().invites[userId] ?? 0;
 }
 
+function setInvites(userId, amount) {
+  const data = loadData();
+  data.invites[userId] = Math.max(0, amount);
+  saveData(data);
+}
+
 function addInvite(userId) {
   const data = loadData();
   data.invites[userId] = (data.invites[userId] ?? 0) + 1;
@@ -52,9 +58,7 @@ function addInvite(userId) {
 }
 
 function resetInvites(userId) {
-  const data = loadData();
-  data.invites[userId] = 0;
-  saveData(data);
+  setInvites(userId, 0);
 }
 
 function hasBeenCounted(memberId) {
@@ -109,6 +113,13 @@ async function registerCommands(guildId) {
     new SlashCommandBuilder()
       .setName('leaderboard')
       .setDescription('Zeigt die Top-Einlader.')
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('setinvites')
+      .setDescription('Setzt manuell die Einladungen für einen User.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(opt => opt.setName('user').setDescription('Der User').setRequired(true))
+      .addIntegerOption(opt => opt.setName('amount').setDescription('Anzahl der Invites').setRequired(true).setMinValue(0))
       .toJSON(),
   ];
   await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
@@ -182,6 +193,12 @@ client.on('interactionCreate', async interaction => {
       const lb = sorted.map(([id, count], i) => `${i + 1}. <@${id}> — **${count}**`).join('\n') || 'Keine Daten.';
       await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(lb).setColor(0x1e1f22)] });
     }
+    if (interaction.commandName === 'setinvites') {
+      const target = interaction.options.getUser('user');
+      const amount = interaction.options.getInteger('amount');
+      setInvites(target.id, amount);
+      await interaction.reply({ content: `✅ Die Invites von **${target.tag}** wurden auf **${amount}** gesetzt.`, ephemeral: true });
+    }
   }
 
   if (interaction.isButton()) {
@@ -215,7 +232,6 @@ client.on('interactionCreate', async interaction => {
           ],
         });
 
-        // DEIN SPEZIFISCHER TEXT
         const ticketText = 
           `✨ ⎯⎯  DEIN REWARD EINLÖSEN  ⎯⎯ ✨\n\n` +
           `💎 **Belohnungswert:** 1.000.000 $\n\n` +
