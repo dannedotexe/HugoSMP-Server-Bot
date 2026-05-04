@@ -351,28 +351,172 @@ client.on('interactionCreate', async interaction => {
     }
 
     // 💰 Claim Reward
-    if (interaction.customId === 'claim') {
-      await interaction.deferReply({ ephemeral: true });
-      const count = getInvites(interaction.user.id);
+if (interaction.customId === 'claim') {
 
-      if (count < REQUIRED_INVITES) {
-        return interaction.editReply(
-          `❌ You don't have enough verified invites yet!\n\n` +
-          `**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`
-        );
-      }
+  await interaction.deferReply({
+    ephemeral: true
+  });
 
-      resetInvites(interaction.user.id);
+  const count =
+    getInvites(
+      interaction.user.id
+    );
 
-      await interaction.editReply(
-        `✅ **Reward claimed!** You will receive: **${REWARD}**\nAn admin will deliver your reward shortly!`
+
+  if (
+    count <
+    REQUIRED_INVITES
+  ) {
+
+    return interaction.editReply(
+
+      `❌ You don't have enough verified invites yet!\n\n` +
+
+      `**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`
+    );
+  }
+
+
+  const ticketName =
+
+    `1m-${interaction.user.username}`
+      .toLowerCase()
+
+
+      .replace(
+        /[^a-z0-9-_]/g,
+        ''
       );
 
-      const log = interaction.guild.channels.cache.get(REWARD_LOG_ID);
-      if (log) {
-        log.send(`💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!`);
-      }
-    }
+
+  // Already exists?
+  const existingTicket =
+
+    interaction.guild.channels.cache.find(
+
+      c =>
+
+        c.name ===
+        ticketName
+    );
+
+
+  if (
+    existingTicket
+  ) {
+
+    return interaction.editReply(
+
+      `❌ You already have an open ticket: <#${existingTicket.id}>`
+    );
+  }
+
+
+  // Create ticket
+  const ticket =
+
+    await interaction.guild.channels.create({
+
+      name:
+        ticketName,
+
+      type: 0,
+
+      parent:
+        '1499147835528974356',
+
+      permissionOverwrites: [
+
+        {
+          id:
+            interaction.guild.id,
+
+          deny:
+            ['ViewChannel']
+        },
+
+        {
+          id:
+            interaction.user.id,
+
+          allow:
+            [
+              'ViewChannel',
+              'SendMessages',
+              'ReadMessageHistory'
+            ]
+        },
+
+        {
+          id:
+            '1499146219946250241',
+
+          allow:
+            [
+              'ViewChannel',
+              'SendMessages',
+              'ReadMessageHistory'
+            ]
+        },
+
+        {
+          id:
+            '1499159379902074880',
+
+          allow:
+            [
+              'ViewChannel',
+              'SendMessages',
+              'ReadMessageHistory'
+            ]
+        }
+      ]
+    });
+
+
+  // Reset only after success
+  resetInvites(
+    interaction.user.id
+  );
+
+
+  // Ticket message
+  await ticket.send(
+
+    `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
+
+    `<@&1499146219946250241> <@&1499159379902074880>\n\n` +
+
+    `Please process this reward.`
+  );
+
+
+  // Reward logs
+  const log =
+
+    interaction.guild.channels.cache.get(
+      REWARD_LOG_ID
+    );
+
+
+  if (
+    log
+  ) {
+
+    await log.send(
+
+      `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
+
+      `🎫 Ticket: <#${ticket.id}>`
+    );
+  }
+
+
+  return interaction.editReply(
+
+    `✅ Ticket created: <#${ticket.id}>`
+  );
+}
   }
 });
 
