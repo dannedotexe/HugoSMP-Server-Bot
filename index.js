@@ -17,11 +17,11 @@ const client = new Client({
 const TOKEN              = process.env.DISCORD_TOKEN;
 const REQUIRED_INVITES   = 8;
 const REWARD             = '$1m on HugoSMP';
-const DATA_FILE          = './data.json';
+const DATA_FILE          = '/app/data/data.json';
 const VERIFY_ROLE_ID     = '1499149656951885956';
 const REWARD_LOG_ID      = '1500479671031169144';
 const MIN_ACCOUNT_AGE_MS = 1 * 24 * 60 * 60 * 1000;
-const RULES_CHANNEL_ID   = '1499135456133255239'; // FIX 5: Rules channel for invites
+const RULES_CHANNEL_ID   = '1499135456133255239';
 
 const TICKET_CATEGORY_ID = '1499147835528974356';
 const ADMIN_ROLE_1       = '1499146219946250241';
@@ -34,13 +34,17 @@ function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     const initial = { invites: {}, counted: [], pending: {} };
+    fs.mkdirSync('/app/data', { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
     return initial;
   } catch (e) { return { invites: {}, counted: [], pending: {} }; }
 }
 
 function saveData(data) {
-  try { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); } catch (e) {}
+  try {
+    fs.mkdirSync('/app/data', { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (e) { console.error('saveData error:', e.message); }
 }
 
 function getInvites(userId) { return loadData().invites[userId] ?? 0; }
@@ -73,7 +77,6 @@ function markAsCounted(memberId) {
   saveData(data);
 }
 
-// FIX 1: hasBeenCounted helper
 function hasBeenCounted(memberId) {
   return loadData().counted?.includes(memberId) ?? false;
 }
@@ -157,7 +160,6 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isButton()) {
     if (interaction.customId === 'gen_invite') {
-      // FIX 5: Use rules channel instead of current channel
       const rulesChannel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID)
         ?? interaction.guild.channels.cache.find(c => c.name === 'rules')
         ?? interaction.channel;
@@ -237,7 +239,6 @@ client.once('ready', async () => {
   }
 });
 
-// FIX 6: guildCreate — register commands on new servers
 client.on('guildCreate', async guild => {
   await registerCommands(guild.id);
   await cacheInvites(guild);
@@ -246,23 +247,14 @@ client.on('guildCreate', async guild => {
 
 client.on('guildMemberAdd', async m => {
   const age = Date.now() - m.user.createdTimestamp;
-  if (age < MIN_ACCOUNT_AGE_MS) return; // FIX: Alt protection
-
-  // FIX 1: Double-count protection
-  if (hasBeenCounted(m.id)) {
-    console.log(`🔁 Already counted: ${m.user.tag}`);
-    return;
-  }
+  if (age < MIN_ACCOUNT_AGE_MS) return;
+  if (hasBeenCounted(m.id)) return;
 
   const invs = await m.guild.invites.fetch();
   invs.forEach(inv => {
     const c = cachedInvites.get(inv.code);
     if (c && inv.uses > c.uses) {
-      // FIX 2: Self-invite protection
-      if (c.inviterId === m.id) {
-        console.log(`🚫 Self-invite blocked: ${m.user.tag}`);
-        return;
-      }
+      if (c.inviterId === m.id) return;
       setPending(m.id, c.inviterId);
     }
     cachedInvites.set(inv.code, { inviterId: inv.inviter?.id, uses: inv.uses });
@@ -274,22 +266,10 @@ client.on('guildMemberUpdate', async (o, n) => {
     const data = loadData();
     const inviterId = data.pending[n.id];
     if (inviterId) {
-      const total = addInvite(inviterId);
+      addInvite(inviterId);
       markAsCounted(n.id);
       delete data.pending[n.id];
       saveData(data);
-
-      // FIX 4: DM notification to inviter
-      try {
-        const inviter = await n.guild.members.fetch(inviterId);
-        await inviter.send(
-          `🎉 **${n.user.tag}** just verified on **${n.guild.name}**!\n\n` +
-          `You now have **${total}/${REQUIRED_INVITES}** verified invites.\n` +
-          (total >= REQUIRED_INVITES
-            ? `✅ You can now claim your reward **${REWARD}**!`
-            : `⏳ **${REQUIRED_INVITES - total}** more to claim your million!`)
-        );
-      } catch (e) { console.log(`⚠️ Could not DM inviter: ${e.message}`); }
     }
   }
 });
