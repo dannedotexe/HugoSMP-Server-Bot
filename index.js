@@ -26,6 +26,8 @@ const TICKET_CATEGORY_ID = '1499147835528974356';
 const ADMIN_ROLE_1       = '1499146219946250241';
 const ADMIN_ROLE_2       = '1499159379902074880';
 
+const EMBED_COLOR_VIOLET = '#b10de7'; // Deine gewünschte Hex-Farbe
+
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
   try {
@@ -46,6 +48,14 @@ function setInvites(userId, amount) {
   const data = loadData();
   data.invites[userId] = Math.max(0, amount);
   saveData(data);
+}
+
+function removeInvites(userId, amount) {
+  const data = loadData();
+  const current = data.invites[userId] ?? 0;
+  data.invites[userId] = Math.max(0, current - amount);
+  saveData(data);
+  return data.invites[userId];
 }
 
 function addInvite(userId) {
@@ -95,18 +105,33 @@ async function registerCommands(guildId) {
   } catch (e) { console.error("Registrierungsfehler:", e); }
 }
 
+// ── Panel builder ─────────────────────────────────────────────────
+function buildPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(EMBED_COLOR_VIOLET)
+    .setTitle('🎁 Invite Rewards')
+    .setDescription(
+      `Invite your friends to the server to earn rewards!\n\n` +
+      `**Goal:** ${REQUIRED_INVITES} Verified Invites\n` +
+      `**Reward:** ${REWARD}\n\n` +
+      `⚠️ **WICHTIG:** Damit deine Invites gezählt werden, **MUSST** du den Link verwenden, der über den Button unten generiert wird!`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('gen_invite').setLabel('Generate Invite Link').setEmoji('🔗').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('check_inv').setLabel('Check Invites').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('claim').setLabel(`Claim ${REWARD}`).setEmoji('💰').setStyle(ButtonStyle.Success)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 // ── Interaction Handler ───────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'setupinviterewards') {
-      const embed = new EmbedBuilder().setColor(0x1e1f22).setTitle('🎁 Invite Rewards').setDescription(`Lade Freunde ein für **${REWARD}**!\nZiel: ${REQUIRED_INVITES} Invites.`);
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('gen_invite').setLabel('Link erstellen').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('check_inv').setLabel('Status prüfen').setEmoji('📊').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('claim').setLabel(`Claim ${REWARD}`).setEmoji('💰').setStyle(ButtonStyle.Success)
-      );
       await interaction.reply({ content: 'Panel gesendet!', ephemeral: true });
-      await interaction.channel.send({ embeds: [embed], components: [row] });
+      await interaction.channel.send(buildPanel());
     }
 
     if (interaction.commandName === 'setinvites') {
@@ -120,21 +145,21 @@ client.on('interactionCreate', async interaction => {
         const data = loadData();
         const sorted = Object.entries(data.invites).sort(([,a],[,b]) => b-a).slice(0,10);
         const text = sorted.map(([id, c], i) => `${i+1}. <@${id}>: ${c}`).join('\n') || 'Keine Daten';
-        await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(0x1e1f22)] });
+        await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(EMBED_COLOR_VIOLET)] });
     }
   }
 
   if (interaction.isButton()) {
     if (interaction.customId === 'gen_invite') {
       const inv = await interaction.channel.createInvite({ maxAge: 0, unique: true });
-      await interaction.reply({ content: `Dein Link: ${inv.url}`, ephemeral: true });
+      await interaction.reply({ content: `Hier ist dein persönlicher Link: ${inv.url}\nTeile diesen Link mit deinen Freunden!`, ephemeral: true });
     }
     if (interaction.customId === 'check_inv') {
-      await interaction.reply({ content: `Du hast aktuell **${getInvites(interaction.user.id)}** Invites.`, ephemeral: true });
+      await interaction.reply({ content: `Du hast aktuell **${getInvites(interaction.user.id)}** verifizierte Invites.`, ephemeral: true });
     }
     if (interaction.customId === 'claim') {
-      const count = getInvites(interaction.user.id);
-      if (count < REQUIRED_INVITES) return interaction.reply({ content: `❌ Du brauchst ${REQUIRED_INVITES} Invites (Du hast ${count}).`, ephemeral: true });
+      const currentInvites = getInvites(interaction.user.id);
+      if (currentInvites < REQUIRED_INVITES) return interaction.reply({ content: `❌ Du brauchst ${REQUIRED_INVITES} Invites (Du hast ${currentInvites}).`, ephemeral: true });
 
       try {
         const ticket = await interaction.guild.channels.create({
@@ -154,39 +179,39 @@ client.on('interactionCreate', async interaction => {
         const ticketEmbed = new EmbedBuilder()
           .setTitle('✨ ⎯⎯  DEIN REWARD EINLÖSEN  ⎯⎯ ✨')
           .setDescription(`💎 **Belohnungswert:** 1.000.000 $\n\n🧮 **KURZRECHNUNG:**\nReward (1 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (25 Stück)\n\n🛠 **DEINE AUFGABE:**\n↳ Order Ingame erstellen (Menge laut Rechnung)\n↳ Preis pro Stück: 1$ \n↳ Steuern: Gehen auf unseren Nacken! \n\n📩 **SCHREIB UNS:**\n• Ingame-Name: ________________\n• Status: "Order ist reingestellt worden!"`)
-          .setColor(0x00FF00)
+          .setColor(EMBED_COLOR_VIOLET) // HIER IST DIE NEUE FARBE
           .setTimestamp();
 
         await ticket.send({ content: `<@&${ADMIN_ROLE_1}> <@&${ADMIN_ROLE_2}> | <@${interaction.user.id}>`, embeds: [ticketEmbed], components: [row] });
         
-        // VERSCHÖNERTER LOG-EINTRAG
         const logChannel = interaction.guild.channels.cache.get(REWARD_LOG_ID);
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
+            .setColor(EMBED_COLOR_VIOLET)
             .setTitle('💰 Reward Claimed')
-            .setDescription(`**${interaction.user.username}** (@${interaction.user.tag}) hat **${REWARD}** beansprucht!`)
+            .setDescription(`**${interaction.user.username}** hat seinen Reward beansprucht!`)
             .addFields(
-              { name: '👤 User', value: `<@${interaction.user.id}>`, inline: true },
-              { name: '📊 Invites', value: `\`${count} verifizierte Invites\``, inline: true },
+              { name: '📊 Abgezogen', value: `\`${REQUIRED_INVITES} Invites\``, inline: true },
+              { name: '📉 Restguthaben', value: `\`${currentInvites - REQUIRED_INVITES} Invites\``, inline: true },
               { name: '🎫 Ticket', value: `\`#${ticket.name}\``, inline: true }
             )
-            .setTimestamp()
-            .setThumbnail(interaction.user.displayAvatarURL());
-
+            .setTimestamp();
           logChannel.send({ embeds: [logEmbed] });
         }
 
-        setInvites(interaction.user.id, 0);
-        await interaction.reply({ content: `✅ Ticket erstellt: ${ticket}`, ephemeral: true });
-
+        // ZIEHT 8 AB
+        removeInvites(interaction.user.id, REQUIRED_INVITES);
+        
+        await interaction.reply({ content: `✅ Ticket erstellt: ${ticket}\nDir wurden ${REQUIRED_INVITES} Invites abgezogen.`, ephemeral: true });
       } catch (e) {
         console.error(e);
         await interaction.reply({ content: '❌ Fehler beim Erstellen des Tickets.', ephemeral: true });
       }
     }
     if (interaction.customId === 'close_ticket') {
-      if (!interaction.member.roles.cache.has(ADMIN_ROLE_1) && !interaction.member.roles.cache.has(ADMIN_ROLE_2)) return interaction.reply({ content: '❌ Nur Admins können das Ticket schließen.', ephemeral: true });
+      const hasPerm = interaction.member.roles.cache.has(ADMIN_ROLE_1) || interaction.member.roles.cache.has(ADMIN_ROLE_2);
+      if (!hasPerm) return interaction.reply({ content: '❌ Nur Admins können das Ticket schließen.', ephemeral: true });
+
       await interaction.reply('🔒 Ticket wird in 5 Sekunden geschlossen...');
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
@@ -196,7 +221,10 @@ client.on('interactionCreate', async interaction => {
 // ── Events ────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} ist bereit.`);
-  for (const guild of client.guilds.cache.values()) await registerCommands(guild.id);
+  for (const guild of client.guilds.cache.values()) {
+      await registerCommands(guild.id);
+      await cacheInvites(guild);
+  }
 });
 
 client.on('guildMemberAdd', async m => {
