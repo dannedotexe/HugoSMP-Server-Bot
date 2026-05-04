@@ -481,13 +481,45 @@ if (interaction.customId === 'claim') {
 
 
   // Ticket message
-  await ticket.send(
+  await ticket.send(const closeRow =
+
+  new ActionRowBuilder()
+
+    .addComponents(
+
+      new ButtonBuilder()
+
+        .setCustomId(
+          'close_ticket'
+        )
+
+        .setLabel(
+          'Close Ticket'
+        )
+
+        .setEmoji(
+          '🔒'
+        )
+
+        .setStyle(
+          ButtonStyle.Danger
+        )
+    );
+
+
+await ticket.send({
+
+  content:
 
     `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
 
     `<@&1499146219946250241> <@&1499159379902074880>\n\n` +
 
-    `Please process this reward.`
+    `Please process this reward.`,
+
+  components:
+    [closeRow]
+});
   );
 
 
