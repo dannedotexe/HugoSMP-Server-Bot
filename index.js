@@ -42,15 +42,17 @@ function saveData(data) {
   try {
     fs.mkdirSync('/app/data', { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (e) { console.error('saveData error:', e); }
+  } catch (e) { console.error('saveData error:', e.message); }
 }
 
 function getInvites(userId) { return loadData().invites[userId] ?? 0; }
+
 function setInvites(userId, amount) {
   const data = loadData();
   data.invites[userId] = Math.max(0, amount);
   saveData(data);
 }
+
 function removeInvites(userId, amount) {
   const data = loadData();
   const current = data.invites[userId] ?? 0;
@@ -58,21 +60,25 @@ function removeInvites(userId, amount) {
   saveData(data);
   return data.invites[userId];
 }
+
 function addInvite(userId) {
   const data = loadData();
   data.invites[userId] = (data.invites[userId] ?? 0) + 1;
   saveData(data);
   return data.invites[userId];
 }
+
 function markAsCounted(memberId) {
   const data = loadData();
   if (!data.counted) data.counted = [];
   if (!data.counted.includes(memberId)) data.counted.push(memberId);
   saveData(data);
 }
+
 function hasBeenCounted(memberId) {
   return loadData().counted?.includes(memberId) ?? false;
 }
+
 function setPending(memberId, inviterId) {
   const data = loadData();
   if (!data.pending) data.pending = {};
@@ -80,7 +86,7 @@ function setPending(memberId, inviterId) {
   saveData(data);
 }
 
-// ── Cache ─────────────────────────────────────────────────────────
+// ── Invite cache ──────────────────────────────────────────────────
 const cachedInvites = new Map();
 
 async function cacheInvites(guild) {
@@ -90,7 +96,23 @@ async function cacheInvites(guild) {
   } catch (e) {}
 }
 
-// ── Panel ─────────────────────────────────────────────────────────
+// ── Register commands ─────────────────────────────────────────────
+async function registerCommands(guildId) {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  const commands = [
+    new SlashCommandBuilder().setName('setupinviterewards').setDescription('Panel senden').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
+    new SlashCommandBuilder().setName('leaderboard').setDescription('Top Einlader').toJSON(),
+    new SlashCommandBuilder().setName('setinvites').setDescription('Invites setzen').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addIntegerOption(o => o.setName('amount').setDescription('Anzahl').setRequired(true)).toJSON()
+  ];
+  try {
+    await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
+    console.log(`✅ Commands registriert für ${guildId}`);
+  } catch (e) { console.error("Registrierungsfehler:", e); }
+}
+
+// ── Panel builder ─────────────────────────────────────────────────
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR_VIOLET)
@@ -109,41 +131,25 @@ function buildPanel() {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Commands Register ─────────────────────────────────────────────
-async function registerCommands(guildId) {
-  const rest = new REST({ version: '10' }).setToken(TOKEN);
-  const commands = [
-    new SlashCommandBuilder().setName('setupinviterewards').setDescription('Panel senden').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON(),
-    new SlashCommandBuilder().setName('leaderboard').setDescription('Top Einlader').toJSON(),
-    new SlashCommandBuilder().setName('setinvites').setDescription('Invites setzen').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
-      .addIntegerOption(o => o.setName('amount').setDescription('Anzahl').setRequired(true)).toJSON()
-  ];
-  try {
-    await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
-  } catch (e) {}
-}
-
 // ── Interaction Handler ───────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'setupinviterewards') {
-        await interaction.reply({ content: '✅ Panel wird gesendet...', ephemeral: true });
+        await interaction.reply({ content: 'Panel gesendet!', ephemeral: true });
         await interaction.channel.send(buildPanel());
-        return;
       }
       if (interaction.commandName === 'setinvites') {
         const target = interaction.options.getUser('user');
         const amount = interaction.options.getInteger('amount');
         setInvites(target.id, amount);
-        return interaction.reply({ content: `✅ Invites von **${target.username}** auf **${amount}** gesetzt.`, ephemeral: true });
+        await interaction.reply({ content: `✅ Invites von **${target.username}** auf **${amount}** gesetzt.`, ephemeral: true });
       }
       if (interaction.commandName === 'leaderboard') {
         const data = loadData();
         const sorted = Object.entries(data.invites).sort(([,a],[,b]) => b-a).slice(0,10);
         const text = sorted.map(([id, c], i) => `${i+1}. <@${id}>: ${c}`).join('\n') || 'Keine Daten';
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(EMBED_COLOR_VIOLET)] });
+        await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(EMBED_COLOR_VIOLET)] });
       }
     }
 
@@ -151,28 +157,84 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId === 'gen_invite') {
         const rulesChannel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID) ?? interaction.channel;
         const inv = await rulesChannel.createInvite({ maxAge: 0, unique: true });
-        return interaction.reply({ content: `Hier ist dein persönlicher Link: ${inv.url}\nTeile diesen Link mit deinen Freunden!`, ephemeral: true });
+        await interaction.reply({ content: `Hier ist dein persönlicher Link: ${inv.url}\nTeile diesen Link mit deinen Freunden!`, ephemeral: true });
       }
+
       if (interaction.customId === 'check_inv') {
-        return interaction.reply({ content: `Du hast aktuell **${getInvites(interaction.user.id)}** verifizierte Invites.`, ephemeral: true });
+        await interaction.reply({ content: `Du hast aktuell **${getInvites(interaction.user.id)}** verifizierte Invites.`, ephemeral: true });
       }
-      // Claim und Close Ticket kannst du später wieder einbauen, wenn du willst
+
+      // ==================== CLAIM BUTTON ====================
+      if (interaction.customId === 'claim') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const currentInvites = getInvites(interaction.user.id);
+        if (currentInvites < REQUIRED_INVITES) {
+          return interaction.editReply({ content: `❌ Du brauchst ${REQUIRED_INVITES} Invites (Du hast ${currentInvites}).` });
+        }
+
+        const ticket = await interaction.guild.channels.create({
+          name: `1m-${interaction.user.username}`,
+          type: ChannelType.GuildText,
+          parent: TICKET_CATEGORY_ID,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+            { id: ADMIN_ROLE_1, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+            { id: ADMIN_ROLE_2, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+          ]
+        });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+        );
+
+        const ticketEmbed = new EmbedBuilder()
+          .setTitle('✨ DEIN 1M REWARD EINLÖSEN ✨')
+          .setDescription(`💎 **Belohnung:** 1.000.000 $\n\nSchreibe bitte:\n• Dein Ingame-Name\n• Bestätigung der Order`)
+          .setColor(EMBED_COLOR_VIOLET)
+          .setTimestamp();
+
+        await ticket.send({
+          content: `<@&${ADMIN_ROLE_1}> <@&${ADMIN_ROLE_2}> | <@${interaction.user.id}>`,
+          embeds: [ticketEmbed],
+          components: [row]
+        });
+
+        removeInvites(interaction.user.id, REQUIRED_INVITES);
+
+        await interaction.editReply({ content: `✅ Ticket erstellt: ${ticket}` });
+      }
+
+      if (interaction.customId === 'close_ticket') {
+        const hasPerm = interaction.member.roles.cache.has(ADMIN_ROLE_1) || interaction.member.roles.cache.has(ADMIN_ROLE_2);
+        if (!hasPerm) return interaction.reply({ content: '❌ Nur Admins können das Ticket schließen.', ephemeral: true });
+        await interaction.reply('🔒 Ticket wird in 5 Sekunden geschlossen...');
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+      }
     }
   } catch (error) {
     console.error('Interaction Error:', error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '❌ Ein Fehler ist aufgetreten.', ephemeral: true }).catch(() => {});
+    if (interaction.deferred || interaction.replied) {
+      interaction.editReply({ content: '❌ Ein Fehler ist aufgetreten.' }).catch(() => {});
+    } else {
+      interaction.reply({ content: '❌ Ein Fehler ist aufgetreten.', ephemeral: true }).catch(() => {});
     }
   }
 });
 
-// ── Ready & Events ────────────────────────────────────────────────
+// ── Events ────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} ist bereit.`);
   for (const guild of client.guilds.cache.values()) {
     await registerCommands(guild.id);
     await cacheInvites(guild);
   }
+});
+
+client.on('guildCreate', async guild => {
+  await registerCommands(guild.id);
+  await cacheInvites(guild);
 });
 
 client.login(TOKEN);
