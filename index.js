@@ -71,10 +71,6 @@ function addInvite(userId) {
   return data.invites[userId];
 }
 
-function resetInvites(userId) {
-  setInvites(userId, 0);
-}
-
 function hasBeenCounted(memberId) {
   return loadData().counted?.includes(memberId) ?? false;
 }
@@ -405,7 +401,6 @@ client.on('interactionCreate', async interaction => {
 
   if (!interaction.isButton()) return;
 
-  // 🔗 Generate Invite Link
   if (interaction.customId === 'gen_invite') {
     await interaction.deferReply({ ephemeral: true });
 
@@ -436,7 +431,6 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // 📊 Check Invites
   if (interaction.customId === 'check_inv') {
     await interaction.deferReply({ ephemeral: true });
 
@@ -448,7 +442,6 @@ client.on('interactionCreate', async interaction => {
     );
   }
 
-  // 💰 Claim Reward
   if (interaction.customId === 'claim') {
     await interaction.deferReply({ ephemeral: true });
 
@@ -519,23 +512,25 @@ client.on('interactionCreate', async interaction => {
       components: [closeRow]
     });
 
-    resetInvites(interaction.user.id);
+    setInvites(interaction.user.id, count - REQUIRED_INVITES);
+
+    const remaining = count - REQUIRED_INVITES;
 
     const log = interaction.guild.channels.cache.get(REWARD_LOG_ID);
 
     if (log) {
       await log.send(
         `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
-        `🎫 Ticket: <#${ticket.id}>`
+        `🎫 Ticket: <#${ticket.id}>\n` +
+        `📊 Remaining invites: **${remaining}**`
       );
     }
 
     return interaction.editReply(
-      `✅ Ticket created: <#${ticket.id}>`
+      `✅ Ticket created: <#${ticket.id}>\n📊 Remaining invites: **${remaining}**`
     );
   }
 
-  // 🔒 Close Ticket
   if (interaction.customId === 'close_ticket') {
     const isStaff = STAFF_ROLE_IDS.some(roleId =>
       interaction.member.roles.cache.has(roleId)
