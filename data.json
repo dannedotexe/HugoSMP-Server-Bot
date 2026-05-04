@@ -1,6 +1,5 @@
 {
   "invites": {},
-  "pending": {},
-  "countedUsers": {},
-  "usedByInviter": {}
+  "counted": [],
+  "pending": {}
 }
