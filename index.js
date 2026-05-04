@@ -21,12 +21,13 @@ const DATA_FILE          = './data.json';
 const VERIFY_ROLE_ID     = '1499149656951885956';
 const REWARD_LOG_ID      = '1500479671031169144';
 const MIN_ACCOUNT_AGE_MS = 1 * 24 * 60 * 60 * 1000;
+const RULES_CHANNEL_ID   = '1499135456133255239'; // FIX 5: Rules channel for invites
 
 const TICKET_CATEGORY_ID = '1499147835528974356';
 const ADMIN_ROLE_1       = '1499146219946250241';
 const ADMIN_ROLE_2       = '1499159379902074880';
 
-const EMBED_COLOR_VIOLET = '#b10de7'; // Deine gewünschte Hex-Farbe
+const EMBED_COLOR_VIOLET = '#b10de7';
 
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
@@ -70,6 +71,11 @@ function markAsCounted(memberId) {
   if (!data.counted) data.counted = [];
   if (!data.counted.includes(memberId)) data.counted.push(memberId);
   saveData(data);
+}
+
+// FIX 1: hasBeenCounted helper
+function hasBeenCounted(memberId) {
+  return loadData().counted?.includes(memberId) ?? false;
 }
 
 function setPending(memberId, inviterId) {
@@ -142,21 +148,27 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'leaderboard') {
-        const data = loadData();
-        const sorted = Object.entries(data.invites).sort(([,a],[,b]) => b-a).slice(0,10);
-        const text = sorted.map(([id, c], i) => `${i+1}. <@${id}>: ${c}`).join('\n') || 'Keine Daten';
-        await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(EMBED_COLOR_VIOLET)] });
+      const data = loadData();
+      const sorted = Object.entries(data.invites).sort(([,a],[,b]) => b-a).slice(0,10);
+      const text = sorted.map(([id, c], i) => `${i+1}. <@${id}>: ${c}`).join('\n') || 'Keine Daten';
+      await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text).setColor(EMBED_COLOR_VIOLET)] });
     }
   }
 
   if (interaction.isButton()) {
     if (interaction.customId === 'gen_invite') {
-      const inv = await interaction.channel.createInvite({ maxAge: 0, unique: true });
+      // FIX 5: Use rules channel instead of current channel
+      const rulesChannel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID)
+        ?? interaction.guild.channels.cache.find(c => c.name === 'rules')
+        ?? interaction.channel;
+      const inv = await rulesChannel.createInvite({ maxAge: 0, unique: true });
       await interaction.reply({ content: `Hier ist dein persönlicher Link: ${inv.url}\nTeile diesen Link mit deinen Freunden!`, ephemeral: true });
     }
+
     if (interaction.customId === 'check_inv') {
       await interaction.reply({ content: `Du hast aktuell **${getInvites(interaction.user.id)}** verifizierte Invites.`, ephemeral: true });
     }
+
     if (interaction.customId === 'claim') {
       const currentInvites = getInvites(interaction.user.id);
       if (currentInvites < REQUIRED_INVITES) return interaction.reply({ content: `❌ Du brauchst ${REQUIRED_INVITES} Invites (Du hast ${currentInvites}).`, ephemeral: true });
@@ -175,15 +187,15 @@ client.on('interactionCreate', async interaction => {
         });
 
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger));
-        
+
         const ticketEmbed = new EmbedBuilder()
           .setTitle('✨ ⎯⎯  DEIN REWARD EINLÖSEN  ⎯⎯ ✨')
           .setDescription(`💎 **Belohnungswert:** 1.000.000 $\n\n🧮 **KURZRECHNUNG:**\nReward (1 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (25 Stück)\n\n🛠 **DEINE AUFGABE:**\n↳ Order Ingame erstellen (Menge laut Rechnung)\n↳ Preis pro Stück: 1$ \n↳ Steuern: Gehen auf unseren Nacken! \n\n📩 **SCHREIB UNS:**\n• Ingame-Name: ________________\n• Status: "Order ist reingestellt worden!"`)
-          .setColor(EMBED_COLOR_VIOLET) // HIER IST DIE NEUE FARBE
+          .setColor(EMBED_COLOR_VIOLET)
           .setTimestamp();
 
         await ticket.send({ content: `<@&${ADMIN_ROLE_1}> <@&${ADMIN_ROLE_2}> | <@${interaction.user.id}>`, embeds: [ticketEmbed], components: [row] });
-        
+
         const logChannel = interaction.guild.channels.cache.get(REWARD_LOG_ID);
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
@@ -199,19 +211,17 @@ client.on('interactionCreate', async interaction => {
           logChannel.send({ embeds: [logEmbed] });
         }
 
-        // ZIEHT 8 AB
         removeInvites(interaction.user.id, REQUIRED_INVITES);
-        
         await interaction.reply({ content: `✅ Ticket erstellt: ${ticket}\nDir wurden ${REQUIRED_INVITES} Invites abgezogen.`, ephemeral: true });
       } catch (e) {
         console.error(e);
         await interaction.reply({ content: '❌ Fehler beim Erstellen des Tickets.', ephemeral: true });
       }
     }
+
     if (interaction.customId === 'close_ticket') {
       const hasPerm = interaction.member.roles.cache.has(ADMIN_ROLE_1) || interaction.member.roles.cache.has(ADMIN_ROLE_2);
       if (!hasPerm) return interaction.reply({ content: '❌ Nur Admins können das Ticket schließen.', ephemeral: true });
-
       await interaction.reply('🔒 Ticket wird in 5 Sekunden geschlossen...');
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
@@ -222,18 +232,39 @@ client.on('interactionCreate', async interaction => {
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} ist bereit.`);
   for (const guild of client.guilds.cache.values()) {
-      await registerCommands(guild.id);
-      await cacheInvites(guild);
+    await registerCommands(guild.id);
+    await cacheInvites(guild);
   }
+});
+
+// FIX 6: guildCreate — register commands on new servers
+client.on('guildCreate', async guild => {
+  await registerCommands(guild.id);
+  await cacheInvites(guild);
+  console.log(`✅ Neuer Server: ${guild.name}`);
 });
 
 client.on('guildMemberAdd', async m => {
   const age = Date.now() - m.user.createdTimestamp;
-  if (age < MIN_ACCOUNT_AGE_MS) return;
+  if (age < MIN_ACCOUNT_AGE_MS) return; // FIX: Alt protection
+
+  // FIX 1: Double-count protection
+  if (hasBeenCounted(m.id)) {
+    console.log(`🔁 Already counted: ${m.user.tag}`);
+    return;
+  }
+
   const invs = await m.guild.invites.fetch();
   invs.forEach(inv => {
     const c = cachedInvites.get(inv.code);
-    if (c && inv.uses > c.uses) setPending(m.id, c.inviterId);
+    if (c && inv.uses > c.uses) {
+      // FIX 2: Self-invite protection
+      if (c.inviterId === m.id) {
+        console.log(`🚫 Self-invite blocked: ${m.user.tag}`);
+        return;
+      }
+      setPending(m.id, c.inviterId);
+    }
     cachedInvites.set(inv.code, { inviterId: inv.inviter?.id, uses: inv.uses });
   });
 });
@@ -243,10 +274,22 @@ client.on('guildMemberUpdate', async (o, n) => {
     const data = loadData();
     const inviterId = data.pending[n.id];
     if (inviterId) {
-      addInvite(inviterId);
+      const total = addInvite(inviterId);
       markAsCounted(n.id);
       delete data.pending[n.id];
       saveData(data);
+
+      // FIX 4: DM notification to inviter
+      try {
+        const inviter = await n.guild.members.fetch(inviterId);
+        await inviter.send(
+          `🎉 **${n.user.tag}** just verified on **${n.guild.name}**!\n\n` +
+          `You now have **${total}/${REQUIRED_INVITES}** verified invites.\n` +
+          (total >= REQUIRED_INVITES
+            ? `✅ You can now claim your reward **${REWARD}**!`
+            : `⏳ **${REQUIRED_INVITES - total}** more to claim your million!`)
+        );
+      } catch (e) { console.log(`⚠️ Could not DM inviter: ${e.message}`); }
     }
   }
 });
