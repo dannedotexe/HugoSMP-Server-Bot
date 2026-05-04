@@ -248,7 +248,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         `You now have **${total}/${REQUIRED_INVITES}** verified invites.\n` +
         (total >= REQUIRED_INVITES
           ? `✅ You can now claim your reward **${REWARD}**!`
-          : `⏳ **${REQUIRED_INVITES - total}** more to go!`)
+          : `⏳ **${REQUIRED_INVITES - total}** more to claim youre million!`)
       );
     } catch (e) {
       console.log(`⚠️ Could not DM inviter ${inviterId}: ${e.message}`);
