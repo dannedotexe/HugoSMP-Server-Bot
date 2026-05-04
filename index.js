@@ -58,10 +58,10 @@ function resetInvites(userId) {
   setInvites(userId, 0);
 }
 
-// Already counted members (double-count protection)
 function hasBeenCounted(memberId) {
   return loadData().counted?.includes(memberId) ?? false;
 }
+
 function markAsCounted(memberId) {
   const data = loadData();
   if (!data.counted) data.counted = [];
@@ -69,16 +69,17 @@ function markAsCounted(memberId) {
   saveData(data);
 }
 
-// Persistent pendingVerify
 function setPending(memberId, inviterId) {
   const data = loadData();
   if (!data.pending) data.pending = {};
   data.pending[memberId] = inviterId;
   saveData(data);
 }
+
 function getPending(memberId) {
   return loadData().pending?.[memberId] ?? null;
 }
+
 function removePending(memberId) {
   const data = loadData();
   if (data.pending) delete data.pending[memberId];
@@ -127,7 +128,6 @@ async function registerCommands(guildId) {
       .toJSON(),
   ];
   await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
-  console.log(`✅ Commands registered for guild ${guildId}`);
 }
 
 // ── Panel builder ─────────────────────────────────────────────────
@@ -151,7 +151,7 @@ function buildPanel() {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Ready ─────────────────────────────────────────────────────────
+// ── Events ────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   for (const guild of client.guilds.cache.values()) {
@@ -162,69 +162,43 @@ client.once('ready', async () => {
   }
 });
 
-// Auto-register on new server
 client.on('guildCreate', async guild => {
   try {
     await registerCommands(guild.id);
     await cacheInvites(guild);
-    console.log(`✅ Joined new guild: ${guild.name}`);
   } catch (e) { console.error('guildCreate error:', e.message); }
 });
 
 client.on('inviteCreate', inv => {
   cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
 });
+
 client.on('inviteDelete', inv => cachedInvites.delete(inv.code));
 
-// ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
   try {
-    // Alt protection
     const accountAge = Date.now() - member.user.createdTimestamp;
-    if (accountAge < MIN_ACCOUNT_AGE_MS) {
-      console.log(`🚫 Alt blocked: ${member.user.tag} (${Math.floor(accountAge / 3600000)}h old)`);
-      return;
-    }
-
-    // Double-count protection
-    if (hasBeenCounted(member.id)) {
-      console.log(`🔁 Already counted: ${member.user.tag} — skipping`);
-      return;
-    }
+    if (accountAge < MIN_ACCOUNT_AGE_MS) return;
+    if (hasBeenCounted(member.id)) return;
 
     const newInvites = await member.guild.invites.fetch();
     let usedInviterId = null;
-    let usedCode = null;
 
     newInvites.forEach(inv => {
       const cached = cachedInvites.get(inv.code);
-      if (cached && inv.uses > cached.uses) {
-        usedInviterId = cached.inviterId;
-        usedCode = inv.code;
-      }
+      if (cached && inv.uses > cached.uses) usedInviterId = cached.inviterId;
     });
 
-    // Update cache
     newInvites.forEach(inv => {
       cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
     });
 
-    // Self-invite protection
-    if (usedInviterId === member.id) {
-      console.log(`🚫 Self-invite blocked: ${member.user.tag}`);
-      return;
-    }
-
-    if (usedInviterId) {
+    if (usedInviterId && usedInviterId !== member.id) {
       setPending(member.id, usedInviterId);
-      console.log(`📥 ${member.user.tag} joined via ${usedCode} — pending verify`);
-    } else {
-      console.log(`⚠️ No invite found for ${member.user.tag}`);
     }
   } catch (e) { console.error('guildMemberAdd error:', e.message); }
 });
 
-// ── Verify role assigned → count invite ──────────────────────────
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
     const gotVerifyRole = !oldMember.roles.cache.has(VERIFY_ROLE_ID) && newMember.roles.cache.has(VERIFY_ROLE_ID);
@@ -233,275 +207,60 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const inviterId = getPending(newMember.id);
     if (!inviterId) return;
 
-    // Mark as counted + save
     markAsCounted(newMember.id);
     removePending(newMember.id);
 
     const total = addInvite(inviterId);
-    console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
-
-    // Notify inviter via DM
-    try {
-      const inviter = await newMember.guild.members.fetch(inviterId);
-      await inviter.send(
-        `🎉 **${newMember.user.tag}** just verified on **${newMember.guild.name}**!\n\n` +
-        `You now have **${total}/${REQUIRED_INVITES}** verified invites.\n` +
-        (total >= REQUIRED_INVITES
-          ? `✅ You can now claim your reward **${REWARD}**!`
-          : `⏳ **${REQUIRED_INVITES - total}** more to claim youre million!`)
-      );
-    } catch (e) {
-      console.log(`⚠️ Could not DM inviter ${inviterId}: ${e.message}`);
+    const inviter = await newMember.guild.members.fetch(inviterId).catch(() => null);
+    if (inviter) {
+      inviter.send(`✅ **${newMember.user.username}** has verified! You now have **${total}** invites.`).catch(() => null);
     }
   } catch (e) { console.error('guildMemberUpdate error:', e.message); }
 });
 
-// ── Interactions ──────────────────────────────────────────────────
+// ── Interaction Handler ───────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
-
   if (interaction.isChatInputCommand()) {
-
-    // /setupinviterewards
     if (interaction.commandName === 'setupinviterewards') {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
-      }
+      await interaction.reply({ content: 'Panel sent!', ephemeral: true });
       await interaction.channel.send(buildPanel());
-      return interaction.reply({ content: '✅ Invite Rewards panel sent!', ephemeral: true });
     }
-
-    // /inviterewards
     if (interaction.commandName === 'inviterewards') {
-      return interaction.reply(buildPanel());
+      await interaction.reply({ ...buildPanel(), ephemeral: true });
     }
-
-    // /leaderboard
     if (interaction.commandName === 'leaderboard') {
-      await interaction.deferReply();
       const data = loadData();
-      const sorted = Object.entries(data.invites)
-        .filter(([, v]) => v > 0)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10);
-
-      if (sorted.length === 0) {
-        return interaction.editReply('📊 No invites recorded yet!');
-      }
-
-      const medals = ['🥇', '🥈', '🥉'];
-      const lines = sorted.map(([userId, count], i) =>
-        `${medals[i] ?? `**${i + 1}.**`} <@${userId}> — **${count}** invite${count === 1 ? '' : 's'}`
-      ).join('\n');
-
-      const embed = new EmbedBuilder()
-        .setColor(0x7c3aed)
-        .setTitle('🏆 Invite Leaderboard')
-        .setDescription(lines)
-        .setFooter({ text: `Goal: ${REQUIRED_INVITES} verified invites → ${REWARD}` });
-
-      return interaction.editReply({ embeds: [embed] });
+      const sorted = Object.entries(data.invites).sort(([, a], [, b]) => b - a).slice(0, 10);
+      const lb = sorted.map(([id, count], i) => `${i + 1}. <@${id}> — **${count}**`).join('\n') || 'No data.';
+      await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(lb).setColor(0x1e1f22)] });
     }
-
-    // /setinvites
     if (interaction.commandName === 'setinvites') {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
-      }
-      const user = interaction.options.getUser('user');
+      const target = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount');
-      setInvites(user.id, amount);
-      return interaction.reply({
-        content: `✅ Set invite count for <@${user.id}> to **${amount}**.`,
-        ephemeral: true
-      });
+      setInvites(target.id, amount);
+      await interaction.reply({ content: `Set **${target.tag}** to **${amount}** invites.`, ephemeral: true });
     }
   }
 
   if (interaction.isButton()) {
-
-    // 🔗 Generate Invite Link
     if (interaction.customId === 'gen_invite') {
-      await interaction.deferReply({ ephemeral: true });
-      try {
-        const rulesChannel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID)
-          ?? interaction.guild.channels.cache.find(c => c.name === 'rules')
-          ?? interaction.channel;
-
-        const invite = await rulesChannel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
-        cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
-
-        return interaction.editReply(
-          `✅ Here is your personal invite link: https://discord.gg/${invite.code}\n\n` +
-          `Make sure your friends **verify** after joining, otherwise they won't count towards your goal!`
-        );
-      } catch (e) {
-        console.error('gen_invite error:', e.message);
-        return interaction.editReply('❌ Could not create invite. Missing permissions?');
-      }
+      const channel = interaction.guild.rulesChannel || interaction.channel;
+      const inv = await channel.createInvite({ maxAge: 0, unique: true });
+      await interaction.reply({ content: `Your link: ${inv.url}`, ephemeral: true });
     }
-
-    // 📊 Check Invites
     if (interaction.customId === 'check_inv') {
-      await interaction.deferReply({ ephemeral: true });
-      const count = getInvites(interaction.user.id);
-      return interaction.editReply(
-        `📊 You currently have **${count}** verified invite${count === 1 ? '' : 's'}!\n\n` +
-        `*(Remember: Only users who join using your personal link and verify their account will count)*`
-      );
+      await interaction.reply({ content: `You have **${getInvites(interaction.user.id)}** invites.`, ephemeral: true });
     }
-
-    // 💰 Claim Reward
-// 💰 Claim Reward
-if (interaction.customId === 'claim') {
-
-  await interaction.deferReply({
-    ephemeral: true
-  });
-
-  const count = getInvites(interaction.user.id);
-
-  if (count < REQUIRED_INVITES) {
-    return interaction.editReply(
-      `❌ You need ${REQUIRED_INVITES - count} more invites.`
-    );
-  }
-
-  const ticketName =
-    `1m-${interaction.user.username}`
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]/g, '');
-
-  const existingTicket =
-    interaction.guild.channels.cache.find(
-      c => c.name === ticketName
-    );
-
-  if (existingTicket) {
-    return interaction.editReply(
-      `❌ You already have an open ticket: <#${existingTicket.id}>`
-    );
-  }
-
-  const ticket =
-    await interaction.guild.channels.create({
-
-      name: ticketName,
-      type: 0,
-      parent: '1499147835528974356',
-
-      permissionOverwrites: [
-
-        {
-          id: interaction.guild.id,
-          deny: ['ViewChannel']
-        },
-
-        {
-          id: interaction.user.id,
-          allow: [
-            'ViewChannel',
-            'SendMessages',
-            'ReadMessageHistory'
-          ]
-        },
-
-        {
-          id: '1499146219946250241',
-          allow: [
-            'ViewChannel',
-            'SendMessages',
-            'ReadMessageHistory'
-          ]
-        },
-
-        {
-          id: '1499159379902074880',
-          allow: [
-            'ViewChannel',
-            'SendMessages',
-            'ReadMessageHistory'
-          ]
-        }
-      ]
-    });
-
-  const closeRow =
-    new ActionRowBuilder()
-      .addComponents(
-
-        new ButtonBuilder()
-          .setCustomId('close_ticket')
-          .setLabel('Close Ticket')
-          .setEmoji('🔒')
-          .setStyle(ButtonStyle.Danger)
-      );
-
-  await ticket.send({
-
-    content:
-      `💰 <@${interaction.user.id}> claimed **${REWARD}** with **${count} verified invites!**\n\n` +
-      `<@&1499146219946250241> <@&1499159379902074880>`,
-
-    components: [closeRow]
-  });
-
-  resetInvites(interaction.user.id);
-
-  const log =
-    interaction.guild.channels.cache.get(
-      REWARD_LOG_ID
-    );
-
-  if (log) {
-    await log.send(
-      `💰 ${interaction.user.tag} claimed ${REWARD}\n🎫 <#${ticket.id}>`
-    );
-  }
-
-  return interaction.editReply(
-    `✅ Ticket created: <#${ticket.id}>`
-  );
-}  });
-
-
-  resetInvites(
-    interaction.user.id
-  );
-
-
-  const log =
-
-    interaction.guild.channels.cache.get(
-      REWARD_LOG_ID
-    );
-
-
-  if (
-    log
-  ) {
-
-    await log.send(
-
-      `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
-
-      `🎫 Ticket: <#${ticket.id}>`
-    );
-  }
-
-
-  return interaction.editReply(
-
-    `✅ Ticket created: <#${ticket.id}>`
-  );
-}
-  }
-
-
-  return interaction.editReply(
-
-    `✅ Ticket created: <#${ticket.id}>`
-  );
-}
+    if (interaction.customId === 'claim') {
+      const count = getInvites(interaction.user.id);
+      if (count < REQUIRED_INVITES) {
+        return interaction.reply({ content: `❌ You need ${REQUIRED_INVITES} invites (You have ${count}).`, ephemeral: true });
+      }
+      const logChannel = interaction.guild.channels.cache.get(REWARD_LOG_ID);
+      if (logChannel) logChannel.send(`💰 **CLAIM**: <@${interaction.user.id}> requested ${REWARD} (${count} invites).`);
+      resetInvites(interaction.user.id);
+      await interaction.reply({ content: `✅ Claim registered! An admin will contact you.`, ephemeral: true });
+    }
   }
 });
 
