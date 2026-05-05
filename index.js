@@ -172,13 +172,13 @@ function buildPanel() {
     .setColor('#b10de7')
     .setTitle('🎁 Invite Rewards')
     .setDescription(
-      'Invite your friends to the server to earn rewards!\n\n' +
-      `**Goal:** ${REQUIRED_INVITES} Verified Invites\n` +
-      `**Reward:** ${REWARD}\n\n` +
-      '⚠️ **IMPORTANT:**\n' +
-      'Only invites generated with the button below will count!\n' +
-      'Normal Discord invite links will **NOT** count.\n\n' +
-      'Click the buttons below to generate your personal link or check your progress.'
+      'Lade deine Freunde auf den Server ein und verdiene Belohnungen!\n\n' +
+`**Ziel:** ${REQUIRED_INVITES} Verifizierte Einladungen\n` +
+`**Belohnung:** ${REWARD}\n\n` +
+'⚠️ **WICHTIG:**\n' +
+'Nur Einladungen die über den Button unten generiert werden zählen!\n' +
+'Normale Discord Einladungslinks zählen **NICHT**.\n\n' +
+'Klicke unten auf die Buttons um deinen persönlichen Link zu erstellen oder deinen Fortschritt zu prüfen.'
     );
 
   const row = new ActionRowBuilder().addComponents(
