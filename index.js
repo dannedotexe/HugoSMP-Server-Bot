@@ -173,12 +173,12 @@ function buildPanel() {
     .setTitle('🎁 Invite Rewards')
     .setDescription(
       'Lade deine Freunde auf den Server ein und verdiene Belohnungen!\n\n' +
-`**Ziel:** ${REQUIRED_INVITES} Verifizierte Einladungen\n` +
-`**Belohnung:** ${REWARD}\n\n` +
-'⚠️ **WICHTIG:**\n' +
-'Nur Einladungen die über den Button unten generiert werden zählen!\n' +
-'Normale Discord Einladungslinks zählen **NICHT**.\n\n' +
-'Klicke unten auf die Buttons um deinen persönlichen Link zu erstellen oder deinen Fortschritt zu prüfen.'
+      `**Ziel:** ${REQUIRED_INVITES} Verifizierte Einladungen\n` +
+      `**Belohnung:** ${REWARD}\n\n` +
+      '⚠️ **WICHTIG:**\n' +
+      'Nur Einladungen die über den Button unten generiert werden zählen!\n' +
+      'Normale Discord Einladungslinks zählen **NICHT**.\n\n' +
+      'Klicke unten auf die Buttons um deinen persönlichen Link zu erstellen oder deinen Fortschritt zu prüfen.'
     );
 
   const row = new ActionRowBuilder().addComponents(
@@ -309,20 +309,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     console.log(
       `✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`
     );
-
-    try {
-      const inviter = await newMember.guild.members.fetch(inviterId);
-
-      await inviter.send(
-        `🎉 **${newMember.user.tag}** just verified on **${newMember.guild.name}**!\n\n` +
-        `You now have **${total}/${REQUIRED_INVITES}** verified invites.\n` +
-        (total >= REQUIRED_INVITES
-          ? `✅ You can now claim your reward **${REWARD}**!`
-          : `⏳ **${REQUIRED_INVITES - total}** more to claim your million!`)
-      );
-    } catch (e) {
-      console.log(`⚠️ Could not DM inviter ${inviterId}: ${e.message}`);
-    }
   } catch (e) {
     console.error('guildMemberUpdate error:', e.message);
   }
@@ -356,9 +342,10 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply();
 
       const data = loadData();
+      const botId = client.user.id;
 
       const sorted = Object.entries(data.invites)
-        .filter(([, v]) => v > 0)
+        .filter(([userId, v]) => v > 0 && userId !== botId)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 10);
 
