@@ -21,9 +21,10 @@ const REQUIRED_INVITES = 8;
 const REWARD = '$1m on HugoSMP';
 const DATA_FILE = './data.json';
 
-const RULES_CHANNEL_ID = '1499135456133255239';
-const VERIFY_ROLE_ID = '1499149656951885956';
-const REWARD_LOG_ID = '1500479671031169144';
+const RULES_CHANNEL_ID      = '1499135456133255239';
+const VERIFY_ROLE_ID        = '1499149656951885956';
+const REWARD_LOG_ID         = '1500479671031169144';
+const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
 
 const TICKET_CATEGORY_ID = '1499147835528974356';
 const STAFF_ROLE_IDS = [
@@ -42,8 +43,7 @@ function loadData() {
   } catch (e) {
     console.error('loadData error:', e.message);
   }
-
-  return { invites: {}, counted: [], pending: {} };
+  return { invites: {}, counted: [], pending: {}, leaderboardMessageId: null };
 }
 
 function saveData(data) {
@@ -105,17 +105,69 @@ const cachedInvites = new Map();
 async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
-
     invites.forEach(inv => {
       cachedInvites.set(inv.code, {
         inviterId: inv.inviter?.id ?? null,
         uses: inv.uses ?? 0
       });
     });
-
     console.log(`📋 Cached ${invites.size} invites for ${guild.name}`);
   } catch (e) {
     console.error('cacheInvites error:', e.message);
+  }
+}
+
+// ── Live Leaderboard ──────────────────────────────────────────────
+function buildLeaderboardEmbed() {
+  const data = loadData();
+  const botId = client.user.id;
+
+  const sorted = Object.entries(data.invites)
+    .filter(([userId, v]) => v > 0 && userId !== botId)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10);
+
+  const medals = ['🥇', '🥈', '🥉'];
+
+  const lines = sorted.length > 0
+    ? sorted.map(([userId, count], i) =>
+        `${medals[i] ?? `**${i + 1}.**`} <@${userId}> — **${count}** invite${count === 1 ? '' : 's'}`
+      ).join('\n')
+    : '*Noch keine Einladungen vorhanden.*';
+
+  return new EmbedBuilder()
+    .setColor('#b10de7')
+    .setTitle('🏆 Invite Leaderboard')
+    .setDescription(lines)
+    .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen → ${REWARD}` })
+    .setTimestamp();
+}
+
+async function updateLeaderboard() {
+  try {
+    const channel = client.channels.cache.get(LEADERBOARD_CHANNEL_ID);
+    if (!channel) return;
+
+    const data = loadData();
+    const embed = buildLeaderboardEmbed();
+
+    if (data.leaderboardMessageId) {
+      try {
+        const msg = await channel.messages.fetch(data.leaderboardMessageId);
+        await msg.edit({ embeds: [embed] });
+        return;
+      } catch (e) {
+        // Message not found, send a new one
+      }
+    }
+
+    // Send new leaderboard message
+    const msg = await channel.send({ embeds: [embed] });
+    data.leaderboardMessageId = msg.id;
+    saveData(data);
+    console.log(`📊 Leaderboard message created: ${msg.id}`);
+  } catch (e) {
+    console.error('updateLeaderboard error:', e.message);
   }
 }
 
@@ -216,6 +268,12 @@ client.once('ready', async () => {
       console.error(`Guild error (${guild.name}):`, e);
     }
   }
+
+  // Initial leaderboard update
+  await updateLeaderboard();
+
+  // Auto-update every 5 minutes
+  setInterval(updateLeaderboard, 5 * 60 * 1000);
 });
 
 client.on('guildCreate', async guild => {
@@ -259,7 +317,6 @@ client.on('guildMemberAdd', async member => {
 
     newInvites.forEach(inv => {
       const cached = cachedInvites.get(inv.code);
-
       if (cached && inv.uses > cached.uses) {
         usedInviterId = cached.inviterId;
         usedCode = inv.code;
@@ -306,9 +363,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
     const total = addInvite(inviterId);
 
-    console.log(
-      `✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`
-    );
+    console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
+
+    // Update leaderboard immediately
+    await updateLeaderboard();
   } catch (e) {
     console.error('guildMemberUpdate error:', e.message);
   }
@@ -319,14 +377,11 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'setupinviterewards') {
       await interaction.deferReply({ ephemeral: true });
-
       try {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
           return interaction.editReply('❌ You need Administrator permissions!');
         }
-
         await interaction.channel.send(buildPanel());
-
         return interaction.editReply('✅ Invite Rewards panel sent!');
       } catch (e) {
         console.error('setupinviterewards error:', e.message);
@@ -340,33 +395,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'leaderboard') {
       await interaction.deferReply();
-
-      const data = loadData();
-      const botId = client.user.id;
-
-      const sorted = Object.entries(data.invites)
-        .filter(([userId, v]) => v > 0 && userId !== botId)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10);
-
-      if (sorted.length === 0) {
-        return interaction.editReply('📊 No invites recorded yet!');
-      }
-
-      const medals = ['🥇', '🥈', '🥉'];
-
-      const lines = sorted.map(([userId, count], i) =>
-        `${medals[i] ?? `**${i + 1}.**`} <@${userId}> — **${count}** invite${count === 1 ? '' : 's'}`
-      ).join('\n');
-
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
-        .setTitle('🏆 Invite Leaderboard')
-        .setDescription(lines)
-        .setFooter({
-          text: `Goal: ${REQUIRED_INVITES} verified invites → ${REWARD}`
-        });
-
+      const embed = buildLeaderboardEmbed();
       return interaction.editReply({ embeds: [embed] });
     }
 
@@ -382,6 +411,7 @@ client.on('interactionCreate', async interaction => {
       const amount = interaction.options.getInteger('amount');
 
       setInvites(user.id, amount);
+      await updateLeaderboard();
 
       return interaction.reply({
         content: `✅ Set invite count for <@${user.id}> to **${amount}**.`,
@@ -395,7 +425,6 @@ client.on('interactionCreate', async interaction => {
   // 🔗 Generate Invite Link
   if (interaction.customId === 'gen_invite') {
     await interaction.deferReply({ ephemeral: true });
-
     try {
       const rulesChannel =
         interaction.guild.channels.cache.get(RULES_CHANNEL_ID) ??
@@ -426,9 +455,7 @@ client.on('interactionCreate', async interaction => {
   // 📊 Check Invites
   if (interaction.customId === 'check_inv') {
     await interaction.deferReply({ ephemeral: true });
-
     const count = getInvites(interaction.user.id);
-
     return interaction.editReply(
       `📊 You currently have **${count}** verified invite${count === 1 ? '' : 's'}!\n\n` +
       `*(Only users who join using your generated personal link and verify will count.)*`
@@ -467,26 +494,11 @@ client.on('interactionCreate', async interaction => {
       type: ChannelType.GuildText,
       parent: TICKET_CATEGORY_ID,
       permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: ['ViewChannel']
-        },
-        {
-          id: interaction.user.id,
-          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-        },
-        {
-          id: STAFF_ROLE_IDS[0],
-          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-        },
-        {
-          id: STAFF_ROLE_IDS[1],
-          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-        },
-        {
-          id: client.user.id,
-          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
-        }
+        { id: interaction.guild.id, deny: ['ViewChannel'] },
+        { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+        { id: STAFF_ROLE_IDS[0], allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+        { id: STAFF_ROLE_IDS[1], allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+        { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
       ]
     });
 
@@ -523,9 +535,9 @@ client.on('interactionCreate', async interaction => {
 
     const remaining = Math.max(0, count - REQUIRED_INVITES);
     setInvites(interaction.user.id, remaining);
+    await updateLeaderboard();
 
     const log = interaction.guild.channels.cache.get(REWARD_LOG_ID);
-
     if (log) {
       await log.send(
         `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
