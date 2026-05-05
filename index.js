@@ -21,9 +21,9 @@ const REQUIRED_INVITES = 8;
 const REWARD = '$1m on HugoSMP';
 const DATA_FILE = './data.json';
 
-const RULES_CHANNEL_ID      = '1499135456133255239';
-const VERIFY_ROLE_ID        = '1499149656951885956';
-const REWARD_LOG_ID         = '1500479671031169144';
+const RULES_CHANNEL_ID       = '1499135456133255239';
+const VERIFY_ROLE_ID         = '1499149656951885956';
+const REWARD_LOG_ID          = '1500479671031169144';
 const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
 
 const TICKET_CATEGORY_ID = '1499147835528974356';
@@ -54,9 +54,7 @@ function saveData(data) {
   }
 }
 
-function getInvites(userId) {
-  return loadData().invites[userId] ?? 0;
-}
+function getInvites(userId) { return loadData().invites[userId] ?? 0; }
 
 function setInvites(userId, amount) {
   const data = loadData();
@@ -71,9 +69,7 @@ function addInvite(userId) {
   return data.invites[userId];
 }
 
-function hasBeenCounted(memberId) {
-  return loadData().counted?.includes(memberId) ?? false;
-}
+function hasBeenCounted(memberId) { return loadData().counted?.includes(memberId) ?? false; }
 
 function markAsCounted(memberId) {
   const data = loadData();
@@ -89,9 +85,7 @@ function setPending(memberId, inviterId) {
   saveData(data);
 }
 
-function getPending(memberId) {
-  return loadData().pending?.[memberId] ?? null;
-}
+function getPending(memberId) { return loadData().pending?.[memberId] ?? null; }
 
 function removePending(memberId) {
   const data = loadData();
@@ -128,7 +122,6 @@ function buildLeaderboardEmbed() {
     .slice(0, 10);
 
   const medals = ['🥇', '🥈', '🥉'];
-
   const lines = sorted.length > 0
     ? sorted.map(([userId, count], i) =>
         `${medals[i] ?? `**${i + 1}.**`} <@${userId}> — **${count}** invite${count === 1 ? '' : 's'}`
@@ -157,11 +150,10 @@ async function updateLeaderboard() {
         await msg.edit({ embeds: [embed] });
         return;
       } catch (e) {
-        // Message not found, send a new one
+        // Message deleted, send new one
       }
     }
 
-    // Send new leaderboard message
     const msg = await channel.send({ embeds: [embed] });
     data.leaderboardMessageId = msg.id;
     saveData(data);
@@ -179,6 +171,12 @@ async function registerCommands(guildId) {
     new SlashCommandBuilder()
       .setName('setupinviterewards')
       .setDescription('Send the invite rewards panel to this channel. Admin only.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('setupleaderboard')
+      .setDescription('Send the live leaderboard to this channel. Admin only.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
@@ -269,10 +267,7 @@ client.once('ready', async () => {
     }
   }
 
-  // Initial leaderboard update
   await updateLeaderboard();
-
-  // Auto-update every 5 minutes
   setInterval(updateLeaderboard, 5 * 60 * 1000);
 });
 
@@ -287,31 +282,24 @@ client.on('guildCreate', async guild => {
 });
 
 client.on('inviteCreate', inv => {
-  cachedInvites.set(inv.code, {
-    inviterId: inv.inviter?.id ?? null,
-    uses: inv.uses ?? 0
-  });
+  cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
 });
-
 client.on('inviteDelete', inv => cachedInvites.delete(inv.code));
 
 // ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
   try {
     const accountAge = Date.now() - member.user.createdTimestamp;
-
     if (accountAge < MIN_ACCOUNT_AGE_MS) {
       console.log(`🚫 Alt blocked: ${member.user.tag}`);
       return;
     }
-
     if (hasBeenCounted(member.id)) {
       console.log(`🔁 Already counted: ${member.user.tag}`);
       return;
     }
 
     const newInvites = await member.guild.invites.fetch();
-
     let usedInviterId = null;
     let usedCode = null;
 
@@ -324,10 +312,7 @@ client.on('guildMemberAdd', async member => {
     });
 
     newInvites.forEach(inv => {
-      cachedInvites.set(inv.code, {
-        inviterId: inv.inviter?.id ?? null,
-        uses: inv.uses ?? 0
-      });
+      cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
     });
 
     if (usedInviterId === member.id) {
@@ -352,7 +337,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const gotVerifyRole =
       !oldMember.roles.cache.has(VERIFY_ROLE_ID) &&
       newMember.roles.cache.has(VERIFY_ROLE_ID);
-
     if (!gotVerifyRole) return;
 
     const inviterId = getPending(newMember.id);
@@ -362,10 +346,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     removePending(newMember.id);
 
     const total = addInvite(inviterId);
-
     console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
 
-    // Update leaderboard immediately
     await updateLeaderboard();
   } catch (e) {
     console.error('guildMemberUpdate error:', e.message);
@@ -375,6 +357,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // ── Interactions ──────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
+
     if (interaction.commandName === 'setupinviterewards') {
       await interaction.deferReply({ ephemeral: true });
       try {
@@ -389,34 +372,41 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
+    if (interaction.commandName === 'setupleaderboard') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+          return interaction.editReply('❌ You need Administrator permissions!');
+        }
+        const msg = await interaction.channel.send({ embeds: [buildLeaderboardEmbed()] });
+        const data = loadData();
+        data.leaderboardMessageId = msg.id;
+        saveData(data);
+        return interaction.editReply('✅ Live Leaderboard gesendet! Es aktualisiert sich automatisch.');
+      } catch (e) {
+        console.error('setupleaderboard error:', e.message);
+        return interaction.editReply('❌ Fehler beim Senden des Leaderboards.');
+      }
+    }
+
     if (interaction.commandName === 'inviterewards') {
       return interaction.reply(buildPanel());
     }
 
     if (interaction.commandName === 'leaderboard') {
       await interaction.deferReply();
-      const embed = buildLeaderboardEmbed();
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [buildLeaderboardEmbed()] });
     }
 
     if (interaction.commandName === 'setinvites') {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({
-          content: '❌ You need Administrator permissions!',
-          ephemeral: true
-        });
+        return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
       }
-
       const user = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount');
-
       setInvites(user.id, amount);
       await updateLeaderboard();
-
-      return interaction.reply({
-        content: `✅ Set invite count for <@${user.id}> to **${amount}**.`,
-        ephemeral: true
-      });
+      return interaction.reply({ content: `✅ Set invite count for <@${user.id}> to **${amount}**.`, ephemeral: true });
     }
   }
 
@@ -431,16 +421,8 @@ client.on('interactionCreate', async interaction => {
         interaction.guild.channels.cache.find(c => c.name === 'rules') ??
         interaction.channel;
 
-      const invite = await rulesChannel.createInvite({
-        maxAge: 0,
-        maxUses: 0,
-        unique: true
-      });
-
-      cachedInvites.set(invite.code, {
-        inviterId: interaction.user.id,
-        uses: 0
-      });
+      const invite = await rulesChannel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
+      cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
 
       return interaction.editReply(
         `✅ Here is your personal invite link: https://discord.gg/${invite.code}\n\n` +
@@ -465,7 +447,6 @@ client.on('interactionCreate', async interaction => {
   // 💰 Claim Reward
   if (interaction.customId === 'claim') {
     await interaction.deferReply({ ephemeral: true });
-
     const count = getInvites(interaction.user.id);
 
     if (count < REQUIRED_INVITES) {
@@ -479,14 +460,9 @@ client.on('interactionCreate', async interaction => {
       .toLowerCase()
       .replace(/[^a-z0-9-_]/g, '');
 
-    const existingTicket = interaction.guild.channels.cache.find(
-      c => c.name === ticketName
-    );
-
+    const existingTicket = interaction.guild.channels.cache.find(c => c.name === ticketName);
     if (existingTicket) {
-      return interaction.editReply(
-        `❌ You already have an open ticket: <#${existingTicket.id}>`
-      );
+      return interaction.editReply(`❌ You already have an open ticket: <#${existingTicket.id}>`);
     }
 
     const ticket = await interaction.guild.channels.create({
@@ -553,28 +529,14 @@ client.on('interactionCreate', async interaction => {
 
   // 🔒 Close Ticket
   if (interaction.customId === 'close_ticket') {
-    const isStaff = STAFF_ROLE_IDS.some(roleId =>
-      interaction.member.roles.cache.has(roleId)
-    );
-
+    const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
     if (!isStaff) {
-      return interaction.reply({
-        content: '❌ Only staff can close this ticket.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ Only staff can close this ticket.', ephemeral: true });
     }
-
-    await interaction.reply({
-      content: '🔒 Ticket will be closed in 3 seconds...',
-      ephemeral: true
-    });
-
+    await interaction.reply({ content: '🔒 Ticket will be closed in 3 seconds...', ephemeral: true });
     setTimeout(async () => {
-      try {
-        await interaction.channel.delete();
-      } catch (e) {
-        console.error('Ticket delete error:', e.message);
-      }
+      try { await interaction.channel.delete(); }
+      catch (e) { console.error('Ticket delete error:', e.message); }
     }, 3000);
   }
 });
