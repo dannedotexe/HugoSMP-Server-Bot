@@ -19,6 +19,7 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_TOKEN;
 const DATA_FILE = '/app/data/data.json';
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
+const KUNDEN_ROLE_ID = '1499472189420732421';
 
 const REQUIRED_INVITES = 8;
 const REWARD = '$1m on HugoSMP';
@@ -33,7 +34,6 @@ const STAFF_ROLE_IDS = [
   '1499159379902074880'
 ];
 const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const KUNDEN_ROLE_ID = '1499472189420732421';
 
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
@@ -393,19 +393,16 @@ client.on('interactionCreate', async interaction => {
       await updateLeaderboard();
       return interaction.reply({ content: `✅ Set invite count for <@${user.id}> to **${amount}**.`, ephemeral: true });
     }
-
     if (interaction.commandName === 'fertig') {
       const user = interaction.options.getUser('user');
       const orderId = getNextOrderId();
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`bewerten_${user.id}_${orderId}`)
-          .setLabel('Jetzt bewerten')
+          .setLabel('⭐ Jetzt bewerten')
           .setStyle(ButtonStyle.Primary)
           .setEmoji('⭐')
       );
-
       await interaction.reply({
         content: `✅ Bestellung für ${user} wurde als **fertig** markiert!\n**Order-ID:** ${orderId}\n\n${user}, bitte bewertete den Shop!\n\n> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
         components: [row]
@@ -431,34 +428,37 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply(`📊 You currently have **${count}** verified invite${count === 1 ? '' : 's'}!`);
     }
     if (interaction.customId === 'claim') {
-      // Dein Original-Claim-Code hier (nicht verändert)
       await interaction.deferReply({ ephemeral: true });
       const count = getInvites(interaction.user.id);
       if (count < REQUIRED_INVITES) {
         return interaction.editReply(`❌ You don't have enough verified invites yet!\n\n**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`);
       }
-      // ... Rest deines Claim-Codes ...
+      // Dein restlicher Claim-Code hier (unverändert)
     }
     if (interaction.customId === 'close_ticket') {
-      // Dein Original-Close-Ticket-Code
+      const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
+      if (!isStaff) {
+        return interaction.reply({ content: '❌ Only staff can close this ticket.', ephemeral: true });
+      }
+      await interaction.reply({ content: '🔒 Ticket will be closed in 3 seconds...', ephemeral: true });
+      setTimeout(async () => {
+        try { await interaction.channel.delete(); } catch (e) {}
+      }, 3000);
     }
 
     if (interaction.customId.startsWith('bewerten_')) {
       const parts = interaction.customId.split('_');
       const buyerId = parts[1];
       const orderId = parts[2] || 'Unbekannt';
-
       if (interaction.user.id !== buyerId) {
         return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
       }
       if (reviewedUsers.has(buyerId)) {
         return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
       }
-
       const modal = new ModalBuilder()
         .setCustomId(`review_modal_${buyerId}_${orderId}`)
         .setTitle('HugoSMP Market Bewertung');
-
       const stars = new TextInputBuilder()
         .setCustomId('stars')
         .setLabel('Sterne (1-5)')
@@ -466,19 +466,16 @@ client.on('interactionCreate', async interaction => {
         .setPlaceholder('5')
         .setRequired(true)
         .setMaxLength(1);
-
       const text = new TextInputBuilder()
         .setCustomId('text')
         .setLabel('Deine Bewertung')
         .setStyle(TextInputStyle.Paragraph)
         .setPlaceholder('War alles schnell, kein Scam, 1 Stack Ancient mehr...')
         .setRequired(true);
-
       modal.addComponents(
         new ActionRowBuilder().addComponents(stars),
         new ActionRowBuilder().addComponents(text)
       );
-
       await interaction.showModal(modal);
     }
   }
@@ -506,10 +503,7 @@ client.on('interactionCreate', async interaction => {
     const reviewer = interaction.user;
 
     const embed = new EmbedBuilder()
-      .setAuthor({ 
-        name: reviewer.username, 
-        iconURL: reviewer.displayAvatarURL() 
-      })
+      .setAuthor({ name: reviewer.username, iconURL: reviewer.displayAvatarURL() })
       .setTitle('Bewertung — HugoSMP Market')
       .setDescription(`**Bewertet von:** **<@${reviewer.id}>**\n\n${starsEmoji} **(${stars}/5)**\n\n${text}`)
       .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
@@ -532,9 +526,20 @@ client.on('interactionCreate', async interaction => {
     reviewedUsers.add(buyerId);
 
     await interaction.reply({ 
-      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.', 
+      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...', 
       ephemeral: true 
     });
+
+    // Ticket automatisch schließen (bei normalen Kauf-Tickets, NICHT bei 1m-Reward-Tickets)
+    if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
+      setTimeout(async () => {
+        try {
+          await interaction.channel.delete();
+        } catch (e) {
+          console.error('Ticket konnte nicht geschlossen werden:', e.message);
+        }
+      }, 3000);
+    }
   }
 });
 
