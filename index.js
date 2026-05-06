@@ -433,7 +433,7 @@ client.on('interactionCreate', async interaction => {
       if (count < REQUIRED_INVITES) {
         return interaction.editReply(`❌ You don't have enough verified invites yet!\n\n**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`);
       }
-      // Dein restlicher Claim-Code hier (unverändert)
+      // Dein Ticket-Code hier (bitte deinen Original-Claim-Code einfügen, falls er fehlt)
     }
     if (interaction.customId === 'close_ticket') {
       const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
@@ -513,7 +513,6 @@ client.on('interactionCreate', async interaction => {
 
     await reviewChannel.send({ embeds: [embed] });
 
-    // Kunden-Rolle vergeben
     try {
       const member = await interaction.guild.members.fetch(reviewer.id);
       if (!member.roles.cache.has(KUNDEN_ROLE_ID)) {
@@ -530,7 +529,7 @@ client.on('interactionCreate', async interaction => {
       ephemeral: true 
     });
 
-    // Ticket automatisch schließen (bei normalen Kauf-Tickets, NICHT bei 1m-Reward-Tickets)
+    // Automatisches Schließen nur bei normalen Kauf-Tickets
     if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
       setTimeout(async () => {
         try {
