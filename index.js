@@ -189,6 +189,17 @@ async function registerCommands(guildId) {
       .setName('leaderboard')
       .setDescription('Show the top inviters!')
       .toJSON(),
+        
+    new SlashCommandBuilder()
+      .setName('fertig')
+      .setDescription('Bestellung als fertig markieren + Bewertung anfordern')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(opt =>
+        opt.setName('user')
+          .setDescription('Der Käufer')
+          .setRequired(true)
+      )
+      .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setinvites')
@@ -539,6 +550,115 @@ client.on('interactionCreate', async interaction => {
       catch (e) { console.error('Ticket delete error:', e.message); }
     }, 3000);
   }
+});
+
+// ── HugoSMP Market Review System ─────────────────────────────────────
+
+const reviewedUsers = new Set(); // Anti-Spam
+
+client.on('interactionCreate', async interaction => {
+    // /fertig Command
+    if (interaction.isChatInputCommand() && interaction.commandName === 'fertig') {
+        const user = interaction.options.getUser('user');
+        const orderId = interaction.options.getString('orderid') || 'Keine ID';
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`bewerten_${user.id}_${orderId}`)
+                .setLabel('⭐ Jetzt bewerten')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('⭐')
+        );
+
+        await interaction.reply({
+            content: `✅ Bestellung für ${user} wurde als **fertig** markiert!\n**Order-ID:** ${orderId}\n\n${user}, bitte bewertete den Shop:`,
+            components: [row]
+        });
+    }
+
+    // Button geklickt
+    if (interaction.isButton() && interaction.customId.startsWith('bewerten_')) {
+        const parts = interaction.customId.split('_');
+        const buyerId = parts[1];
+        const orderId = parts[2] || 'Unbekannt';
+
+        if (interaction.user.id !== buyerId) {
+            return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
+        }
+
+        if (reviewedUsers.has(buyerId)) {
+            return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId(`review_modal_${buyerId}_${orderId}`)
+            .setTitle('HugoSMP Market Bewertung');
+
+        const stars = new TextInputBuilder()
+            .setCustomId('stars')
+            .setLabel('Sterne (1-5)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('5')
+            .setRequired(true)
+            .setMaxLength(1);
+
+        const text = new TextInputBuilder()
+            .setCustomId('text')
+            .setLabel('Deine Bewertung')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('War alles schnell, kein Scam, 1 Stack Ancient mehr...')
+            .setRequired(true);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(stars),
+            new ActionRowBuilder().addComponents(text)
+        );
+
+        await interaction.showModal(modal);
+    }
+
+    // Modal abgesendet
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('review_modal_')) {
+        const parts = interaction.customId.split('_');
+        const buyerId = parts[2];
+        const orderId = parts[3] || 'Unbekannt';
+
+        const starsStr = interaction.fields.getTextInputValue('stars');
+        const text = interaction.fields.getTextInputValue('text');
+        const stars = parseInt(starsStr);
+
+        if (isNaN(stars) || stars < 1 || stars > 5) {
+            return interaction.reply({ content: '❌ Bitte eine Zahl zwischen **1** und **5** eingeben!', ephemeral: true });
+        }
+
+        const reviewChannel = interaction.guild.channels.cache.get('1499131549826813962');
+        if (!reviewChannel) {
+            return interaction.reply({ content: '❌ Reviews-Channel nicht gefunden!', ephemeral: true });
+        }
+
+        const starsEmoji = '⭐'.repeat(stars);
+
+        const embed = new EmbedBuilder()
+            .setAuthor({ 
+                name: 'Hugomarket Bot', 
+                iconURL: client.user.displayAvatarURL() 
+            })
+            .setTitle('Bewertung — HugoSMP Market')
+            .setDescription(`${starsEmoji} **(${stars}/5)**\n\n${text}`)
+            .setThumbnail('https://i.imgur.com/DEINLOGO_URL_HIER.png') // ← HIER KOMMT DEIN LOGO
+            .setFooter({ text: `Order-ID: ${orderId}` })
+            .setColor(0x00ff00)
+            .setTimestamp();
+
+        await reviewChannel.send({ embeds: [embed] });
+
+        reviewedUsers.add(buyerId);
+
+        await interaction.reply({ 
+            content: '✅ **Danke für deine Bewertung!** Sie wurde erfolgreich veröffentlicht.', 
+            ephemeral: true 
+        });
+    }
 });
 
 client.login(TOKEN);
