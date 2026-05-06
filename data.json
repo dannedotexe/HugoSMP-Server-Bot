@@ -1,5 +1,7 @@
 {
   "invites": {},
   "counted": [],
-  "pending": {}
+  "pending": {},
+  "leaderboardMessageId": null,
+  "nextOrderId": 1
 }
