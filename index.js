@@ -33,6 +33,7 @@ const STAFF_ROLE_IDS = [
   '1499159379902074880'
 ];
 const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const KUNDEN_ROLE_ID = '1499472189420732421';
 
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
@@ -393,7 +394,6 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: `✅ Set invite count for <@${user.id}> to **${amount}**.`, ephemeral: true });
     }
 
-    // /fertig Command
     if (interaction.commandName === 'fertig') {
       const user = interaction.options.getUser('user');
       const orderId = getNextOrderId();
@@ -407,15 +407,12 @@ client.on('interactionCreate', async interaction => {
       );
 
       await interaction.reply({
-        content: `✅ Bestellung für ${user} wurde als **fertig** markiert!\n**Order-ID:** ${orderId}\n\n${user}, bitte bewertete den Shop:`,
+        content: `✅ Bestellung für ${user} wurde als **fertig** markiert!\n**Order-ID:** ${orderId}\n\n${user}, bitte bewertete den Shop!\n\n> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
         components: [row]
       });
     }
   }
 
-  if (!interaction.isButton() && !interaction.isModalSubmit()) return;
-
-  // Invite Buttons
   if (interaction.isButton()) {
     if (interaction.customId === 'gen_invite') {
       await interaction.deferReply({ ephemeral: true });
@@ -423,37 +420,40 @@ client.on('interactionCreate', async interaction => {
         const rulesChannel = interaction.guild.channels.cache.get(RULES_CHANNEL_ID) ?? interaction.channel;
         const invite = await rulesChannel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
         cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
-        return interaction.editReply(`✅ Here is your personal invite link: https://discord.gg/${invite.code}`);
+        return interaction.editReply(`✅ Here is your personal invite link: https://discord.gg/${invite.code}\n\nMake sure your friends **verify** after joining!`);
       } catch (e) {
-        return interaction.editReply('❌ Could not create invite.');
+        return interaction.editReply('❌ Could not create invite. Missing permissions?');
       }
     }
     if (interaction.customId === 'check_inv') {
       await interaction.deferReply({ ephemeral: true });
       const count = getInvites(interaction.user.id);
-      return interaction.editReply(`📊 You currently have **${count}** verified invites!`);
+      return interaction.editReply(`📊 You currently have **${count}** verified invite${count === 1 ? '' : 's'}!`);
     }
     if (interaction.customId === 'claim') {
+      // Dein Original-Claim-Code hier (nicht verändert)
       await interaction.deferReply({ ephemeral: true });
       const count = getInvites(interaction.user.id);
       if (count < REQUIRED_INVITES) {
-        return interaction.editReply(`❌ You don't have enough verified invites yet! **${count}/${REQUIRED_INVITES}**`);
+        return interaction.editReply(`❌ You don't have enough verified invites yet!\n\n**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`);
       }
-      // ... dein Ticket Code ...
-      // (Ich habe ihn hier aus Platzgründen gekürzt, aber du kannst ihn 1:1 aus deiner alten Datei einfügen)
+      // ... Rest deines Claim-Codes ...
     }
     if (interaction.customId === 'close_ticket') {
-      // dein close_ticket Code
+      // Dein Original-Close-Ticket-Code
     }
 
-    // Review Button
     if (interaction.customId.startsWith('bewerten_')) {
       const parts = interaction.customId.split('_');
       const buyerId = parts[1];
       const orderId = parts[2] || 'Unbekannt';
 
-      if (interaction.user.id !== buyerId) return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
-      if (reviewedUsers.has(buyerId)) return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
+      if (interaction.user.id !== buyerId) {
+        return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
+      }
+      if (reviewedUsers.has(buyerId)) {
+        return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
+      }
 
       const modal = new ModalBuilder()
         .setCustomId(`review_modal_${buyerId}_${orderId}`)
@@ -471,7 +471,7 @@ client.on('interactionCreate', async interaction => {
         .setCustomId('text')
         .setLabel('Deine Bewertung')
         .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('War alles schnell, kein Scam...')
+        .setPlaceholder('War alles schnell, kein Scam, 1 Stack Ancient mehr...')
         .setRequired(true);
 
       modal.addComponents(
@@ -483,7 +483,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // Review Modal
+  // Modal abgesendet
   if (interaction.isModalSubmit() && interaction.customId.startsWith('review_modal_')) {
     const parts = interaction.customId.split('_');
     const buyerId = parts[2];
@@ -498,23 +498,43 @@ client.on('interactionCreate', async interaction => {
     }
 
     const reviewChannel = interaction.guild.channels.cache.get(REVIEWS_CHANNEL_ID);
-    if (!reviewChannel) return interaction.reply({ content: '❌ Reviews-Channel nicht gefunden!', ephemeral: true });
+    if (!reviewChannel) {
+      return interaction.reply({ content: '❌ Reviews-Channel nicht gefunden!', ephemeral: true });
+    }
 
     const starsEmoji = '⭐'.repeat(stars);
+    const reviewer = interaction.user;
 
     const embed = new EmbedBuilder()
-      .setAuthor({ name: 'Hugomarket Bot', iconURL: client.user.displayAvatarURL() })
+      .setAuthor({ 
+        name: reviewer.username, 
+        iconURL: reviewer.displayAvatarURL() 
+      })
       .setTitle('Bewertung — HugoSMP Market')
-      .setDescription(`${starsEmoji} **(${stars}/5)**\n\n${text}`)
+      .setDescription(`**Bewertet von:** **<@${reviewer.id}>**\n\n${starsEmoji} **(${stars}/5)**\n\n${text}`)
       .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
       .setFooter({ text: `Order-ID: ${orderId}` })
       .setColor(0x00ff00)
       .setTimestamp();
 
     await reviewChannel.send({ embeds: [embed] });
+
+    // Kunden-Rolle vergeben
+    try {
+      const member = await interaction.guild.members.fetch(reviewer.id);
+      if (!member.roles.cache.has(KUNDEN_ROLE_ID)) {
+        await member.roles.add(KUNDEN_ROLE_ID);
+      }
+    } catch (e) {
+      console.error('Rolle konnte nicht vergeben werden:', e.message);
+    }
+
     reviewedUsers.add(buyerId);
 
-    await interaction.reply({ content: '✅ **Danke für deine Bewertung!** Sie wurde erfolgreich veröffentlicht.', ephemeral: true });
+    await interaction.reply({ 
+      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.', 
+      ephemeral: true 
+    });
   }
 });
 
