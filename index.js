@@ -645,7 +645,7 @@ client.on('interactionCreate', async interaction => {
             })
             .setTitle('Bewertung — HugoSMP Market')
             .setDescription(`${starsEmoji} **(${stars}/5)**\n\n${text}`)
-            .setThumbnail('https://i.imgur.com/DEINLOGO_URL_HIER.png') // ← HIER KOMMT DEIN LOGO
+            .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg?ex=69fc95f3&is=69fb4473&hm=28e4bdf4c0f2fd3770b9337947d0d3e9d151cfd4f2dfa01e2d9d06c90230c58d&') // ← HIER KOMMT DEIN LOGO
             .setFooter({ text: `Order-ID: ${orderId}` })
             .setColor(0x00ff00)
             .setTimestamp();
