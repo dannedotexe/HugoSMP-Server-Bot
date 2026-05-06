@@ -399,7 +399,7 @@ client.on('interactionCreate', async interaction => {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`bewerten_${user.id}_${orderId}`)
-          .setLabel('⭐ Jetzt bewerten')
+          .setLabel('Jetzt bewerten')
           .setStyle(ButtonStyle.Primary)
           .setEmoji('⭐')
       );
