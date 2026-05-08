@@ -583,12 +583,16 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        const rows = buildStockButtons();
+       const rows = buildStockButtons();
 
-        const msg = await interaction.channel.send({
-          embeds: [buildStockEmbed()],
-          components: rows
-        });
+const msg = await interaction.channel.send({
+  embeds: [buildStockEmbed()],
+  components: rows.slice(0, 5)
+});
+
+await interaction.channel.send({
+  components: rows.slice(5)
+});
 
         const data = loadData();
         data.stockMessageId = msg.id;
