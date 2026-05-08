@@ -263,7 +263,7 @@ function buildStockButtons() {
       new ButtonBuilder()
         .setCustomId(`stock_set_${item.id}`)
         .setLabel(item.name)
-        .setEmoji(item.emojiId)
+        .setEmoji({   id: item.emojiId })
         .setStyle(ButtonStyle.Primary),
 
       new ButtonBuilder()
