@@ -471,7 +471,7 @@ if (interaction.commandName === 'setupstock') {
         const item = STOCK_ITEMS.find(i => i.id === itemId);
         const modal = new ModalBuilder()
           .setCustomId(`stock_modal_${itemId}`)
-          .setTitle(`${item.emoji} ${item.name} — Bestand setzen`);
+          .setTitle(item.emoji + ' ' + item.name + ' - Bestand setzen');
         const input = new TextInputBuilder()
           .setCustomId('amount')
           .setLabel('Neuer Bestand (Zahl eingeben)')
