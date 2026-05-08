@@ -38,12 +38,17 @@ const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Stock items ───────────────────────────────────────────────────
 const STOCK_ITEMS = [
-  { id: 'money',     name: '1M Money',                 emoji: '<:Money:1502281700774772908>', emojiId: '1502281700774772908', price: '1,50 €' },
-  { id: 'elytra',    name: 'Elytra',                emoji: '<:Elytra:1502281765492883497>', emojiId: '1502281765492883497', price: '110 €' },
-  { id: 'mace',      name: 'Mace mit Windburst I',  emoji: '<:Mace:1502281825131692163>', emojiId: '1502281825131692163', price: '1,50 €' },
-  { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:Deepslate_Emerald_Ore:1502281747667353610>', emojiId: '1502281747667353610', price: '0,70 €' },
-  { id: 'ancient',   name: 'Ancient Debris',        emoji: '<:Ancient:1502281804780933293>', emojiId: '1502281804780933293', price: '0,08 €' },
-  { id: 'gilded',    name: 'Gilded Blackstone',     emoji: '<:Gilded_Blackstone:1502281854051680469>', emojiId: '1502281854051680469', price: '0,04 €' },
+  { id: 'money', name: '1M Money', emoji: '<:Money:1502281700774772908>', emojiId: '1502281700774772908', price: '1,50 €' },
+
+  { id: 'elytra', name: 'Elytra', emoji: '<:Elytra:1502281765492883497>', emojiId: '1502281765492883497', price: '110 €' },
+
+  { id: 'mace', name: 'Mace mit Windburst I', emoji: '<:Mace:1502281825131692163>', emojiId: '1502281825131692163', price: '1,50 €' },
+
+  { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:DeepslateEmeraldOre:1502281747667353610>', emojiId: '1502281747667353610', price: '0,70 €' },
+
+  { id: 'ancient', name: 'Ancient Debris', emoji: '<:Ancient:1502281804780933293>', emojiId: '1502281804780933293', price: '0,08 €' },
+
+  { id: 'gilded', name: 'Gilded Blackstone', emoji: '<:GildedBlackstone:1502281854051680469>', emojiId: '1502281854051680469', price: '0,04 €' },
 ];
 
 // ── Data helpers ──────────────────────────────────────────────────
