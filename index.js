@@ -32,9 +32,11 @@ const RULES_CHANNEL_ID = '1499135456133255239';
 const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_ID = '1500479671031169144';
 const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
+
 const TICKET_CATEGORY_ID = '1499147835528974356';
 const CLOSED_TICKET_CATEGORY_ID = '1499148006270963732';
 const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
+
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
 const STAFF_ROLE_IDS = [
@@ -117,6 +119,11 @@ function loadData() {
       data.publicStockChannelId = data.publicStockChannelId || null;
 
       if (typeof data.nextOrderId !== 'number') data.nextOrderId = 1;
+      if (typeof data.nextTicketOrderId !== 'number') data.nextTicketOrderId = 1;
+
+      data.reviewedOrders = data.reviewedOrders || [];
+      data.reviewTicketDecisions = data.reviewTicketDecisions || [];
+      data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
       if (!data.stock) data.stock = {};
 
@@ -137,12 +144,21 @@ function loadData() {
     counted: [],
     pending: {},
     leaderboardMessageId: null,
+
     stockMessageId: null,
     stockButtonsMessageId: null,
     stockChannelId: STOCK_CHANNEL_ID,
+
     publicStockMessageId: null,
     publicStockChannelId: null,
+
     nextOrderId: 1,
+    nextTicketOrderId: 1,
+
+    reviewedOrders: [],
+    reviewTicketDecisions: [],
+    orderFormsSubmitted: {},
+
     stock: {}
   };
 
@@ -214,10 +230,59 @@ function getNextOrderId() {
   return orderId;
 }
 
+function getNextTicketOrderId() {
+  const data = loadData();
+  const orderId = String(data.nextTicketOrderId).padStart(4, '0');
+  data.nextTicketOrderId += 1;
+  saveData(data);
+  return orderId;
+}
+
+function hasReviewedOrder(orderId) {
+  return loadData().reviewedOrders.includes(orderId);
+}
+
+function markReviewedOrder(orderId) {
+  const data = loadData();
+  if (!data.reviewedOrders.includes(orderId)) {
+    data.reviewedOrders.push(orderId);
+  }
+  saveData(data);
+}
+
+function hasReviewDecision(id) {
+  return loadData().reviewTicketDecisions.includes(id);
+}
+
+function markReviewDecision(id) {
+  const data = loadData();
+  if (!data.reviewTicketDecisions.includes(id)) {
+    data.reviewTicketDecisions.push(id);
+  }
+  saveData(data);
+}
+
+function hasOrderFormSubmitted(channelId) {
+  return !!loadData().orderFormsSubmitted[channelId];
+}
+
+function markOrderFormSubmitted(channelId) {
+  const data = loadData();
+  data.orderFormsSubmitted[channelId] = true;
+  saveData(data);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId)) ||
     member.permissions.has(PermissionFlagsBits.Administrator);
+}
+
+function cleanUsername(username) {
+  return username
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, '')
+    .slice(0, 80);
 }
 
 function getTicketOwnerId(channel) {
@@ -232,10 +297,31 @@ function getTicketType(channel) {
   return match ? match[1] : 'ticket';
 }
 
+function getTicketOrderId(channel) {
+  const topic = channel.topic || '';
+  const match = topic.match(/order:([^;]+)/);
+  return match ? match[1] : 'none';
+}
+
 async function buildTranscript(channel) {
   try {
-    const messages = await channel.messages.fetch({ limit: 100 });
-    const sorted = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    let allMessages = [];
+    let lastId = null;
+
+    while (true) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+
+      const messages = await channel.messages.fetch(options);
+      if (messages.size === 0) break;
+
+      allMessages.push(...messages.values());
+      lastId = messages.last().id;
+
+      if (messages.size < 100) break;
+    }
+
+    const sorted = allMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
     if (sorted.length === 0) {
       return 'Keine Nachrichten gefunden.';
@@ -245,7 +331,11 @@ async function buildTranscript(channel) {
       const time = new Date(msg.createdTimestamp).toLocaleString('de-DE');
       const author = `${msg.author.tag} (${msg.author.id})`;
       const content = msg.content || '[Embed/Anhang/Keine Textnachricht]';
-      return `[${time}] ${author}: ${content}`;
+      const attachments = msg.attachments.size > 0
+        ? `\nAnhänge: ${msg.attachments.map(a => a.url).join(', ')}`
+        : '';
+
+      return `[${time}] ${author}: ${content}${attachments}`;
     }).join('\n');
   } catch (e) {
     console.error('buildTranscript error:', e.message);
@@ -260,6 +350,7 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
 
     const ownerId = getTicketOwnerId(channel);
     const ticketType = getTicketType(channel);
+    const ticketOrderId = getTicketOrderId(channel);
     const transcript = await buildTranscript(channel);
 
     const attachment = new AttachmentBuilder(
@@ -273,6 +364,7 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
       .setDescription(
         `**Ticket:** ${channel.name}\n` +
         `**Typ:** ${ticketType}\n` +
+        `**Order:** ${ticketOrderId}\n` +
         `**Owner:** ${ownerId ? `<@${ownerId}>` : 'Unbekannt'}\n` +
         `**Geschlossen von:** <@${closedBy.id}>\n` +
         `**Grund:** ${reason}`
@@ -718,6 +810,7 @@ client.once('ready', async () => {
   }
 
   await updateLeaderboard();
+  await updateStockPanel();
 
   setInterval(updateLeaderboard, 5 * 60 * 1000);
 });
@@ -820,9 +913,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 // ── Interactions ──────────────────────────────────────────────────
-const reviewedUsers = new Set();
-const reviewTicketDecisions = new Set();
-
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
 
@@ -1171,6 +1261,13 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'verify_member') {
       try {
+        if (interaction.member.roles.cache.has(VERIFY_ROLE_ID)) {
+          return interaction.reply({
+            content: '✅ Du bist bereits verifiziert.',
+            ephemeral: true
+          });
+        }
+
         await interaction.member.roles.add(VERIFY_ROLE_ID);
 
         return interaction.reply({
@@ -1192,11 +1289,21 @@ client.on('interactionCreate', async interaction => {
       const typeName = isOrder ? 'bestellung' : 'support';
       const displayName = isOrder ? 'Bestellung' : 'Support';
 
-      const ticketName = `${typeName}-${interaction.user.username}`
-        .toLowerCase()
-        .replace(/[^a-z0-9-_]/g, '');
+      const cleanName = cleanUsername(interaction.user.username);
 
-      const existing = interaction.guild.channels.cache.find(c => c.name === ticketName);
+      let ticketName;
+      let ticketOrderId = null;
+
+      if (isOrder) {
+        ticketOrderId = getNextTicketOrderId();
+        ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
+      } else {
+        ticketName = `support-${cleanName}`.slice(0, 100);
+      }
+
+      const existing = interaction.guild.channels.cache.find(c =>
+        c.name === ticketName || c.name === `closed-${ticketName}`
+      );
 
       if (existing) {
         return interaction.reply({
@@ -1210,7 +1317,7 @@ client.on('interactionCreate', async interaction => {
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:${typeName}`,
+          topic: `owner:${interaction.user.id};type:${typeName};order:${ticketOrderId || 'none'}`,
           permissionOverwrites: [
             {
               id: interaction.guild.id,
@@ -1233,7 +1340,7 @@ client.on('interactionCreate', async interaction => {
 
         const ticketEmbed = new EmbedBuilder()
           .setColor('#b10de7')
-          .setTitle(isOrder ? '🛒 Bestellung' : '🎫 Support')
+          .setTitle(isOrder ? `🛒 Bestellung #${ticketOrderId}` : '🎫 Support')
           .setDescription(
             isOrder
               ? 'Willkommen! Bitte klicke unten auf **Bestellformular ausfüllen**.\n\nDu kannst danach noch weitere Infos in den Chat schreiben.'
@@ -1287,6 +1394,13 @@ client.on('interactionCreate', async interaction => {
       if (ownerId && interaction.user.id !== ownerId) {
         return interaction.reply({
           content: '❌ Nur der Ticket-Ersteller kann das Bestellformular ausfüllen.',
+          ephemeral: true
+        });
+      }
+
+      if (hasOrderFormSubmitted(interaction.channel.id)) {
+        return interaction.reply({
+          content: '❌ Das Bestellformular wurde in diesem Ticket bereits abgesendet.',
           ephemeral: true
         });
       }
@@ -1427,7 +1541,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       const reviewDecisionId = `${interaction.channel.id}_${interaction.user.id}`;
-      reviewTicketDecisions.add(reviewDecisionId);
+      markReviewDecision(reviewDecisionId);
 
       return interaction.update({
         content: '📌 Das Ticket bleibt offen.',
@@ -1446,7 +1560,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       const reviewDecisionId = `${interaction.channel.id}_${interaction.user.id}`;
-      reviewTicketDecisions.add(reviewDecisionId);
+      markReviewDecision(reviewDecisionId);
 
       await interaction.update({
         content: '🔒 Ticket wird geschlossen...',
@@ -1571,12 +1685,13 @@ client.on('interactionCreate', async interaction => {
         );
       }
 
-      const ticketName = `1m-${interaction.user.username}`
-        .toLowerCase()
-        .replace(/[^a-z0-9-_]/g, '');
+      const cleanName = cleanUsername(interaction.user.username);
+      const ticketName = `1m-${cleanName}`.slice(0, 100);
 
       const existingTicket =
-        interaction.guild.channels.cache.find(c => c.name === ticketName);
+        interaction.guild.channels.cache.find(c =>
+          c.name === ticketName || c.name === `closed-${ticketName}`
+        );
 
       if (existingTicket) {
         return interaction.editReply(`❌ You already have an open ticket: <#${existingTicket.id}>`);
@@ -1587,7 +1702,7 @@ client.on('interactionCreate', async interaction => {
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:reward`,
+          topic: `owner:${interaction.user.id};type:reward;order:none`,
           permissionOverwrites: [
             {
               id: interaction.guild.id,
@@ -1681,9 +1796,9 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
-      if (reviewedUsers.has(buyerId)) {
+      if (hasReviewedOrder(orderId)) {
         return interaction.reply({
-          content: '❌ Du hast bereits eine Bewertung abgegeben!',
+          content: '❌ Diese Bestellung wurde bereits bewertet!',
           ephemeral: true
         });
       }
@@ -1728,14 +1843,24 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
+      if (hasOrderFormSubmitted(interaction.channel.id)) {
+        return interaction.reply({
+          content: '❌ Das Bestellformular wurde in diesem Ticket bereits abgesendet.',
+          ephemeral: true
+        });
+      }
+
       const item = interaction.fields.getTextInputValue('item');
       const amount = interaction.fields.getTextInputValue('amount');
       const ingame = interaction.fields.getTextInputValue('ingame');
       const payment = interaction.fields.getTextInputValue('payment');
+      const orderId = getTicketOrderId(interaction.channel);
+
+      markOrderFormSubmitted(interaction.channel.id);
 
       const embed = new EmbedBuilder()
         .setColor('#b10de7')
-        .setTitle('🛒 Neue Bestellung')
+        .setTitle(`🛒 Neue Bestellung${orderId !== 'none' ? ` #${orderId}` : ''}`)
         .addFields(
           { name: 'Item', value: item, inline: true },
           { name: 'Menge', value: amount, inline: true },
@@ -1799,6 +1924,13 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
+      if (hasReviewedOrder(orderId)) {
+        return interaction.reply({
+          content: '❌ Diese Bestellung wurde bereits bewertet!',
+          ephemeral: true
+        });
+      }
+
       const reviewChannel = interaction.guild.channels.cache.get(REVIEWS_CHANNEL_ID);
 
       if (!reviewChannel) {
@@ -1840,7 +1972,7 @@ client.on('interactionCreate', async interaction => {
         console.error('Rolle konnte nicht vergeben werden:', e.message);
       }
 
-      reviewedUsers.add(buyerId);
+      markReviewedOrder(orderId);
 
       const reviewDecisionId = `${interaction.channel.id}_${reviewer.id}`;
 
@@ -1870,15 +2002,17 @@ client.on('interactionCreate', async interaction => {
 
       setTimeout(async () => {
         try {
-          if (reviewTicketDecisions.has(reviewDecisionId)) return;
+          if (hasReviewDecision(reviewDecisionId)) return;
 
-          reviewTicketDecisions.add(reviewDecisionId);
+          markReviewDecision(reviewDecisionId);
 
           await closeTicket(interaction.channel, reviewer, 'Auto-Close nach Review');
         } catch (e) {
           console.error('auto close after review error:', e.message);
         }
       }, 5 * 60 * 1000);
+
+      return;
     }
   }
 });
