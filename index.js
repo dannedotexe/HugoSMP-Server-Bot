@@ -388,16 +388,38 @@ client.on('interactionCreate', async interaction => {
       } catch (e) { return interaction.editReply('❌ Fehler.'); }
     }
 
-    if (interaction.commandName === 'setupstock') {
-      await interaction.deferReply({ ephemeral: true });
-      try {
-        const rows = buildStockButtons();
-        const msg = await interaction.channel.send({ embeds: [buildStockEmbed()], components: rows });
-        const data = loadData();
-        data.stockMessageId = msg.id;
-        saveData(data);
-        return interaction.editReply('✅ Stock Panel gesendet!');
-      } catch (e) { return interaction.editReply('❌ Fehler beim Senden des Stock Panels.'); }
+if (interaction.commandName === 'setupstock') {
+  await interaction.deferReply({ ephemeral: true });
+  try {
+
+    // Channel nur für Staff sichtbar machen
+    await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
+      ViewChannel: false
+    });
+
+    for (const roleId of STAFF_ROLE_IDS) {
+      await interaction.channel.permissionOverwrites.edit(roleId, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true
+      });
+    }
+
+    const rows = buildStockButtons();
+    const msg = await interaction.channel.send({
+      embeds: [buildStockEmbed()],
+      components: rows
+    });
+
+    const data = loadData();
+    data.stockMessageId = msg.id;
+    saveData(data);
+
+    return interaction.editReply('✅ Stock Panel gesendet!');
+  } catch (e) {
+    return interaction.editReply('❌ Fehler beim Senden des Stock Panels.');
+  }
+}
     }
 
     if (interaction.commandName === 'inviterewards') {
