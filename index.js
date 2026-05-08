@@ -15,7 +15,6 @@ const client = new Client({
   ]
 });
 
-// ── Config ────────────────────────────────────────────────────────
 const TOKEN = process.env.DISCORD_TOKEN;
 const DATA_FILE = '/app/data/data.json';
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
@@ -34,24 +33,18 @@ const STAFF_ROLE_IDS = [
   '1499146219946250241',
   '1499159379902074880'
 ];
+
 const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-// ── Stock items ───────────────────────────────────────────────────
 const STOCK_ITEMS = [
   { id: 'money', name: '1M Money', emoji: '<:Money:1502281700774772908>', emojiId: '1502281700774772908', price: '1,50 €' },
-
   { id: 'elytra', name: 'Elytra', emoji: '<:Elytra:1502281765492883497>', emojiId: '1502281765492883497', price: '110 €' },
-
   { id: 'mace', name: 'Mace mit Windburst I', emoji: '<:Mace:1502281825131692163>', emojiId: '1502281825131692163', price: '1,50 €' },
-
   { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:DeepslateEmeraldOre:1502281747667353610>', emojiId: '1502281747667353610', price: '0,70 €' },
-
   { id: 'ancient', name: 'Ancient Debris', emoji: '<:Ancient:1502281804780933293>', emojiId: '1502281804780933293', price: '0,08 €' },
-
   { id: 'gilded', name: 'Gilded Blackstone', emoji: '<:GildedBlackstone:1502281854051680469>', emojiId: '1502281854051680469', price: '0,04 €' },
 ];
 
-// ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
@@ -71,6 +64,10 @@ function loadData() {
         data.stock = {};
         STOCK_ITEMS.forEach(item => { data.stock[item.id] = 0; });
       }
+
+      STOCK_ITEMS.forEach(item => {
+        if (typeof data.stock[item.id] !== 'number') data.stock[item.id] = 0;
+      });
 
       return data;
     }
@@ -104,9 +101,7 @@ function saveData(data) {
   }
 }
 
-function getInvites(userId) {
-  return loadData().invites[userId] ?? 0;
-}
+function getInvites(userId) { return loadData().invites[userId] ?? 0; }
 
 function setInvites(userId, amount) {
   const data = loadData();
@@ -157,27 +152,23 @@ function getNextOrderId() {
   return orderId;
 }
 
-// ── Invite cache ──────────────────────────────────────────────────
 const cachedInvites = new Map();
 
 async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
-
     invites.forEach(inv => {
       cachedInvites.set(inv.code, {
         inviterId: inv.inviter?.id ?? null,
         uses: inv.uses ?? 0
       });
     });
-
     console.log(`📋 Cached ${invites.size} invites for ${guild.name}`);
   } catch (e) {
     console.error('cacheInvites error:', e.message);
   }
 }
 
-// ── Live Leaderboard ──────────────────────────────────────────────
 function buildLeaderboardEmbed() {
   const data = loadData();
   const botId = client.user.id;
@@ -227,7 +218,6 @@ async function updateLeaderboard() {
   }
 }
 
-// ── Stock Panel ───────────────────────────────────────────────────
 function buildStockEmbed() {
   const data = loadData();
 
@@ -270,7 +260,7 @@ function buildStockButtons() {
       new ButtonBuilder()
         .setCustomId(`stock_set_${item.id}`)
         .setLabel(item.name)
-        .setEmoji({   id: item.emojiId })
+        .setEmoji({ id: item.emojiId })
         .setStyle(ButtonStyle.Primary),
 
       new ButtonBuilder()
@@ -305,7 +295,7 @@ async function updateStockPanel() {
 
           if (data.stockButtonsMessageId) {
             const buttonsMsg = await channel.messages.fetch(data.stockButtonsMessageId);
-            await buttonsMsg.edit({ components: rows.slice(5) });
+            await buttonsMsg.edit({ content: '‎', components: rows.slice(5) });
           }
         }
       } catch (e) {}
@@ -325,20 +315,6 @@ async function updateStockPanel() {
   }
 }
 
-    if (data.publicStockMessageId && data.publicStockChannelId) {
-      try {
-        const channel = client.channels.cache.get(data.publicStockChannelId);
-        if (channel) {
-          const msg = await channel.messages.fetch(data.publicStockMessageId);
-          await msg.edit({ embeds: [embed], components: [] });
-        }
-      } catch (e) {}
-    }
-  } catch (e) {
-    console.error('updateStockPanel error:', e.message);
-  }
-}
-// ── Register slash commands ───────────────────────────────────────
 async function registerCommands(guildId) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
 
@@ -410,7 +386,6 @@ async function registerCommands(guildId) {
   console.log(`✅ Commands registered for guild ${guildId}`);
 }
 
-// ── Panel builder ─────────────────────────────────────────────────
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor('#b10de7')
@@ -434,7 +409,6 @@ function buildPanel() {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Ready ─────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
@@ -469,7 +443,6 @@ client.on('inviteCreate', inv => {
 
 client.on('inviteDelete', inv => cachedInvites.delete(inv.code));
 
-// ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
   try {
     const accountAge = Date.now() - member.user.createdTimestamp;
@@ -520,7 +493,6 @@ client.on('guildMemberAdd', async member => {
   }
 });
 
-// ── Verify role → count invite ────────────────────────────────────
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
     const gotVerifyRole =
@@ -536,7 +508,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     removePending(newMember.id);
 
     const total = addInvite(inviterId);
-
     console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
 
     await updateLeaderboard();
@@ -545,7 +516,6 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   }
 });
 
-// ── Interactions ──────────────────────────────────────────────────
 const reviewedUsers = new Set();
 
 client.on('interactionCreate', async interaction => {
@@ -566,9 +536,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        const msg = await interaction.channel.send({
-          embeds: [buildLeaderboardEmbed()]
-        });
+        const msg = await interaction.channel.send({ embeds: [buildLeaderboardEmbed()] });
 
         const data = loadData();
         data.leaderboardMessageId = msg.id;
@@ -600,33 +568,42 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-if (interaction.commandName === 'setupstockpanel') {
-  await interaction.deferReply({ ephemeral: true });
+    if (interaction.commandName === 'setupstockpanel') {
+      try {
+        await interaction.deferReply({ ephemeral: true });
 
-  try {
-    const rows = buildStockButtons();
+        const rows = buildStockButtons();
 
-    const msg = await interaction.channel.send({
-      embeds: [buildStockEmbed()],
-      components: rows.slice(0, 5)
-    });
+        const msg = await interaction.channel.send({
+          embeds: [buildStockEmbed()],
+          components: rows.slice(0, 5)
+        });
 
-    const buttonsMsg = await interaction.channel.send({
-      components: rows.slice(5)
-    });
+        const buttonsMsg = await interaction.channel.send({
+          content: '‎',
+          components: rows.slice(5)
+        });
 
-    const data = loadData();
-    data.stockMessageId = msg.id;
-    data.stockButtonsMessageId = buttonsMsg.id;
-    data.stockChannelId = interaction.channel.id;
-    saveData(data);
+        const data = loadData();
+        data.stockMessageId = msg.id;
+        data.stockButtonsMessageId = buttonsMsg.id;
+        data.stockChannelId = interaction.channel.id;
+        saveData(data);
 
-    return interaction.deleteReply();
-  } catch (e) {
-    console.error('setupstockpanel error:', e);
-    return interaction.editReply('❌ Fehler beim Senden des Staff Stock Panels.');
-  }
-}
+        return interaction.deleteReply();
+      } catch (e) {
+        console.error('setupstockpanel error:', e);
+
+        if (!interaction.replied && !interaction.deferred) {
+          return interaction.reply({
+            content: '❌ Fehler beim Senden des Staff Stock Panels.',
+            ephemeral: true
+          });
+        }
+
+        return interaction.editReply('❌ Fehler beim Senden des Staff Stock Panels.');
+      }
+    }
 
     if (interaction.commandName === 'inviterewards') {
       return interaction.reply(buildPanel());
@@ -674,8 +651,6 @@ if (interaction.commandName === 'setupstockpanel') {
   }
 
   if (interaction.isButton()) {
-
-    // ── Stock buttons ─────────────────────────────────────────────
     if (interaction.customId.startsWith('stock_')) {
       const isStaff =
         STAFF_ROLE_IDS.some(r => interaction.member.roles.cache.has(r)) ||
@@ -707,7 +682,6 @@ if (interaction.commandName === 'setupstockpanel') {
           .setRequired(true);
 
         modal.addComponents(new ActionRowBuilder().addComponents(input));
-
         return interaction.showModal(modal);
       }
 
@@ -717,7 +691,6 @@ if (interaction.commandName === 'setupstockpanel') {
       const current = data.stock[itemId] ?? 0;
 
       let delta = 0;
-
       if (action === 'plus1') delta = 1;
       else if (action === 'plus10') delta = 10;
       else if (action === 'minus1') delta = -1;
@@ -735,7 +708,6 @@ if (interaction.commandName === 'setupstockpanel') {
       );
     }
 
-    // ── Invite buttons ────────────────────────────────────────────
     if (interaction.customId === 'gen_invite') {
       await interaction.deferReply({ ephemeral: true });
 
@@ -778,8 +750,6 @@ if (interaction.commandName === 'setupstockpanel') {
       await interaction.deferReply({ ephemeral: true });
 
       const count = getInvites(interaction.user.id);
-
-      console.log(`💰 Claim attempt by ${interaction.user.tag} — invites: ${count}`);
 
       if (count < REQUIRED_INVITES) {
         return interaction.editReply(
@@ -939,9 +909,7 @@ if (interaction.commandName === 'setupstockpanel') {
     }
   }
 
-  // ── Modal submit ──────────────────────────────────────────────
   if (interaction.isModalSubmit()) {
-
     if (interaction.customId.startsWith('stock_modal_')) {
       const itemId = interaction.customId.replace('stock_modal_', '');
       const amountStr = interaction.fields.getTextInputValue('amount');
