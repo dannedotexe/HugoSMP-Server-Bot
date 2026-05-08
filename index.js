@@ -406,6 +406,7 @@ if (interaction.commandName === 'setupstock') {
 
     const data = loadData();
     data.stockMessageId = msg.id;
+
     saveData(data);
 
   } catch (e) {
@@ -425,7 +426,6 @@ if (interaction.commandName === 'setupstockpanel') {
     console.error('setupstockpanel error:', e);
   }
 }
-
     // Channel nur für Staff sichtbar machen
 await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
   ViewChannel: false
