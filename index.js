@@ -454,7 +454,7 @@ await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
     return interaction.editReply('❌ Fehler beim Senden des Stock Panels.');
   }
 }
-    }
+    
 
     if (interaction.commandName === 'inviterewards') {
       return interaction.reply(buildPanel());
