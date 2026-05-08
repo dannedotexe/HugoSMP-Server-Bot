@@ -703,3 +703,103 @@ client.on('interactionCreate', async interaction => {
         });
       }
     }
+    if (interaction.customId === 'verify_member') {
+  try {
+    await interaction.member.roles.add(VERIFY_ROLE_ID);
+
+    return interaction.reply({
+      content: '✅ Du wurdest erfolgreich verifiziert!',
+      ephemeral: true
+    });
+  } catch (e) {
+    return interaction.reply({
+      content: '❌ Rolle konnte nicht vergeben werden.',
+      ephemeral: true
+    });
+  }
+}
+
+if (interaction.customId === 'create_ticket') {
+
+  const ticketName = `ticket-${interaction.user.username}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, '');
+
+  const existing = interaction.guild.channels.cache.find(
+    c => c.name === ticketName
+  );
+
+  if (existing) {
+    return interaction.reply({
+      content: `❌ Du hast bereits ein Ticket: <#${existing.id}>`,
+      ephemeral: true
+    });
+  }
+
+  const ticket = await interaction.guild.channels.create({
+    name: ticketName,
+    type: ChannelType.GuildText,
+    parent: TICKET_CATEGORY_ID,
+    permissionOverwrites: [
+      {
+        id: interaction.guild.id,
+        deny: ['ViewChannel']
+      },
+      {
+        id: interaction.user.id,
+        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+      },
+      ...STAFF_ROLE_IDS.map(roleId => ({
+        id: roleId,
+        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+      }))
+    ]
+  });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('close_ticket')
+      .setLabel('Ticket schließen')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await ticket.send({
+    content: `<@${interaction.user.id}> Willkommen beim Support!\nBitte beschreibe dein Anliegen.`,
+    components: [row]
+  });
+
+  return interaction.reply({
+    content: `✅ Ticket erstellt: <#${ticket.id}>`,
+    ephemeral: true
+  });
+}
+
+if (interaction.customId === 'close_ticket') {
+
+  const isStaff =
+    STAFF_ROLE_IDS.some(roleId =>
+      interaction.member.roles.cache.has(roleId)
+    );
+
+  if (!isStaff) {
+    return interaction.reply({
+      content: '❌ Nur Staff kann Tickets schließen.',
+      ephemeral: true
+    });
+  }
+
+  await interaction.reply({
+    content: '🔒 Ticket wird geschlossen...',
+    ephemeral: true
+  });
+
+  setTimeout(async () => {
+    try {
+      await interaction.channel.delete();
+    } catch {}
+  }, 3000);
+}
+});
+
+client.login(TOKEN);
