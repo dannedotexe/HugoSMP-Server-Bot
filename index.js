@@ -38,6 +38,7 @@ const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Stock items ───────────────────────────────────────────────────
 const STOCK_ITEMS = [
+  { id: 'money',     name: 'Money',                 emoji: '<:Money:1502281700774772908>', emojiId: '1502281700774772908', price: '1 € = 1.000.000 $' },
   { id: 'elytra',    name: 'Elytra',                emoji: '<:Elytra:1502281765492883497>', emojiId: '1502281765492883497', price: '<:Money:1502281700774772908> 110 €' },
   { id: 'mace',      name: 'Mace mit Windburst I',  emoji: '<:Mace:1502281825131692163>', emojiId: '1502281825131692163', price: '<:Money:1502281700774772908> 1,50 €' },
   { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:Deepslate_Emerald_Ore:1502281747667353610>', emojiId: '1502281747667353610', price: '<:Money:1502281700774772908> 0,70 €' },
