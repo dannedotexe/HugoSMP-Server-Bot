@@ -37,6 +37,13 @@ const STAFF_ROLE_IDS = [
   '1499159379902074880'
 ];
 
+const PING_ROLES = {
+  giveaways: '1501296933732618360',
+  restocks: '1501297036719423700',
+  deals: '1501297197113938100',
+  news: '1501297279804641474'
+};
+
 const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Stock items ───────────────────────────────────────────────────
@@ -427,6 +434,12 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('setuproles')
+      .setDescription('Send the ping roles panel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('say')
       .setDescription('Send a message as the bot.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -653,6 +666,54 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
+    if (interaction.commandName === 'setuproles') {
+      const embed = new EmbedBuilder()
+        .setColor('#b10de7')
+        .setDescription(
+          '**Reagiert mit dem Emoji auf diese Nachricht, von dessen Kategorie ihr zukünftig gepingt werden möchtet:**\n\n' +
+          '🎉 = Giveaways\n\n' +
+          '📦 = Item Restocks\n\n' +
+          '💰 = Deals, Rabatte & Freebies\n\n' +
+          '📰 = News & Ankündigungen'
+        );
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('role_giveaways')
+          .setLabel('Giveaways')
+          .setEmoji('🎉')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('role_restocks')
+          .setLabel('Item Restocks')
+          .setEmoji('📦')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('role_deals')
+          .setLabel('Deals')
+          .setEmoji('💰')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('role_news')
+          .setLabel('News')
+          .setEmoji('📰')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await interaction.channel.send({
+        embeds: [embed],
+        components: [row]
+      });
+
+      return interaction.reply({
+        content: '✅ Rollen-Panel gesendet!',
+        ephemeral: true
+      });
+    }
+
     if (interaction.commandName === 'setupverify') {
       const embed = new EmbedBuilder()
         .setColor('#b10de7')
@@ -685,16 +746,22 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'setuptickets') {
       const embed = new EmbedBuilder()
         .setColor('#b10de7')
-        .setTitle('Ticket Support')
+        .setTitle('Ticket System')
         .setDescription(
           '**Create Ticket**\n\n' +
-          '⬇️ Hier erstellst du ein Ticket für Fragen oder einen Einkauf'
+          '⬇️ Wähle aus, ob du eine **Bestellung** oder **Support** brauchst.'
         );
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId('create_ticket')
-          .setLabel('Create')
+          .setCustomId('create_order_ticket')
+          .setLabel('Bestellung')
+          .setEmoji('🛒')
+          .setStyle(ButtonStyle.Success),
+
+        new ButtonBuilder()
+          .setCustomId('create_support_ticket')
+          .setLabel('Support')
           .setEmoji('🎫')
           .setStyle(ButtonStyle.Primary)
       );
@@ -851,6 +918,46 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.isButton()) {
 
+    if (interaction.customId.startsWith('role_')) {
+      const roleKey = interaction.customId.replace('role_', '');
+      const roleId = PING_ROLES[roleKey];
+
+      if (!roleId) {
+        return interaction.reply({
+          content: '❌ Rolle nicht gefunden.',
+          ephemeral: true
+        });
+      }
+
+      const member = interaction.member;
+      const hasRole = member.roles.cache.has(roleId);
+
+      try {
+        if (hasRole) {
+          await member.roles.remove(roleId);
+
+          return interaction.reply({
+            content: `❌ Rolle entfernt: <@&${roleId}>`,
+            ephemeral: true
+          });
+        }
+
+        await member.roles.add(roleId);
+
+        return interaction.reply({
+          content: `✅ Rolle erhalten: <@&${roleId}>`,
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error('role button error:', e);
+
+        return interaction.reply({
+          content: '❌ Ich konnte die Rolle nicht ändern. Prüfe meine Rollen-Rechte.',
+          ephemeral: true
+        });
+      }
+    }
+
     if (interaction.customId === 'verify_member') {
       try {
         await interaction.member.roles.add(VERIFY_ROLE_ID);
@@ -869,8 +976,12 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.customId === 'create_ticket') {
-      const ticketName = `ticket-${interaction.user.username}`
+    if (interaction.customId === 'create_order_ticket' || interaction.customId === 'create_support_ticket') {
+      const isOrder = interaction.customId === 'create_order_ticket';
+      const typeName = isOrder ? 'bestellung' : 'support';
+      const displayName = isOrder ? 'Bestellung' : 'Support';
+
+      const ticketName = `${typeName}-${interaction.user.username}`
         .toLowerCase()
         .replace(/[^a-z0-9-_]/g, '');
 
@@ -878,7 +989,7 @@ client.on('interactionCreate', async interaction => {
 
       if (existing) {
         return interaction.reply({
-          content: `❌ Du hast bereits ein Ticket: <#${existing.id}>`,
+          content: `❌ Du hast bereits ein ${displayName}-Ticket: <#${existing.id}>`,
           ephemeral: true
         });
       }
@@ -908,6 +1019,16 @@ client.on('interactionCreate', async interaction => {
           ]
         });
 
+        const ticketEmbed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(isOrder ? '🛒 Bestellung' : '🎫 Support')
+          .setDescription(
+            isOrder
+              ? 'Willkommen! Bitte schreibe hier, was du kaufen möchtest.\n\n**Vorlage:**\n• Item:\n• Menge:\n• Ingame-Name:\n• Zahlungsmethode:'
+              : 'Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.'
+          )
+          .setTimestamp();
+
         const closeRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId('close_ticket')
@@ -917,16 +1038,17 @@ client.on('interactionCreate', async interaction => {
         );
 
         await ticket.send({
-          content: `<@${interaction.user.id}> Willkommen beim Support!\nBitte beschreibe dein Anliegen.`,
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
+          embeds: [ticketEmbed],
           components: [closeRow]
         });
 
         return interaction.reply({
-          content: `✅ Ticket erstellt: <#${ticket.id}>`,
+          content: `✅ ${displayName}-Ticket erstellt: <#${ticket.id}>`,
           ephemeral: true
         });
       } catch (e) {
-        console.error('create_ticket error:', e);
+        console.error('create ticket error:', e);
 
         return interaction.reply({
           content: '❌ Fehler beim Erstellen des Tickets. Prüfe die Bot-Rechte.',
