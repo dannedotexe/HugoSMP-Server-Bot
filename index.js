@@ -243,6 +243,11 @@ async function registerCommands(guildId) {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
     new SlashCommandBuilder()
+  .setName('setupstockpanel')
+  .setDescription('Send the public stock panel.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .toJSON(),
+    new SlashCommandBuilder()
       .setName('setupleaderboard')
       .setDescription('Send the live leaderboard to this channel. Admin only.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -389,8 +394,37 @@ client.on('interactionCreate', async interaction => {
     }
 
 if (interaction.commandName === 'setupstock') {
-  await interaction.deferReply({ ephemeral: true });
+
   try {
+
+    const rows = buildStockButtons();
+
+    const msg = await interaction.channel.send({
+      embeds: [buildStockEmbed()],
+      components: rows
+    });
+
+    const data = loadData();
+    data.stockMessageId = msg.id;
+    saveData(data);
+
+  } catch (e) {
+    console.error('setupstock error:', e);
+  }
+}
+
+if (interaction.commandName === 'setupstockpanel') {
+
+  try {
+
+    await interaction.channel.send({
+      embeds: [buildStockEmbed()]
+    });
+
+  } catch (e) {
+    console.error('setupstockpanel error:', e);
+  }
+}
 
     // Channel nur für Staff sichtbar machen
 await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
@@ -409,7 +443,7 @@ await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
     const msg = await interaction.channel.send({
       embeds: [buildStockEmbed()],
       components: rows
-    });
+  });
 
     const data = loadData();
     data.stockMessageId = msg.id;
@@ -554,10 +588,10 @@ await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
             `🛠️ **DEINE AUFGABE:**\n` +
             `↳ Order Ingame erstellen (Menge laut Rechnung)\n` +
             `↳ Preis pro Stück: 1$\n` +
-            `↳ Steuern: Gehen auf unseren Nacken!\n\n` +
+            `↳ Steuern: Sind so gut wie keine Vorhanden!\n\n` +
             `📩 **SCHREIB UNS:**\n` +
             `• Ingame-Name:\n` +
-            `• Status: "Order ist reingestellt worden!"`
+            `• Status: "Ich habe die Order reingestellt!"`
           )
           .setTimestamp();
 
@@ -592,8 +626,8 @@ await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
     if (interaction.customId === 'close_ticket') {
       const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
       if (!isStaff) return interaction.reply({ content: '❌ Only staff can close this ticket.', ephemeral: true });
-      await interaction.reply({ content: '🔒 Ticket will be closed in 3 seconds...', ephemeral: true });
-      setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 3000);
+      await interaction.reply({ content: '🔒 Ticket will be closed in 5 seconds...', ephemeral: true });
+      setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 5000);
     }
 
     if (interaction.customId.startsWith('bewerten_')) {
@@ -657,9 +691,9 @@ await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
         if (!member.roles.cache.has(KUNDEN_ROLE_ID)) await member.roles.add(KUNDEN_ROLE_ID);
       } catch (e) { console.error('Rolle konnte nicht vergeben werden:', e.message); }
       reviewedUsers.add(buyerId);
-      await interaction.reply({ content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...', ephemeral: true });
+      await interaction.reply({ content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 10 Sekunden automatisch geschlossen...', ephemeral: true });
       if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
-        setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 3000);
+        setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 10000);
       }
     }
   }
