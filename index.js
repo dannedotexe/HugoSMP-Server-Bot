@@ -38,11 +38,11 @@ const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Stock items ───────────────────────────────────────────────────
 const STOCK_ITEMS = [
-  { id: 'elytra',    name: 'Elytra',                emoji: '<:Elytra:1502281765492883497>', price: '<:Money:1502281700774772908> 110 €' },
-  { id: 'mace',      name: 'Mace mit Windburst I',  emoji: '<:Mace:1502281825131692163>', price: '<:Money:1502281700774772908> 1,50 €' },
-  { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:EmeraldOre:1502281747667353610>', price: '<:Money:1502281700774772908> 0,70 €' },
-  { id: 'ancient',   name: 'Ancient Debris',        emoji: '<:Ancient:1502281804780933293>', price: '<:Money:1502281700774772908> 0,08 €' },
-  { id: 'gilded',    name: 'Gilded Blackstone',     emoji: '<:Gilded:1502281854051680469>', price: '<:Money:1502281700774772908> 0,04 €' },
+  { id: 'elytra',    name: 'Elytra',                emoji: '<:Elytra:1502281765492883497>', emojiId: '1502281765492883497', price: '<:Money:1502281700774772908> 110 €' },
+  { id: 'mace',      name: 'Mace mit Windburst I',  emoji: '<:Mace:1502281825131692163>', emojiId: '1502281825131692163', price: '<:Money:1502281700774772908> 1,50 €' },
+  { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '<:Deepslate_Emerald_Ore:1502281747667353610>', emojiId: '1502281747667353610', price: '<:Money:1502281700774772908> 0,70 €' },
+  { id: 'ancient',   name: 'Ancient Debris',        emoji: '<:Ancient:1502281804780933293>', emojiId: '1502281804780933293', price: '<:Money:1502281700774772908> 0,08 €' },
+  { id: 'gilded',    name: 'Gilded Blackstone',     emoji: '<:Gilded_Blackstone:1502281854051680469>', emojiId: '1502281854051680469', price: '<:Money:1502281700774772908> 0,04 €' },
 ];
 
 // ── Data helpers ──────────────────────────────────────────────────
@@ -59,10 +59,12 @@ function loadData() {
       data.publicStockMessageId = data.publicStockMessageId || null;
       data.publicStockChannelId = data.publicStockChannelId || null;
       if (typeof data.nextOrderId !== 'number') data.nextOrderId = 1;
+
       if (!data.stock) {
         data.stock = {};
         STOCK_ITEMS.forEach(item => { data.stock[item.id] = 0; });
       }
+
       return data;
     }
   } catch (e) {
@@ -94,7 +96,9 @@ function saveData(data) {
   }
 }
 
-function getInvites(userId) { return loadData().invites[userId] ?? 0; }
+function getInvites(userId) {
+  return loadData().invites[userId] ?? 0;
+}
 
 function setInvites(userId, amount) {
   const data = loadData();
@@ -151,12 +155,14 @@ const cachedInvites = new Map();
 async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
+
     invites.forEach(inv => {
       cachedInvites.set(inv.code, {
         inviterId: inv.inviter?.id ?? null,
         uses: inv.uses ?? 0
       });
     });
+
     console.log(`📋 Cached ${invites.size} invites for ${guild.name}`);
   } catch (e) {
     console.error('cacheInvites error:', e.message);
@@ -243,11 +249,31 @@ function buildStockButtons() {
     const item = STOCK_ITEMS[i];
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`stock_minus10_${item.id}`).setLabel('-10').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`stock_minus1_${item.id}`).setLabel('-1').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`stock_set_${item.id}`).setLabel(`${item.emoji} ${item.name}`).setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`stock_plus1_${item.id}`).setLabel('+1').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`stock_plus10_${item.id}`).setLabel('+10').setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`stock_minus10_${item.id}`)
+        .setLabel('-10')
+        .setStyle(ButtonStyle.Danger),
+
+      new ButtonBuilder()
+        .setCustomId(`stock_minus1_${item.id}`)
+        .setLabel('-1')
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId(`stock_set_${item.id}`)
+        .setLabel(item.name)
+        .setEmoji(item.emojiId)
+        .setStyle(ButtonStyle.Primary),
+
+      new ButtonBuilder()
+        .setCustomId(`stock_plus1_${item.id}`)
+        .setLabel('+1')
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId(`stock_plus10_${item.id}`)
+        .setLabel('+10')
+        .setStyle(ButtonStyle.Success),
     );
 
     rows.push(row);
@@ -285,7 +311,6 @@ async function updateStockPanel() {
     console.error('updateStockPanel error:', e.message);
   }
 }
-
 // ── Register slash commands ───────────────────────────────────────
 async function registerCommands(guildId) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -305,13 +330,13 @@ async function registerCommands(guildId) {
 
     new SlashCommandBuilder()
       .setName('setupstock')
-      .setDescription('Send the staff stock panel with buttons.')
+      .setDescription('Send the public stock panel without buttons.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setupstockpanel')
-      .setDescription('Send the public stock panel without buttons.')
+      .setDescription('Send the staff stock panel with buttons.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
@@ -438,6 +463,7 @@ client.on('guildMemberAdd', async member => {
 
     newInvites.forEach(inv => {
       const cached = cachedInvites.get(inv.code);
+
       if (cached && inv.uses > cached.uses) {
         usedInviterId = cached.inviterId;
         usedCode = inv.code;
@@ -483,6 +509,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     removePending(newMember.id);
 
     const total = addInvite(inviterId);
+
     console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
 
     await updateLeaderboard();
@@ -512,7 +539,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        const msg = await interaction.channel.send({ embeds: [buildLeaderboardEmbed()] });
+        const msg = await interaction.channel.send({
+          embeds: [buildLeaderboardEmbed()]
+        });
 
         const data = loadData();
         data.leaderboardMessageId = msg.id;
@@ -525,6 +554,26 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'setupstock') {
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const msg = await interaction.channel.send({
+          embeds: [buildStockEmbed()]
+        });
+
+        const data = loadData();
+        data.publicStockMessageId = msg.id;
+        data.publicStockChannelId = interaction.channel.id;
+        saveData(data);
+
+        return interaction.deleteReply();
+      } catch (e) {
+        console.error('setupstock error:', e);
+        return interaction.editReply('❌ Fehler beim Senden des Stock Panels.');
+      }
+    }
+
+    if (interaction.commandName === 'setupstockpanel') {
       await interaction.deferReply({ ephemeral: true });
 
       try {
@@ -542,28 +591,8 @@ client.on('interactionCreate', async interaction => {
 
         return interaction.deleteReply();
       } catch (e) {
-        console.error('setupstock error:', e);
-        return interaction.editReply('❌ Fehler beim Senden des Stock Panels.');
-      }
-    }
-
-    if (interaction.commandName === 'setupstockpanel') {
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        const msg = await interaction.channel.send({
-          embeds: [buildStockEmbed()]
-        });
-
-        const data = loadData();
-        data.publicStockMessageId = msg.id;
-        data.publicStockChannelId = interaction.channel.id;
-        saveData(data);
-
-        return interaction.deleteReply();
-      } catch (e) {
         console.error('setupstockpanel error:', e);
-        return interaction.editReply('❌ Fehler beim Senden des öffentlichen Stock Panels.');
+        return interaction.editReply('❌ Fehler beim Senden des Staff Stock Panels.');
       }
     }
 
@@ -636,7 +665,7 @@ client.on('interactionCreate', async interaction => {
 
         const modal = new ModalBuilder()
           .setCustomId(`stock_modal_${itemId}`)
-          .setTitle(item.emoji + ' ' + item.name + ' - Bestand setzen');
+          .setTitle(item.name + ' - Bestand setzen');
 
         const input = new TextInputBuilder()
           .setCustomId('amount')
@@ -717,6 +746,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       const count = getInvites(interaction.user.id);
+
       console.log(`💰 Claim attempt by ${interaction.user.tag} — invites: ${count}`);
 
       if (count < REQUIRED_INVITES) {
@@ -955,6 +985,7 @@ client.on('interactionCreate', async interaction => {
 
       try {
         const member = await interaction.guild.members.fetch(reviewer.id);
+
         if (!member.roles.cache.has(KUNDEN_ROLE_ID)) {
           await member.roles.add(KUNDEN_ROLE_ID);
         }
