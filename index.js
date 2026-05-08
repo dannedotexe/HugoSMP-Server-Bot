@@ -61,6 +61,7 @@ function loadData() {
       data.pending = data.pending || {};
       data.leaderboardMessageId = data.leaderboardMessageId || null;
       data.stockMessageId = data.stockMessageId || null;
+      data.stockButtonsMessageId = data.stockButtonsMessageId || null;
       data.stockChannelId = data.stockChannelId || STOCK_CHANNEL_ID;
       data.publicStockMessageId = data.publicStockMessageId || null;
       data.publicStockChannelId = data.publicStockChannelId || null;
@@ -83,6 +84,7 @@ function loadData() {
     pending: {},
     leaderboardMessageId: null,
     stockMessageId: null,
+    stockButtonsMessageId: null,
     stockChannelId: STOCK_CHANNEL_ID,
     publicStockMessageId: null,
     publicStockChannelId: null,
@@ -299,10 +301,29 @@ async function updateStockPanel() {
         const channel = client.channels.cache.get(data.stockChannelId);
         if (channel) {
           const msg = await channel.messages.fetch(data.stockMessageId);
-          await msg.edit({ embeds: [embed], components: rows });
+          await msg.edit({ embeds: [embed], components: rows.slice(0, 5) });
+
+          if (data.stockButtonsMessageId) {
+            const buttonsMsg = await channel.messages.fetch(data.stockButtonsMessageId);
+            await buttonsMsg.edit({ components: rows.slice(5) });
+          }
         }
       } catch (e) {}
     }
+
+    if (data.publicStockMessageId && data.publicStockChannelId) {
+      try {
+        const channel = client.channels.cache.get(data.publicStockChannelId);
+        if (channel) {
+          const msg = await channel.messages.fetch(data.publicStockMessageId);
+          await msg.edit({ embeds: [embed], components: [] });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error('updateStockPanel error:', e.message);
+  }
+}
 
     if (data.publicStockMessageId && data.publicStockChannelId) {
       try {
@@ -579,32 +600,33 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.commandName === 'setupstockpanel') {
-      await interaction.deferReply({ ephemeral: true });
+if (interaction.commandName === 'setupstockpanel') {
+  await interaction.deferReply({ ephemeral: true });
 
-      try {
-       const rows = buildStockButtons();
+  try {
+    const rows = buildStockButtons();
 
-const msg = await interaction.channel.send({
-  embeds: [buildStockEmbed()],
-  components: rows.slice(0, 5)
-});
+    const msg = await interaction.channel.send({
+      embeds: [buildStockEmbed()],
+      components: rows.slice(0, 5)
+    });
 
-await interaction.channel.send({
-  components: rows.slice(5)
-});
+    const buttonsMsg = await interaction.channel.send({
+      components: rows.slice(5)
+    });
 
-        const data = loadData();
-        data.stockMessageId = msg.id;
-        data.stockChannelId = interaction.channel.id;
-        saveData(data);
+    const data = loadData();
+    data.stockMessageId = msg.id;
+    data.stockButtonsMessageId = buttonsMsg.id;
+    data.stockChannelId = interaction.channel.id;
+    saveData(data);
 
-        return interaction.deleteReply();
-      } catch (e) {
-        console.error('setupstockpanel error:', e);
-        return interaction.editReply('❌ Fehler beim Senden des Staff Stock Panels.');
-      }
-    }
+    return interaction.deleteReply();
+  } catch (e) {
+    console.error('setupstockpanel error:', e);
+    return interaction.editReply('❌ Fehler beim Senden des Staff Stock Panels.');
+  }
+}
 
     if (interaction.commandName === 'inviterewards') {
       return interaction.reply(buildPanel());
