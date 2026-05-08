@@ -393,9 +393,9 @@ if (interaction.commandName === 'setupstock') {
   try {
 
     // Channel nur für Staff sichtbar machen
-    await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
-      ViewChannel: false
-    });
+await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
+  ViewChannel: false
+});
 
     for (const roleId of STAFF_ROLE_IDS) {
       await interaction.channel.permissionOverwrites.edit(roleId, {
