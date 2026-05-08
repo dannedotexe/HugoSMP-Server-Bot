@@ -422,19 +422,96 @@ client.on('interactionCreate', async interaction => {
         return interaction.editReply('❌ Could not create invite. Missing permissions?');
       }
     }
+
     if (interaction.customId === 'check_inv') {
       await interaction.deferReply({ ephemeral: true });
       const count = getInvites(interaction.user.id);
       return interaction.editReply(`📊 You currently have **${count}** verified invite${count === 1 ? '' : 's'}!`);
     }
+
     if (interaction.customId === 'claim') {
       await interaction.deferReply({ ephemeral: true });
       const count = getInvites(interaction.user.id);
+      console.log(`💰 Claim attempt by ${interaction.user.tag} — invites: ${count}`);
+
       if (count < REQUIRED_INVITES) {
         return interaction.editReply(`❌ You don't have enough verified invites yet!\n\n**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`);
       }
-      // Dein Ticket-Code hier (bitte deinen Original-Claim-Code einfügen, falls er fehlt)
+
+      const ticketName = `1m-${interaction.user.username}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, '');
+
+      const existingTicket = interaction.guild.channels.cache.find(c => c.name === ticketName);
+      if (existingTicket) {
+        return interaction.editReply(`❌ You already have an open ticket: <#${existingTicket.id}>`);
+      }
+
+      try {
+        const ticket = await interaction.guild.channels.create({
+          name: ticketName,
+          type: ChannelType.GuildText,
+          parent: TICKET_CATEGORY_ID,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: ['ViewChannel'] },
+            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            { id: STAFF_ROLE_IDS[0], allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            { id: STAFF_ROLE_IDS[1], allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
+          ]
+        });
+
+        const ticketEmbed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle('✨ — DEIN REWARD EINLÖSEN — ✨')
+          .setDescription(
+            `💎 **Belohnungswert:** 1.000.000 $\n\n` +
+            `🧮 **KURZRECHNUNG:**\n` +
+            `Reward (1 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (25 Stück)\n\n` +
+            `🛠️ **DEINE AUFGABE:**\n` +
+            `↳ Order Ingame erstellen (Menge laut Rechnung)\n` +
+            `↳ Preis pro Stück: 1$\n` +
+            `↳ Steuern: Gehen auf unseren Nacken!\n\n` +
+            `📩 **SCHREIB UNS:**\n` +
+            `• Ingame-Name:\n` +
+            `• Status: "Order ist reingestellt worden!"`
+          )
+          .setTimestamp();
+
+        const closeRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('close_ticket')
+            .setLabel('Ticket schließen')
+            .setEmoji('🔒')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await ticket.send({
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
+          embeds: [ticketEmbed],
+          components: [closeRow]
+        });
+
+        const remaining = Math.max(0, count - REQUIRED_INVITES);
+        setInvites(interaction.user.id, remaining);
+        await updateLeaderboard();
+
+        const log = interaction.guild.channels.cache.get(REWARD_LOG_ID);
+        if (log) {
+          await log.send(
+            `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
+            `🎫 Ticket: <#${ticket.id}>\n` +
+            `📊 Remaining invites: **${remaining}**`
+          );
+        }
+
+        return interaction.editReply(`✅ Ticket created: <#${ticket.id}>\n📊 Remaining invites: **${remaining}**`);
+      } catch (e) {
+        console.error('claim ticket error:', e);
+        return interaction.editReply('❌ Fehler beim Erstellen des Tickets. Bitte kontaktiere einen Admin!');
+      }
     }
+
     if (interaction.customId === 'close_ticket') {
       const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
       if (!isStaff) {
@@ -524,12 +601,11 @@ client.on('interactionCreate', async interaction => {
 
     reviewedUsers.add(buyerId);
 
-    await interaction.reply({ 
-      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...', 
-      ephemeral: true 
+    await interaction.reply({
+      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...',
+      ephemeral: true
     });
 
-    // Automatisches Schließen nur bei normalen Kauf-Tickets
     if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
       setTimeout(async () => {
         try {
