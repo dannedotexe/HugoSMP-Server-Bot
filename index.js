@@ -312,7 +312,6 @@ client.once('ready', async () => {
     }
   }
   await updateLeaderboard();
-  await updateStockPanel();
   setInterval(updateLeaderboard, 5 * 60 * 1000);
 });
 
