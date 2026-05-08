@@ -566,240 +566,107 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 const reviewedUsers = new Set();
+  }
 
-client.on('interactionCreate', async interaction => {
+  if (interaction.isButton()) {
 
-  if (interaction.isChatInputCommand()) {
-
-    if (interaction.commandName === 'say') {
-      const text = interaction.options.getString('text');
-
-      await interaction.channel.send(text);
-
-      return interaction.reply({
-        content: '✅ Nachricht gesendet!',
-        ephemeral: true
-      });
-    }
-
-    if (interaction.commandName === 'setupverify') {
-
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
-        .setTitle('Captcha Verification')
-        .setDescription(
-          'Press to Verify\n⬇️\n\n' +
-          '**1M = 1.5€ | HugoSMP Market • Verification**'
-        )
-        .setThumbnail(
-          'https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg'
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('verify_member')
-          .setLabel('Verify')
-          .setEmoji('✅')
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      await interaction.channel.send({
-        embeds: [embed],
-        components: [row]
-      });
-
-      return interaction.reply({
-        content: '✅ Verify Panel gesendet!',
-        ephemeral: true
-      });
-    }
-
-    if (interaction.commandName === 'setuptickets') {
-
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
-        .setTitle('Ticket Support')
-        .setDescription(
-          '**Create Ticket**\n\n' +
-          '⬇️ Hier erstellst du ein Ticket für Fragen oder einen Einkauf'
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('create_ticket')
-          .setLabel('Create')
-          .setEmoji('🎫')
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      await interaction.channel.send({
-        embeds: [embed],
-        components: [row]
-      });
-
-      return interaction.reply({
-        content: '✅ Ticket Panel gesendet!',
-        ephemeral: true
-      });
-    }
-
-    if (interaction.commandName === 'setupstock') {
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        const msg = await interaction.channel.send({
-          embeds: [buildStockEmbed()]
-        });
-
-        const data = loadData();
-
-        data.publicStockMessageId = msg.id;
-        data.publicStockChannelId = interaction.channel.id;
-
-        saveData(data);
-
-        return interaction.deleteReply();
-
-      } catch (e) {
-        console.error('setupstock error:', e);
-
-        return interaction.editReply({
-          content: '❌ Fehler beim Senden.'
-        });
-      }
-    }
-
-    if (interaction.commandName === 'setupstockpanel') {
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        const rows = buildStockButtons();
-
-        const msg = await interaction.channel.send({
-          embeds: [buildStockEmbed()],
-          components: rows.slice(0, 5)
-        });
-
-        const buttonsMsg = await interaction.channel.send({
-          content: '‎',
-          components: rows.slice(5)
-        });
-
-        const data = loadData();
-
-        data.stockMessageId = msg.id;
-        data.stockButtonsMessageId = buttonsMsg.id;
-        data.stockChannelId = interaction.channel.id;
-
-        saveData(data);
-
-        return interaction.deleteReply();
-
-      } catch (e) {
-        console.error('setupstockpanel error:', e);
-
-        return interaction.editReply({
-          content: '❌ Fehler beim Senden.'
-        });
-      }
-    }
     if (interaction.customId === 'verify_member') {
-  try {
-    await interaction.member.roles.add(VERIFY_ROLE_ID);
+      try {
+        await interaction.member.roles.add(VERIFY_ROLE_ID);
 
-    return interaction.reply({
-      content: '✅ Du wurdest erfolgreich verifiziert!',
-      ephemeral: true
-    });
-  } catch (e) {
-    return interaction.reply({
-      content: '❌ Rolle konnte nicht vergeben werden.',
-      ephemeral: true
-    });
+        return interaction.reply({
+          content: '✅ Du wurdest erfolgreich verifiziert!',
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({
+          content: '❌ Rolle konnte nicht vergeben werden.',
+          ephemeral: true
+        });
+      }
+    }
+
+    if (interaction.customId === 'create_ticket') {
+
+      const ticketName = `ticket-${interaction.user.username}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, '');
+
+      const existing = interaction.guild.channels.cache.find(
+        c => c.name === ticketName
+      );
+
+      if (existing) {
+        return interaction.reply({
+          content: `❌ Du hast bereits ein Ticket: <#${existing.id}>`,
+          ephemeral: true
+        });
+      }
+
+      const ticket = await interaction.guild.channels.create({
+        name: ticketName,
+        type: ChannelType.GuildText,
+        parent: TICKET_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.id,
+            deny: ['ViewChannel']
+          },
+          {
+            id: interaction.user.id,
+            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+          },
+          ...STAFF_ROLE_IDS.map(roleId => ({
+            id: roleId,
+            allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+          }))
+        ]
+      });
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('close_ticket')
+          .setLabel('Ticket schließen')
+          .setEmoji('🔒')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await ticket.send({
+        content: `<@${interaction.user.id}> Willkommen beim Support!\nBitte beschreibe dein Anliegen.`,
+        components: [row]
+      });
+
+      return interaction.reply({
+        content: `✅ Ticket erstellt: <#${ticket.id}>`,
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId === 'close_ticket') {
+
+      const isStaff = STAFF_ROLE_IDS.some(roleId =>
+        interaction.member.roles.cache.has(roleId)
+      );
+
+      if (!isStaff) {
+        return interaction.reply({
+          content: '❌ Nur Staff kann Tickets schließen.',
+          ephemeral: true
+        });
+      }
+
+      await interaction.reply({
+        content: '🔒 Ticket wird geschlossen...',
+        ephemeral: true
+      });
+
+      setTimeout(async () => {
+        try {
+          await interaction.channel.delete();
+        } catch {}
+      }, 3000);
+    }
   }
-}
-
-if (interaction.customId === 'create_ticket') {
-
-  const ticketName = `ticket-${interaction.user.username}`
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]/g, '');
-
-  const existing = interaction.guild.channels.cache.find(
-    c => c.name === ticketName
-  );
-
-  if (existing) {
-    return interaction.reply({
-      content: `❌ Du hast bereits ein Ticket: <#${existing.id}>`,
-      ephemeral: true
-    });
-  }
-
-  const ticket = await interaction.guild.channels.create({
-    name: ticketName,
-    type: ChannelType.GuildText,
-    parent: TICKET_CATEGORY_ID,
-    permissionOverwrites: [
-      {
-        id: interaction.guild.id,
-        deny: ['ViewChannel']
-      },
-      {
-        id: interaction.user.id,
-        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-      },
-      ...STAFF_ROLE_IDS.map(roleId => ({
-        id: roleId,
-        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
-      }))
-    ]
-  });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('close_ticket')
-      .setLabel('Ticket schließen')
-      .setEmoji('🔒')
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await ticket.send({
-    content: `<@${interaction.user.id}> Willkommen beim Support!\nBitte beschreibe dein Anliegen.`,
-    components: [row]
-  });
-
-  return interaction.reply({
-    content: `✅ Ticket erstellt: <#${ticket.id}>`,
-    ephemeral: true
-  });
-}
-
-if (interaction.customId === 'close_ticket') {
-
-  const isStaff =
-    STAFF_ROLE_IDS.some(roleId =>
-      interaction.member.roles.cache.has(roleId)
-    );
-
-  if (!isStaff) {
-    return interaction.reply({
-      content: '❌ Nur Staff kann Tickets schließen.',
-      ephemeral: true
-    });
-  }
-
-  await interaction.reply({
-    content: '🔒 Ticket wird geschlossen...',
-    ephemeral: true
-  });
-
-  setTimeout(async () => {
-    try {
-      await interaction.channel.delete();
-    } catch {}
-  }, 3000);
-}
 });
 
 client.login(TOKEN);
