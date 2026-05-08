@@ -2,7 +2,8 @@ const {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
   REST, Routes, SlashCommandBuilder, PermissionFlagsBits,
-  ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle
+  ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
+  AttachmentBuilder
 } = require('discord.js');
 
 const fs = require('fs');
@@ -12,6 +13,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
   ]
 });
 
@@ -30,6 +33,8 @@ const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_ID = '1500479671031169144';
 const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
 const TICKET_CATEGORY_ID = '1499147835528974356';
+const CLOSED_TICKET_CATEGORY_ID = '1499148006270963732';
+const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
 const STAFF_ROLE_IDS = [
@@ -207,6 +212,142 @@ function getNextOrderId() {
   data.nextOrderId += 1;
   saveData(data);
   return orderId;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+function isStaff(member) {
+  return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId)) ||
+    member.permissions.has(PermissionFlagsBits.Administrator);
+}
+
+function getTicketOwnerId(channel) {
+  const topic = channel.topic || '';
+  const match = topic.match(/owner:(\d+)/);
+  return match ? match[1] : null;
+}
+
+function getTicketType(channel) {
+  const topic = channel.topic || '';
+  const match = topic.match(/type:([a-z]+)/);
+  return match ? match[1] : 'ticket';
+}
+
+async function buildTranscript(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+    const sorted = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+    if (sorted.length === 0) {
+      return 'Keine Nachrichten gefunden.';
+    }
+
+    return sorted.map(msg => {
+      const time = new Date(msg.createdTimestamp).toLocaleString('de-DE');
+      const author = `${msg.author.tag} (${msg.author.id})`;
+      const content = msg.content || '[Embed/Anhang/Keine Textnachricht]';
+      return `[${time}] ${author}: ${content}`;
+    }).join('\n');
+  } catch (e) {
+    console.error('buildTranscript error:', e.message);
+    return 'Transcript konnte nicht erstellt werden.';
+  }
+}
+
+async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
+  try {
+    const logChannel = guild.channels.cache.get(TICKET_LOG_CHANNEL_ID);
+    if (!logChannel) return;
+
+    const ownerId = getTicketOwnerId(channel);
+    const ticketType = getTicketType(channel);
+    const transcript = await buildTranscript(channel);
+
+    const attachment = new AttachmentBuilder(
+      Buffer.from(transcript, 'utf8'),
+      { name: `${channel.name}-transcript.txt` }
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor('#b10de7')
+      .setTitle('🔒 Ticket geschlossen')
+      .setDescription(
+        `**Ticket:** ${channel.name}\n` +
+        `**Typ:** ${ticketType}\n` +
+        `**Owner:** ${ownerId ? `<@${ownerId}>` : 'Unbekannt'}\n` +
+        `**Geschlossen von:** <@${closedBy.id}>\n` +
+        `**Grund:** ${reason}`
+      )
+      .setTimestamp();
+
+    await logChannel.send({
+      embeds: [embed],
+      files: [attachment]
+    });
+  } catch (e) {
+    console.error('sendTicketLog error:', e.message);
+  }
+}
+
+async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
+  const ownerId = getTicketOwnerId(channel);
+
+  await sendTicketLog(channel.guild, channel, closedBy, reason);
+
+  if (ownerId) {
+    await channel.permissionOverwrites.edit(ownerId, {
+      ViewChannel: false,
+      SendMessages: false,
+      ReadMessageHistory: false
+    }).catch(() => {});
+  }
+
+  await channel.setParent(CLOSED_TICKET_CATEGORY_ID).catch(() => {});
+
+  if (!channel.name.startsWith('closed-')) {
+    await channel.setName(`closed-${channel.name}`.slice(0, 100)).catch(() => {});
+  }
+
+  const reopenRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('reopen_ticket')
+      .setLabel('Ticket wieder öffnen')
+      .setEmoji('🔓')
+      .setStyle(ButtonStyle.Success)
+  );
+
+  await channel.send({
+    content: '🔒 Dieses Ticket wurde geschlossen. Staff kann es wieder öffnen.',
+    components: [reopenRow]
+  }).catch(() => {});
+}
+
+async function reopenTicket(channel, reopenedBy) {
+  const ownerId = getTicketOwnerId(channel);
+
+  await channel.setParent(TICKET_CATEGORY_ID).catch(() => {});
+
+  if (channel.name.startsWith('closed-')) {
+    await channel.setName(channel.name.replace('closed-', '').slice(0, 100)).catch(() => {});
+  }
+
+  if (ownerId) {
+    await channel.permissionOverwrites.edit(ownerId, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true
+    }).catch(() => {});
+  }
+
+  const logChannel = channel.guild.channels.cache.get(TICKET_LOG_CHANNEL_ID);
+  if (logChannel) {
+    await logChannel.send({
+      content: `🔓 Ticket wieder geöffnet: <#${channel.id}> von <@${reopenedBy.id}>`
+    }).catch(() => {});
+  }
+
+  await channel.send({
+    content: `🔓 Ticket wurde von <@${reopenedBy.id}> wieder geöffnet.`
+  }).catch(() => {});
 }
 
 // ── Invite cache ──────────────────────────────────────────────────
@@ -451,6 +592,35 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('embed')
+      .setDescription('Send an embed as the bot.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addStringOption(opt =>
+        opt.setName('title')
+          .setDescription('Embed title')
+          .setRequired(true)
+      )
+      .addStringOption(opt =>
+        opt.setName('text')
+          .setDescription('Embed text')
+          .setRequired(true)
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('clear')
+      .setDescription('Delete messages in this channel.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+      .addIntegerOption(opt =>
+        opt.setName('amount')
+          .setDescription('Amount of messages to delete')
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(100)
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('inviterewards')
       .setDescription('Invite your friends to earn rewards!')
       .toJSON(),
@@ -651,6 +821,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
 // ── Interactions ──────────────────────────────────────────────────
 const reviewedUsers = new Set();
+const reviewTicketDecisions = new Set();
 
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
@@ -664,6 +835,46 @@ client.on('interactionCreate', async interaction => {
         content: '✅ Nachricht gesendet!',
         ephemeral: true
       });
+    }
+
+    if (interaction.commandName === 'embed') {
+      const title = interaction.options.getString('title');
+      const text = interaction.options.getString('text');
+
+      const embed = new EmbedBuilder()
+        .setColor('#b10de7')
+        .setTitle(title)
+        .setDescription(text)
+        .setTimestamp();
+
+      await interaction.channel.send({
+        embeds: [embed]
+      });
+
+      return interaction.reply({
+        content: '✅ Embed gesendet!',
+        ephemeral: true
+      });
+    }
+
+    if (interaction.commandName === 'clear') {
+      const amount = interaction.options.getInteger('amount');
+
+      try {
+        const deleted = await interaction.channel.bulkDelete(amount, true);
+
+        return interaction.reply({
+          content: `✅ ${deleted.size} Nachrichten gelöscht.`,
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error('clear error:', e);
+
+        return interaction.reply({
+          content: '❌ Fehler beim Löschen. Nachrichten dürfen nicht älter als 14 Tage sein.',
+          ephemeral: true
+        });
+      }
     }
 
     if (interaction.commandName === 'setuproles') {
@@ -999,6 +1210,7 @@ client.on('interactionCreate', async interaction => {
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
+          topic: `owner:${interaction.user.id};type:${typeName}`,
           permissionOverwrites: [
             {
               id: interaction.guild.id,
@@ -1024,12 +1236,24 @@ client.on('interactionCreate', async interaction => {
           .setTitle(isOrder ? '🛒 Bestellung' : '🎫 Support')
           .setDescription(
             isOrder
-              ? 'Willkommen! Bitte schreibe hier, was du kaufen möchtest.\n\n**Vorlage:**\n• Item:\n• Menge:\n• Ingame-Name:\n• Zahlungsmethode:'
+              ? 'Willkommen! Bitte klicke unten auf **Bestellformular ausfüllen**.\n\nDu kannst danach noch weitere Infos in den Chat schreiben.'
               : 'Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.'
           )
           .setTimestamp();
 
-        const closeRow = new ActionRowBuilder().addComponents(
+        const ticketButtons = new ActionRowBuilder();
+
+        if (isOrder) {
+          ticketButtons.addComponents(
+            new ButtonBuilder()
+              .setCustomId('order_form')
+              .setLabel('Bestellformular ausfüllen')
+              .setEmoji('📝')
+              .setStyle(ButtonStyle.Primary)
+          );
+        }
+
+        ticketButtons.addComponents(
           new ButtonBuilder()
             .setCustomId('close_ticket')
             .setLabel('Ticket schließen')
@@ -1040,7 +1264,7 @@ client.on('interactionCreate', async interaction => {
         await ticket.send({
           content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
           embeds: [ticketEmbed],
-          components: [closeRow]
+          components: [ticketButtons]
         });
 
         return interaction.reply({
@@ -1057,12 +1281,193 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.customId.startsWith('stock_')) {
-      const isStaff =
-        STAFF_ROLE_IDS.some(r => interaction.member.roles.cache.has(r)) ||
-        interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+    if (interaction.customId === 'order_form') {
+      const ownerId = getTicketOwnerId(interaction.channel);
 
-      if (!isStaff) {
+      if (ownerId && interaction.user.id !== ownerId) {
+        return interaction.reply({
+          content: '❌ Nur der Ticket-Ersteller kann das Bestellformular ausfüllen.',
+          ephemeral: true
+        });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId('order_form_modal')
+        .setTitle('Bestellformular');
+
+      const itemInput = new TextInputBuilder()
+        .setCustomId('item')
+        .setLabel('Was möchtest du kaufen?')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. 1M Money, Elytra, Ancient Debris')
+        .setRequired(true);
+
+      const amountInput = new TextInputBuilder()
+        .setCustomId('amount')
+        .setLabel('Menge')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. 5')
+        .setRequired(true);
+
+      const ingameInput = new TextInputBuilder()
+        .setCustomId('ingame')
+        .setLabel('Ingame-Name')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Dein Minecraft Name')
+        .setRequired(true);
+
+      const paymentInput = new TextInputBuilder()
+        .setCustomId('payment')
+        .setLabel('Zahlungsmethode')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. PayPal, Paysafecard')
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(itemInput),
+        new ActionRowBuilder().addComponents(amountInput),
+        new ActionRowBuilder().addComponents(ingameInput),
+        new ActionRowBuilder().addComponents(paymentInput)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.customId === 'close_ticket') {
+      const ownerId = getTicketOwnerId(interaction.channel);
+      const allowed = isStaff(interaction.member) || interaction.user.id === ownerId;
+
+      if (!allowed) {
+        return interaction.reply({
+          content: '❌ Du darfst dieses Ticket nicht schließen.',
+          ephemeral: true
+        });
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('confirm_close_ticket')
+          .setLabel('Ja, schließen')
+          .setEmoji('✅')
+          .setStyle(ButtonStyle.Danger),
+
+        new ButtonBuilder()
+          .setCustomId('cancel_close_ticket')
+          .setLabel('Abbrechen')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      return interaction.reply({
+        content: 'Möchtest du dieses Ticket wirklich schließen?',
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId === 'cancel_close_ticket') {
+      return interaction.update({
+        content: '❌ Schließen abgebrochen.',
+        components: []
+      });
+    }
+
+    if (interaction.customId === 'confirm_close_ticket') {
+      const ownerId = getTicketOwnerId(interaction.channel);
+      const allowed = isStaff(interaction.member) || interaction.user.id === ownerId;
+
+      if (!allowed) {
+        return interaction.reply({
+          content: '❌ Du darfst dieses Ticket nicht schließen.',
+          ephemeral: true
+        });
+      }
+
+      await interaction.update({
+        content: '🔒 Ticket wird geschlossen...',
+        components: []
+      });
+
+      setTimeout(async () => {
+        try {
+          await closeTicket(interaction.channel, interaction.user, 'Manuell geschlossen');
+        } catch (e) {
+          console.error('confirm close error:', e.message);
+        }
+      }, 2000);
+
+      return;
+    }
+
+    if (interaction.customId === 'reopen_ticket') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({
+          content: '❌ Nur Staff kann Tickets wieder öffnen.',
+          ephemeral: true
+        });
+      }
+
+      await interaction.reply({
+        content: '🔓 Ticket wird wieder geöffnet...',
+        ephemeral: true
+      });
+
+      await reopenTicket(interaction.channel, interaction.user);
+      return;
+    }
+
+    if (interaction.customId.startsWith('review_keep_open_')) {
+      const buyerId = interaction.customId.replace('review_keep_open_', '');
+
+      if (interaction.user.id !== buyerId) {
+        return interaction.reply({
+          content: '❌ Nur der Käufer kann das auswählen.',
+          ephemeral: true
+        });
+      }
+
+      const reviewDecisionId = `${interaction.channel.id}_${interaction.user.id}`;
+      reviewTicketDecisions.add(reviewDecisionId);
+
+      return interaction.update({
+        content: '📌 Das Ticket bleibt offen.',
+        components: []
+      });
+    }
+
+    if (interaction.customId.startsWith('review_close_ticket_')) {
+      const buyerId = interaction.customId.replace('review_close_ticket_', '');
+
+      if (interaction.user.id !== buyerId) {
+        return interaction.reply({
+          content: '❌ Nur der Käufer kann das Ticket schließen.',
+          ephemeral: true
+        });
+      }
+
+      const reviewDecisionId = `${interaction.channel.id}_${interaction.user.id}`;
+      reviewTicketDecisions.add(reviewDecisionId);
+
+      await interaction.update({
+        content: '🔒 Ticket wird geschlossen...',
+        components: []
+      });
+
+      setTimeout(async () => {
+        try {
+          await closeTicket(interaction.channel, interaction.user, 'Nach Review geschlossen');
+        } catch (e) {
+          console.error('review close ticket error:', e.message);
+        }
+      }, 3000);
+
+      return;
+    }
+
+    if (interaction.customId.startsWith('stock_')) {
+      const isStaffMember = isStaff(interaction.member);
+
+      if (!isStaffMember) {
         return interaction.reply({
           content: '❌ Nur Admins können den Bestand bearbeiten!',
           ephemeral: true
@@ -1182,6 +1587,7 @@ client.on('interactionCreate', async interaction => {
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
+          topic: `owner:${interaction.user.id};type:reward`,
           permissionOverwrites: [
             {
               id: interaction.guild.id,
@@ -1263,32 +1669,6 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.customId === 'close_ticket') {
-      const isStaff =
-        STAFF_ROLE_IDS.some(roleId =>
-          interaction.member.roles.cache.has(roleId)
-        ) ||
-        interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-
-      if (!isStaff) {
-        return interaction.reply({
-          content: '❌ Nur Staff kann dieses Ticket schließen.',
-          ephemeral: true
-        });
-      }
-
-      await interaction.reply({
-        content: '🔒 Ticket wird in 5 Sekunden geschlossen...',
-        ephemeral: true
-      });
-
-      setTimeout(async () => {
-        try {
-          await interaction.channel.delete();
-        } catch (e) {}
-      }, 5000);
-    }
-
     if (interaction.customId.startsWith('bewerten_')) {
       const parts = interaction.customId.split('_');
       const buyerId = parts[1];
@@ -1337,6 +1717,43 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isModalSubmit()) {
+
+    if (interaction.customId === 'order_form_modal') {
+      const ownerId = getTicketOwnerId(interaction.channel);
+
+      if (ownerId && interaction.user.id !== ownerId) {
+        return interaction.reply({
+          content: '❌ Nur der Ticket-Ersteller kann das Bestellformular absenden.',
+          ephemeral: true
+        });
+      }
+
+      const item = interaction.fields.getTextInputValue('item');
+      const amount = interaction.fields.getTextInputValue('amount');
+      const ingame = interaction.fields.getTextInputValue('ingame');
+      const payment = interaction.fields.getTextInputValue('payment');
+
+      const embed = new EmbedBuilder()
+        .setColor('#b10de7')
+        .setTitle('🛒 Neue Bestellung')
+        .addFields(
+          { name: 'Item', value: item, inline: true },
+          { name: 'Menge', value: amount, inline: true },
+          { name: 'Ingame-Name', value: ingame, inline: true },
+          { name: 'Zahlungsmethode', value: payment, inline: true },
+          { name: 'Käufer', value: `<@${interaction.user.id}>`, inline: true }
+        )
+        .setTimestamp();
+
+      await interaction.channel.send({
+        embeds: [embed]
+      });
+
+      return interaction.reply({
+        content: '✅ Bestellformular gesendet!',
+        ephemeral: true
+      });
+    }
 
     if (interaction.customId.startsWith('stock_modal_')) {
       const itemId = interaction.customId.replace('stock_modal_', '');
@@ -1425,19 +1842,43 @@ client.on('interactionCreate', async interaction => {
 
       reviewedUsers.add(buyerId);
 
+      const reviewDecisionId = `${interaction.channel.id}_${reviewer.id}`;
+
+      const reviewCloseRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`review_keep_open_${reviewer.id}`)
+          .setLabel('Offen lassen')
+          .setEmoji('📌')
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId(`review_close_ticket_${reviewer.id}`)
+          .setLabel('Ticket schließen')
+          .setEmoji('🔒')
+          .setStyle(ButtonStyle.Danger)
+      );
+
       await interaction.reply({
         content:
           '✅ **Danke für deine Bewertung!**\n' +
           'Du hast die **Kunden-Rolle** erhalten.\n\n' +
-          'Das Ticket wird in 10 Sekunden automatisch geschlossen...',
+          'Möchtest du das Ticket schließen oder offen lassen?\n' +
+          '⏳ Wenn du nichts auswählst, wird das Ticket in **5 Minuten** automatisch geschlossen.',
+        components: [reviewCloseRow],
         ephemeral: true
       });
 
       setTimeout(async () => {
         try {
-          await interaction.channel.delete();
-        } catch (e) {}
-      }, 10000);
+          if (reviewTicketDecisions.has(reviewDecisionId)) return;
+
+          reviewTicketDecisions.add(reviewDecisionId);
+
+          await closeTicket(interaction.channel, reviewer, 'Auto-Close nach Review');
+        } catch (e) {
+          console.error('auto close after review error:', e.message);
+        }
+      }, 5 * 60 * 1000);
     }
   }
 });
