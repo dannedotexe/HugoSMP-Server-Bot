@@ -28,12 +28,22 @@ const VERIFY_ROLE_ID = '1499149656951885956';
 const REWARD_LOG_ID = '1500479671031169144';
 const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
 const TICKET_CATEGORY_ID = '1499147835528974356';
+const STOCK_CHANNEL_ID = '1502271613968846878';
 
 const STAFF_ROLE_IDS = [
   '1499146219946250241',
   '1499159379902074880'
 ];
 const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// ── Stock items ───────────────────────────────────────────────────
+const STOCK_ITEMS = [
+  { id: 'elytra',    name: 'Elytra',                emoji: '🪽', price: '110 €' },
+  { id: 'mace',      name: 'Mace mit Windburst I',  emoji: '🔨', price: '1,50 €' },
+  { id: 'deepslate', name: 'Deepslate Emerald Ore', emoji: '💚', price: '0,70 €' },
+  { id: 'ancient',   name: 'Ancient Debris',        emoji: '🪨', price: '0,08 €' },
+  { id: 'gilded',    name: 'Gilded Blackstone',     emoji: '🟫', price: '0,04 €' },
+];
 
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
@@ -44,13 +54,20 @@ function loadData() {
       data.counted = data.counted || [];
       data.pending = data.pending || {};
       data.leaderboardMessageId = data.leaderboardMessageId || null;
+      data.stockMessageId = data.stockMessageId || null;
       if (typeof data.nextOrderId !== 'number') data.nextOrderId = 1;
+      if (!data.stock) {
+        data.stock = {};
+        STOCK_ITEMS.forEach(item => { data.stock[item.id] = 0; });
+      }
       return data;
     }
   } catch (e) {
     console.error('loadData error:', e.message);
   }
-  return { invites: {}, counted: [], pending: {}, leaderboardMessageId: null, nextOrderId: 1 };
+  const initial = { invites: {}, counted: [], pending: {}, leaderboardMessageId: null, stockMessageId: null, nextOrderId: 1, stock: {} };
+  STOCK_ITEMS.forEach(item => { initial.stock[item.id] = 0; });
+  return initial;
 }
 
 function saveData(data) {
@@ -92,8 +109,6 @@ function removePending(memberId) {
   if (data.pending) delete data.pending[memberId];
   saveData(data);
 }
-
-// ── Order ID ──────────────────────────────────────────────────────
 function getNextOrderId() {
   const data = loadData();
   const orderId = `#${String(data.nextOrderId).padStart(4, '0')}`;
@@ -108,10 +123,7 @@ async function cacheInvites(guild) {
   try {
     const invites = await guild.invites.fetch();
     invites.forEach(inv => {
-      cachedInvites.set(inv.code, {
-        inviterId: inv.inviter?.id ?? null,
-        uses: inv.uses ?? 0
-      });
+      cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
     });
     console.log(`📋 Cached ${invites.size} invites for ${guild.name}`);
   } catch (e) {
@@ -157,9 +169,67 @@ async function updateLeaderboard() {
     const msg = await channel.send({ embeds: [embed] });
     data.leaderboardMessageId = msg.id;
     saveData(data);
-    console.log(`📊 Leaderboard message created: ${msg.id}`);
   } catch (e) {
     console.error('updateLeaderboard error:', e.message);
+  }
+}
+
+// ── Stock Panel ───────────────────────────────────────────────────
+function buildStockEmbed() {
+  const data = loadData();
+  const lines = STOCK_ITEMS.map(item => {
+    const amount = data.stock[item.id] ?? 0;
+    const status = amount === 0 ? '🔴 Ausverkauft' : amount <= 5 ? `🟡 ${amount} auf Lager` : `🟢 ${amount} auf Lager`;
+    return `${item.emoji} **${item.name}** — ${item.price}\n┗ ${status}`;
+  }).join('\n\n');
+
+  return new EmbedBuilder()
+    .setColor('#b10de7')
+    .setTitle('🏪 Hugo Shop — Lagerbestand')
+    .setDescription(lines)
+    .setFooter({ text: 'Nur Admins können den Bestand bearbeiten • Zuletzt aktualisiert' })
+    .setTimestamp();
+}
+
+function buildStockButtons() {
+  const rows = [];
+  // Row per item: -10, -1, item name (disabled), +1, +10
+  for (let i = 0; i < STOCK_ITEMS.length; i++) {
+    const item = STOCK_ITEMS[i];
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`stock_minus10_${item.id}`).setLabel('-10').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`stock_minus1_${item.id}`).setLabel('-1').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`stock_set_${item.id}`).setLabel(`${item.emoji} ${item.name}`).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`stock_plus1_${item.id}`).setLabel('+1').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`stock_plus10_${item.id}`).setLabel('+10').setStyle(ButtonStyle.Success),
+    );
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function updateStockPanel() {
+  try {
+    const channel = client.channels.cache.get(STOCK_CHANNEL_ID);
+    if (!channel) return;
+    const data = loadData();
+    const embed = buildStockEmbed();
+    const rows = buildStockButtons();
+
+    if (data.stockMessageId) {
+      try {
+        const msg = await channel.messages.fetch(data.stockMessageId);
+        await msg.edit({ embeds: [embed], components: rows });
+        return;
+      } catch (e) {}
+    }
+
+    const msg = await channel.send({ embeds: [embed], components: rows });
+    data.stockMessageId = msg.id;
+    saveData(data);
+    console.log(`📦 Stock panel created: ${msg.id}`);
+  } catch (e) {
+    console.error('updateStockPanel error:', e.message);
   }
 }
 
@@ -178,6 +248,11 @@ async function registerCommands(guildId) {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
     new SlashCommandBuilder()
+      .setName('setupstock')
+      .setDescription('Send the stock panel to this channel. Admin only.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+    new SlashCommandBuilder()
       .setName('inviterewards')
       .setDescription('Invite your friends to earn rewards!')
       .toJSON(),
@@ -189,33 +264,17 @@ async function registerCommands(guildId) {
       .setName('fertig')
       .setDescription('Bestellung als fertig markieren + Bewertung anfordern')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addUserOption(opt =>
-        opt.setName('user')
-          .setDescription('Der Käufer')
-          .setRequired(true)
-      )
+      .addUserOption(opt => opt.setName('user').setDescription('Der Käufer').setRequired(true))
       .toJSON(),
     new SlashCommandBuilder()
       .setName('setinvites')
       .setDescription('Set invites manually. Admin only.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addUserOption(opt =>
-        opt.setName('user')
-          .setDescription('User whose invites should be changed')
-          .setRequired(true)
-      )
-      .addIntegerOption(opt =>
-        opt.setName('amount')
-          .setDescription('New invite amount')
-          .setRequired(true)
-          .setMinValue(0)
-      )
+      .addUserOption(opt => opt.setName('user').setDescription('User whose invites should be changed').setRequired(true))
+      .addIntegerOption(opt => opt.setName('amount').setDescription('New invite amount').setRequired(true).setMinValue(0))
       .toJSON(),
   ];
-  await rest.put(
-    Routes.applicationGuildCommands(client.user.id, guildId),
-    { body: commands }
-  );
+  await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
   console.log(`✅ Commands registered for guild ${guildId}`);
 }
 
@@ -234,21 +293,9 @@ function buildPanel() {
       'Klicke unten auf die Buttons um deinen persönlichen Link zu erstellen oder deinen Fortschritt zu prüfen.'
     );
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('gen_invite')
-      .setLabel('Generate Invite Link')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('check_inv')
-      .setLabel('Check Invites')
-      .setEmoji('📊')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('claim')
-      .setLabel(`Claim ${REWARD}`)
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('gen_invite').setLabel('Generate Invite Link').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('check_inv').setLabel('Check Invites').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('claim').setLabel(`Claim ${REWARD}`).setEmoji('💰').setStyle(ButtonStyle.Success),
   );
   return { embeds: [embed], components: [row] };
 }
@@ -265,6 +312,7 @@ client.once('ready', async () => {
     }
   }
   await updateLeaderboard();
+  await updateStockPanel();
   setInterval(updateLeaderboard, 5 * 60 * 1000);
 });
 
@@ -272,7 +320,6 @@ client.on('guildCreate', async guild => {
   try {
     await registerCommands(guild.id);
     await cacheInvites(guild);
-    console.log(`✅ Joined new guild: ${guild.name}`);
   } catch (e) {
     console.error('guildCreate error:', e.message);
   }
@@ -287,48 +334,25 @@ client.on('inviteDelete', inv => cachedInvites.delete(inv.code));
 client.on('guildMemberAdd', async member => {
   try {
     const accountAge = Date.now() - member.user.createdTimestamp;
-    if (accountAge < MIN_ACCOUNT_AGE_MS) {
-      console.log(`🚫 Alt blocked: ${member.user.tag}`);
-      return;
-    }
-    if (hasBeenCounted(member.id)) {
-      console.log(`🔁 Already counted: ${member.user.tag}`);
-      return;
-    }
+    if (accountAge < MIN_ACCOUNT_AGE_MS) { console.log(`🚫 Alt blocked: ${member.user.tag}`); return; }
+    if (hasBeenCounted(member.id)) { console.log(`🔁 Already counted: ${member.user.tag}`); return; }
     const newInvites = await member.guild.invites.fetch();
-    let usedInviterId = null;
-    let usedCode = null;
+    let usedInviterId = null, usedCode = null;
     newInvites.forEach(inv => {
       const cached = cachedInvites.get(inv.code);
-      if (cached && inv.uses > cached.uses) {
-        usedInviterId = cached.inviterId;
-        usedCode = inv.code;
-      }
+      if (cached && inv.uses > cached.uses) { usedInviterId = cached.inviterId; usedCode = inv.code; }
     });
-    newInvites.forEach(inv => {
-      cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 });
-    });
-    if (usedInviterId === member.id) {
-      console.log(`🚫 Self-invite blocked: ${member.user.tag}`);
-      return;
-    }
-    if (usedInviterId) {
-      setPending(member.id, usedInviterId);
-      console.log(`📥 ${member.user.tag} joined via ${usedCode} — pending verify`);
-    } else {
-      console.log(`⚠️ No invite found for ${member.user.tag}`);
-    }
-  } catch (e) {
-    console.error('guildMemberAdd error:', e.message);
-  }
+    newInvites.forEach(inv => { cachedInvites.set(inv.code, { inviterId: inv.inviter?.id ?? null, uses: inv.uses ?? 0 }); });
+    if (usedInviterId === member.id) { console.log(`🚫 Self-invite blocked: ${member.user.tag}`); return; }
+    if (usedInviterId) { setPending(member.id, usedInviterId); console.log(`📥 ${member.user.tag} joined via ${usedCode} — pending verify`); }
+    else { console.log(`⚠️ No invite found for ${member.user.tag}`); }
+  } catch (e) { console.error('guildMemberAdd error:', e.message); }
 });
 
-// ── Verify role assigned → count invite ──────────────────────────
+// ── Verify role → count invite ────────────────────────────────────
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
-    const gotVerifyRole =
-      !oldMember.roles.cache.has(VERIFY_ROLE_ID) &&
-      newMember.roles.cache.has(VERIFY_ROLE_ID);
+    const gotVerifyRole = !oldMember.roles.cache.has(VERIFY_ROLE_ID) && newMember.roles.cache.has(VERIFY_ROLE_ID);
     if (!gotVerifyRole) return;
     const inviterId = getPending(newMember.id);
     if (!inviterId) return;
@@ -337,9 +361,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const total = addInvite(inviterId);
     console.log(`✅ ${newMember.user.tag} verified — invite counted for ${inviterId} (total: ${total})`);
     await updateLeaderboard();
-  } catch (e) {
-    console.error('guildMemberUpdate error:', e.message);
-  }
+  } catch (e) { console.error('guildMemberUpdate error:', e.message); }
 });
 
 // ── Interactions ──────────────────────────────────────────────────
@@ -347,61 +369,60 @@ const reviewedUsers = new Set();
 
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
+
     if (interaction.commandName === 'setupinviterewards') {
       await interaction.deferReply({ ephemeral: true });
       try {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-          return interaction.editReply('❌ You need Administrator permissions!');
-        }
         await interaction.channel.send(buildPanel());
         return interaction.editReply('✅ Invite Rewards panel sent!');
-      } catch (e) {
-        console.error('setupinviterewards error:', e.message);
-        return interaction.editReply('❌ Could not send panel. Check bot permissions.');
-      }
+      } catch (e) { return interaction.editReply('❌ Could not send panel.'); }
     }
+
     if (interaction.commandName === 'setupleaderboard') {
       await interaction.deferReply({ ephemeral: true });
       try {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-          return interaction.editReply('❌ You need Administrator permissions!');
-        }
         const msg = await interaction.channel.send({ embeds: [buildLeaderboardEmbed()] });
         const data = loadData();
         data.leaderboardMessageId = msg.id;
         saveData(data);
-        return interaction.editReply('✅ Live Leaderboard gesendet! Es aktualisiert sich automatisch.');
-      } catch (e) {
-        console.error('setupleaderboard error:', e.message);
-        return interaction.editReply('❌ Fehler beim Senden des Leaderboards.');
-      }
+        return interaction.editReply('✅ Live Leaderboard gesendet!');
+      } catch (e) { return interaction.editReply('❌ Fehler.'); }
     }
+
+    if (interaction.commandName === 'setupstock') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const rows = buildStockButtons();
+        const msg = await interaction.channel.send({ embeds: [buildStockEmbed()], components: rows });
+        const data = loadData();
+        data.stockMessageId = msg.id;
+        saveData(data);
+        return interaction.editReply('✅ Stock Panel gesendet!');
+      } catch (e) { return interaction.editReply('❌ Fehler beim Senden des Stock Panels.'); }
+    }
+
     if (interaction.commandName === 'inviterewards') {
       return interaction.reply(buildPanel());
     }
+
     if (interaction.commandName === 'leaderboard') {
       await interaction.deferReply();
       return interaction.editReply({ embeds: [buildLeaderboardEmbed()] });
     }
+
     if (interaction.commandName === 'setinvites') {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
-      }
       const user = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount');
       setInvites(user.id, amount);
       await updateLeaderboard();
       return interaction.reply({ content: `✅ Set invite count for <@${user.id}> to **${amount}**.`, ephemeral: true });
     }
+
     if (interaction.commandName === 'fertig') {
       const user = interaction.options.getUser('user');
       const orderId = getNextOrderId();
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`bewerten_${user.id}_${orderId}`)
-          .setLabel('Jetzt bewerten')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('⭐')
+        new ButtonBuilder().setCustomId(`bewerten_${user.id}_${orderId}`).setLabel('Jetzt bewerten').setStyle(ButtonStyle.Primary).setEmoji('⭐')
       );
       await interaction.reply({
         content: `✅ Bestellung für ${user} wurde als **fertig** markiert!\n**Order-ID:** ${orderId}\n\n${user}, bitte bewertete den Shop!\n\n> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
@@ -411,6 +432,54 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+
+    // ── Stock buttons ─────────────────────────────────────────────
+    if (interaction.customId.startsWith('stock_')) {
+      const isStaff = STAFF_ROLE_IDS.some(r => interaction.member.roles.cache.has(r))
+        || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+      if (!isStaff) {
+        return interaction.reply({ content: '❌ Nur Admins können den Bestand bearbeiten!', ephemeral: true });
+      }
+
+      const parts = interaction.customId.split('_');
+      const action = parts[1]; // minus10, minus1, set, plus1, plus10
+      const itemId = parts[2];
+
+      // "set" → show modal to enter number
+      if (action === 'set') {
+        const item = STOCK_ITEMS.find(i => i.id === itemId);
+        const modal = new ModalBuilder()
+          .setCustomId(`stock_modal_${itemId}`)
+          .setTitle(`${item.emoji} ${item.name} — Bestand setzen`);
+        const input = new TextInputBuilder()
+          .setCustomId('amount')
+          .setLabel('Neuer Bestand (Zahl eingeben)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('z.B. 50')
+          .setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
+      }
+
+      // +/- buttons
+      await interaction.deferReply({ ephemeral: true });
+      const data = loadData();
+      const current = data.stock[itemId] ?? 0;
+      let delta = 0;
+      if (action === 'plus1') delta = 1;
+      else if (action === 'plus10') delta = 10;
+      else if (action === 'minus1') delta = -1;
+      else if (action === 'minus10') delta = -10;
+
+      data.stock[itemId] = Math.max(0, current + delta);
+      saveData(data);
+      await updateStockPanel();
+
+      const item = STOCK_ITEMS.find(i => i.id === itemId);
+      return interaction.editReply(`✅ **${item.name}**: ${current} → **${data.stock[itemId]}**`);
+    }
+
+    // ── Invite buttons ────────────────────────────────────────────
     if (interaction.customId === 'gen_invite') {
       await interaction.deferReply({ ephemeral: true });
       try {
@@ -418,9 +487,7 @@ client.on('interactionCreate', async interaction => {
         const invite = await rulesChannel.createInvite({ maxAge: 0, maxUses: 0, unique: true });
         cachedInvites.set(invite.code, { inviterId: interaction.user.id, uses: 0 });
         return interaction.editReply(`✅ Here is your personal invite link: https://discord.gg/${invite.code}\n\nMake sure your friends **verify** after joining!`);
-      } catch (e) {
-        return interaction.editReply('❌ Could not create invite. Missing permissions?');
-      }
+      } catch (e) { return interaction.editReply('❌ Could not create invite. Missing permissions?'); }
     }
 
     if (interaction.customId === 'check_inv') {
@@ -438,14 +505,9 @@ client.on('interactionCreate', async interaction => {
         return interaction.editReply(`❌ You don't have enough verified invites yet!\n\n**${count}/${REQUIRED_INVITES}** — You need **${REQUIRED_INVITES - count}** more.`);
       }
 
-      const ticketName = `1m-${interaction.user.username}`
-        .toLowerCase()
-        .replace(/[^a-z0-9-_]/g, '');
-
+      const ticketName = `1m-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-_]/g, '');
       const existingTicket = interaction.guild.channels.cache.find(c => c.name === ticketName);
-      if (existingTicket) {
-        return interaction.editReply(`❌ You already have an open ticket: <#${existingTicket.id}>`);
-      }
+      if (existingTicket) return interaction.editReply(`❌ You already have an open ticket: <#${existingTicket.id}>`);
 
       try {
         const ticket = await interaction.guild.channels.create({
@@ -479,11 +541,7 @@ client.on('interactionCreate', async interaction => {
           .setTimestamp();
 
         const closeRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('close_ticket')
-            .setLabel('Ticket schließen')
-            .setEmoji('🔒')
-            .setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
         );
 
         await ticket.send({
@@ -500,11 +558,9 @@ client.on('interactionCreate', async interaction => {
         if (log) {
           await log.send(
             `💰 **${interaction.user.tag}** (<@${interaction.user.id}>) claimed **${REWARD}** with **${count} verified invites**!\n` +
-            `🎫 Ticket: <#${ticket.id}>\n` +
-            `📊 Remaining invites: **${remaining}**`
+            `🎫 Ticket: <#${ticket.id}>\n📊 Remaining invites: **${remaining}**`
           );
         }
-
         return interaction.editReply(`✅ Ticket created: <#${ticket.id}>\n📊 Remaining invites: **${remaining}**`);
       } catch (e) {
         console.error('claim ticket error:', e);
@@ -514,106 +570,76 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'close_ticket') {
       const isStaff = STAFF_ROLE_IDS.some(roleId => interaction.member.roles.cache.has(roleId));
-      if (!isStaff) {
-        return interaction.reply({ content: '❌ Only staff can close this ticket.', ephemeral: true });
-      }
+      if (!isStaff) return interaction.reply({ content: '❌ Only staff can close this ticket.', ephemeral: true });
       await interaction.reply({ content: '🔒 Ticket will be closed in 3 seconds...', ephemeral: true });
-      setTimeout(async () => {
-        try { await interaction.channel.delete(); } catch (e) {}
-      }, 3000);
+      setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 3000);
     }
 
     if (interaction.customId.startsWith('bewerten_')) {
       const parts = interaction.customId.split('_');
       const buyerId = parts[1];
       const orderId = parts[2] || 'Unbekannt';
-      if (interaction.user.id !== buyerId) {
-        return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
-      }
-      if (reviewedUsers.has(buyerId)) {
-        return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
-      }
-      const modal = new ModalBuilder()
-        .setCustomId(`review_modal_${buyerId}_${orderId}`)
-        .setTitle('HugoSMP Market Bewertung');
-      const stars = new TextInputBuilder()
-        .setCustomId('stars')
-        .setLabel('Sterne (1-5)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('5')
-        .setRequired(true)
-        .setMaxLength(1);
-      const text = new TextInputBuilder()
-        .setCustomId('text')
-        .setLabel('Deine Bewertung')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('War alles schnell, kein Scam, 1 Stack Ancient mehr...')
-        .setRequired(true);
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(stars),
-        new ActionRowBuilder().addComponents(text)
-      );
+      if (interaction.user.id !== buyerId) return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
+      if (reviewedUsers.has(buyerId)) return interaction.reply({ content: '❌ Du hast bereits eine Bewertung abgegeben!', ephemeral: true });
+      const modal = new ModalBuilder().setCustomId(`review_modal_${buyerId}_${orderId}`).setTitle('HugoSMP Market Bewertung');
+      const stars = new TextInputBuilder().setCustomId('stars').setLabel('Sterne (1-5)').setStyle(TextInputStyle.Short).setPlaceholder('5').setRequired(true).setMaxLength(1);
+      const text = new TextInputBuilder().setCustomId('text').setLabel('Deine Bewertung').setStyle(TextInputStyle.Paragraph).setPlaceholder('War alles schnell, kein Scam...').setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(stars), new ActionRowBuilder().addComponents(text));
       await interaction.showModal(modal);
     }
   }
 
-  // Modal abgesendet
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('review_modal_')) {
-    const parts = interaction.customId.split('_');
-    const buyerId = parts[2];
-    const orderId = parts[3] || 'Unbekannt';
+  // ── Modal submit ──────────────────────────────────────────────
+  if (interaction.isModalSubmit()) {
 
-    const starsStr = interaction.fields.getTextInputValue('stars');
-    const text = interaction.fields.getTextInputValue('text');
-    const stars = parseInt(starsStr);
-
-    if (isNaN(stars) || stars < 1 || stars > 5) {
-      return interaction.reply({ content: '❌ Bitte eine Zahl zwischen **1** und **5** eingeben!', ephemeral: true });
-    }
-
-    const reviewChannel = interaction.guild.channels.cache.get(REVIEWS_CHANNEL_ID);
-    if (!reviewChannel) {
-      return interaction.reply({ content: '❌ Reviews-Channel nicht gefunden!', ephemeral: true });
-    }
-
-    const starsEmoji = '⭐'.repeat(stars);
-    const reviewer = interaction.user;
-
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: reviewer.username, iconURL: reviewer.displayAvatarURL() })
-      .setTitle('Bewertung — HugoSMP Market')
-      .setDescription(`**Bewertet von:** **<@${reviewer.id}>**\n\n${starsEmoji} **(${stars}/5)**\n\n${text}`)
-      .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
-      .setFooter({ text: `Order-ID: ${orderId}` })
-      .setColor(0x00ff00)
-      .setTimestamp();
-
-    await reviewChannel.send({ embeds: [embed] });
-
-    try {
-      const member = await interaction.guild.members.fetch(reviewer.id);
-      if (!member.roles.cache.has(KUNDEN_ROLE_ID)) {
-        await member.roles.add(KUNDEN_ROLE_ID);
+    // Stock modal
+    if (interaction.customId.startsWith('stock_modal_')) {
+      const itemId = interaction.customId.replace('stock_modal_', '');
+      const amountStr = interaction.fields.getTextInputValue('amount');
+      const amount = parseInt(amountStr);
+      if (isNaN(amount) || amount < 0) {
+        return interaction.reply({ content: '❌ Bitte eine gültige Zahl (≥ 0) eingeben!', ephemeral: true });
       }
-    } catch (e) {
-      console.error('Rolle konnte nicht vergeben werden:', e.message);
+      const data = loadData();
+      const old = data.stock[itemId] ?? 0;
+      data.stock[itemId] = amount;
+      saveData(data);
+      await updateStockPanel();
+      const item = STOCK_ITEMS.find(i => i.id === itemId);
+      return interaction.reply({ content: `✅ **${item.name}**: ${old} → **${amount}**`, ephemeral: true });
     }
 
-    reviewedUsers.add(buyerId);
-
-    await interaction.reply({
-      content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...',
-      ephemeral: true
-    });
-
-    if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
-      setTimeout(async () => {
-        try {
-          await interaction.channel.delete();
-        } catch (e) {
-          console.error('Ticket konnte nicht geschlossen werden:', e.message);
-        }
-      }, 3000);
+    // Review modal
+    if (interaction.customId.startsWith('review_modal_')) {
+      const parts = interaction.customId.split('_');
+      const buyerId = parts[2];
+      const orderId = parts[3] || 'Unbekannt';
+      const starsStr = interaction.fields.getTextInputValue('stars');
+      const text = interaction.fields.getTextInputValue('text');
+      const stars = parseInt(starsStr);
+      if (isNaN(stars) || stars < 1 || stars > 5) return interaction.reply({ content: '❌ Bitte eine Zahl zwischen **1** und **5** eingeben!', ephemeral: true });
+      const reviewChannel = interaction.guild.channels.cache.get(REVIEWS_CHANNEL_ID);
+      if (!reviewChannel) return interaction.reply({ content: '❌ Reviews-Channel nicht gefunden!', ephemeral: true });
+      const starsEmoji = '⭐'.repeat(stars);
+      const reviewer = interaction.user;
+      const embed = new EmbedBuilder()
+        .setAuthor({ name: reviewer.username, iconURL: reviewer.displayAvatarURL() })
+        .setTitle('Bewertung — HugoSMP Market')
+        .setDescription(`**Bewertet von:** **<@${reviewer.id}>**\n\n${starsEmoji} **(${stars}/5)**\n\n${text}`)
+        .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
+        .setFooter({ text: `Order-ID: ${orderId}` })
+        .setColor(0x00ff00)
+        .setTimestamp();
+      await reviewChannel.send({ embeds: [embed] });
+      try {
+        const member = await interaction.guild.members.fetch(reviewer.id);
+        if (!member.roles.cache.has(KUNDEN_ROLE_ID)) await member.roles.add(KUNDEN_ROLE_ID);
+      } catch (e) { console.error('Rolle konnte nicht vergeben werden:', e.message); }
+      reviewedUsers.add(buyerId);
+      await interaction.reply({ content: '✅ **Danke für deine Bewertung!**\nDu hast die **Kunden-Rolle** erhalten.\n\nDas Ticket wird in 3 Sekunden automatisch geschlossen...', ephemeral: true });
+      if (!interaction.channel.name.toLowerCase().startsWith('1m-')) {
+        setTimeout(async () => { try { await interaction.channel.delete(); } catch (e) {} }, 3000);
+      }
     }
   }
 });
