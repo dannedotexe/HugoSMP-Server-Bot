@@ -388,6 +388,10 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
 }
 
 async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
+  if (channel.parentId === CLOSED_TICKET_CATEGORY_ID || channel.name.startsWith('closed-')) {
+    return;
+  }
+
   const ownerId = getTicketOwnerId(channel);
 
   await sendTicketLog(channel.guild, channel, closedBy, reason);
@@ -1225,7 +1229,6 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
-
     if (interaction.customId.startsWith('role_')) {
       const roleKey = interaction.customId.replace('role_', '');
       const roleId = PING_ROLES[roleKey];
