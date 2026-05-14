@@ -97,8 +97,14 @@ const STOCK_ITEMS = [
     emojiId: '1502281854051680469',
     price: '0,04 €'
   },
+  {
+    id: 'skeleton_spawner',
+    name: 'Skeleton Spawner',
+    emoji: '<:SkeletonSpawner:1504552157053980793>',
+    emojiId: '1504552157053980793',
+    price: '6 €'
+  },
 ];
-
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
   try {
