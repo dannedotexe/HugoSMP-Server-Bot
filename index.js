@@ -105,6 +105,7 @@ const STOCK_ITEMS = [
     price: '6 €'
   },
 ];
+
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
   try {
