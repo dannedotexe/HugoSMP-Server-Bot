@@ -20,7 +20,7 @@ const client = new Client({
 
 // ── Config ────────────────────────────────────────────────────────
 const TOKEN = process.env.DISCORD_TOKEN;
-const DATA_FILE = './data.json';
+const DATA_FILE = '/app/data/data.json';
 
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
 const KUNDEN_ROLE_ID = '1499472189420732421';
