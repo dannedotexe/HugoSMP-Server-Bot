@@ -280,6 +280,8 @@ function markOrderFormSubmitted(channelId) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
+const closingTickets = new Set();
+
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId)) ||
     member.permissions.has(PermissionFlagsBits.Administrator);
@@ -388,40 +390,52 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
 }
 
 async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
+  if (closingTickets.has(channel.id)) {
+    return;
+  }
+
   if (channel.parentId === CLOSED_TICKET_CATEGORY_ID || channel.name.startsWith('closed-')) {
     return;
   }
 
-  const ownerId = getTicketOwnerId(channel);
+  closingTickets.add(channel.id);
 
-  await sendTicketLog(channel.guild, channel, closedBy, reason);
+  try {
+    const ownerId = getTicketOwnerId(channel);
 
-  if (ownerId) {
-    await channel.permissionOverwrites.edit(ownerId, {
-      ViewChannel: false,
-      SendMessages: false,
-      ReadMessageHistory: false
+    await sendTicketLog(channel.guild, channel, closedBy, reason);
+
+    if (ownerId) {
+      await channel.permissionOverwrites.edit(ownerId, {
+        ViewChannel: false,
+        SendMessages: false,
+        ReadMessageHistory: false
+      }).catch(() => {});
+    }
+
+    await channel.setParent(CLOSED_TICKET_CATEGORY_ID).catch(() => {});
+
+    if (!channel.name.startsWith('closed-')) {
+      await channel.setName(`closed-${channel.name}`.slice(0, 100)).catch(() => {});
+    }
+
+    const reopenRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('reopen_ticket')
+        .setLabel('Ticket wieder öffnen')
+        .setEmoji('🔓')
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await channel.send({
+      content: '🔒 Dieses Ticket wurde geschlossen. Staff kann es wieder öffnen.',
+      components: [reopenRow]
     }).catch(() => {});
+  } finally {
+    setTimeout(() => {
+      closingTickets.delete(channel.id);
+    }, 30000);
   }
-
-  await channel.setParent(CLOSED_TICKET_CATEGORY_ID).catch(() => {});
-
-  if (!channel.name.startsWith('closed-')) {
-    await channel.setName(`closed-${channel.name}`.slice(0, 100)).catch(() => {});
-  }
-
-  const reopenRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('reopen_ticket')
-      .setLabel('Ticket wieder öffnen')
-      .setEmoji('🔓')
-      .setStyle(ButtonStyle.Success)
-  );
-
-  await channel.send({
-    content: '🔒 Dieses Ticket wurde geschlossen. Staff kann es wieder öffnen.',
-    components: [reopenRow]
-  }).catch(() => {});
 }
 
 async function reopenTicket(channel, reopenedBy) {
@@ -695,6 +709,12 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('getorder')
+      .setDescription('Sendet die Bestell-Anleitung.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('embed')
       .setDescription('Send an embed as the bot.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -934,6 +954,33 @@ client.on('interactionCreate', async interaction => {
 
       return interaction.reply({
         content: '✅ Nachricht gesendet!',
+        ephemeral: true
+      });
+    }
+
+    if (interaction.commandName === 'getorder') {
+      const embed = new EmbedBuilder()
+        .setColor('#b10de7')
+        .setTitle('✨ — DEINE BESTELLUNG ERHALTEN — ✨')
+        .setDescription(
+          '**SOBALD GEZAHLT WURDE** 💸\n' +
+          '↓\n\n' +
+          '🧮 **KURZRECHNUNG:**\n' +
+          'Bestellung (z.B: 5 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (125 Stück)\n\n' +
+          '🛠️ **DEINE AUFGABE:**\n' +
+          '↳ Order Ingame erstellen (Menge laut Rechnung)\n' +
+          '↳ Preis pro Stück: 1$\n' +
+          '↳ Steuern: Sind so gut wie keine Vorhanden!\n\n' +
+          '*Das ganze Ancient machst du dann in die höchste Order rein und\n' +
+          'somit hast du dein gekauftes Geld!*'
+        );
+
+      await interaction.channel.send({
+        embeds: [embed]
+      });
+
+      return interaction.reply({
+        content: '✅ Bestell-Anleitung gesendet!',
         ephemeral: true
       });
     }
@@ -1459,33 +1506,142 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'close_ticket') {
       const ownerId = getTicketOwnerId(interaction.channel);
-      const allowed = isStaff(interaction.member) || interaction.user.id === ownerId;
 
-      if (!allowed) {
+      if (!ownerId) {
+        return interaction.reply({
+          content: '❌ Ticket-Ersteller konnte nicht gefunden werden.',
+          ephemeral: true
+        });
+      }
+
+      if (!isStaff(interaction.member) && interaction.user.id !== ownerId) {
         return interaction.reply({
           content: '❌ Du darfst dieses Ticket nicht schließen.',
           ephemeral: true
         });
       }
 
+      if (interaction.channel.parentId === CLOSED_TICKET_CATEGORY_ID || interaction.channel.name.startsWith('closed-')) {
+        return interaction.reply({
+          content: '❌ Dieses Ticket ist bereits geschlossen.',
+          ephemeral: true
+        });
+      }
+
+      if (interaction.user.id === ownerId) {
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('confirm_close_ticket')
+            .setLabel('Ja, schließen')
+            .setEmoji('✅')
+            .setStyle(ButtonStyle.Danger),
+
+          new ButtonBuilder()
+            .setCustomId('cancel_close_ticket')
+            .setLabel('Abbrechen')
+            .setEmoji('❌')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        return interaction.reply({
+          content: 'Möchtest du dieses Ticket wirklich schließen?',
+          components: [row],
+          ephemeral: true
+        });
+      }
+
+      const stamp = Date.now().toString();
+      const requestId = `close_${interaction.channel.id}_${ownerId}_${stamp}`;
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId('confirm_close_ticket')
-          .setLabel('Ja, schließen')
-          .setEmoji('✅')
+          .setCustomId(`ticket_close_yes_${ownerId}_${stamp}`)
+          .setLabel('Ticket schließen')
+          .setEmoji('🔒')
           .setStyle(ButtonStyle.Danger),
 
         new ButtonBuilder()
-          .setCustomId('cancel_close_ticket')
-          .setLabel('Abbrechen')
-          .setEmoji('❌')
+          .setCustomId(`ticket_close_no_${ownerId}_${stamp}`)
+          .setLabel('Offen lassen')
+          .setEmoji('📌')
           .setStyle(ButtonStyle.Secondary)
       );
 
-      return interaction.reply({
-        content: 'Möchtest du dieses Ticket wirklich schließen?',
-        components: [row],
+      await interaction.reply({
+        content: `✅ Anfrage an <@${ownerId}> gesendet.`,
         ephemeral: true
+      });
+
+      await interaction.channel.send({
+        content:
+          `<@${ownerId}> soll dieses Ticket geschlossen werden?\n` +
+          `⏳ Wenn du nichts auswählst, wird das Ticket in **5 Minuten** automatisch geschlossen.`,
+        components: [row]
+      });
+
+      setTimeout(async () => {
+        try {
+          if (hasReviewDecision(requestId)) return;
+
+          markReviewDecision(requestId);
+          await closeTicket(interaction.channel, interaction.user, 'Auto-Close nach Staff-Anfrage');
+        } catch (e) {
+          console.error('ticket close auto error:', e.message);
+        }
+      }, 5 * 60 * 1000);
+
+      return;
+    }
+
+    if (interaction.customId.startsWith('ticket_close_yes_')) {
+      const parts = interaction.customId.split('_');
+      const ownerId = parts[3];
+      const stamp = parts[4];
+
+      if (interaction.user.id !== ownerId) {
+        return interaction.reply({
+          content: '❌ Nur der Ticket-Ersteller kann das bestätigen.',
+          ephemeral: true
+        });
+      }
+
+      const requestId = `close_${interaction.channel.id}_${ownerId}_${stamp}`;
+      markReviewDecision(requestId);
+
+      await interaction.update({
+        content: '🔒 Ticket wird geschlossen...',
+        components: []
+      });
+
+      setTimeout(async () => {
+        try {
+          await closeTicket(interaction.channel, interaction.user, 'Ticket-Ersteller hat Schließen bestätigt');
+        } catch (e) {
+          console.error('ticket owner close yes error:', e.message);
+        }
+      }, 2000);
+
+      return;
+    }
+
+    if (interaction.customId.startsWith('ticket_close_no_')) {
+      const parts = interaction.customId.split('_');
+      const ownerId = parts[3];
+      const stamp = parts[4];
+
+      if (interaction.user.id !== ownerId) {
+        return interaction.reply({
+          content: '❌ Nur der Ticket-Ersteller kann das auswählen.',
+          ephemeral: true
+        });
+      }
+
+      const requestId = `close_${interaction.channel.id}_${ownerId}_${stamp}`;
+      markReviewDecision(requestId);
+
+      return interaction.update({
+        content: '📌 Das Ticket bleibt offen.',
+        components: []
       });
     }
 
@@ -1600,10 +1756,17 @@ client.on('interactionCreate', async interaction => {
 
       const parts = interaction.customId.split('_');
       const action = parts[1];
-      const itemId = parts[2];
+      const itemId = parts.slice(2).join('_');
 
       if (action === 'set') {
         const item = STOCK_ITEMS.find(i => i.id === itemId);
+
+        if (!item) {
+          return interaction.reply({
+            content: '❌ Item nicht gefunden.',
+            ephemeral: true
+          });
+        }
 
         const modal = new ModalBuilder()
           .setCustomId(`stock_modal_${itemId}`)
@@ -1639,6 +1802,10 @@ client.on('interactionCreate', async interaction => {
       await updateStockPanel();
 
       const item = STOCK_ITEMS.find(i => i.id === itemId);
+
+      if (!item) {
+        return interaction.editReply('❌ Item nicht gefunden.');
+      }
 
       return interaction.editReply(
         `✅ **${item.name}**: ${current} → **${data.stock[itemId]}**`
@@ -1911,6 +2078,13 @@ client.on('interactionCreate', async interaction => {
       await updateStockPanel();
 
       const item = STOCK_ITEMS.find(i => i.id === itemId);
+
+      if (!item) {
+        return interaction.reply({
+          content: '❌ Item nicht gefunden.',
+          ephemeral: true
+        });
+      }
 
       return interaction.reply({
         content: `✅ **${item.name}**: ${old} → **${amount}**`,
