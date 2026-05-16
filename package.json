@@ -2,9 +2,14 @@
   "name": "hugosmp-invite-bot",
   "version": "1.0.0",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "discord.js": "^14.15.0",
     "@discordjs/rest": "^2.3.0",
-    "discord-api-types": "^0.37.97"
+    "discord-api-types": "^0.37.97",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   }
 }
