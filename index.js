@@ -7,6 +7,8 @@ const {
 } = require('discord.js');
 
 const fs = require('fs');
+const express = require('express');
+const cors = require('cors');
 
 const client = new Client({
   intents: [
@@ -21,6 +23,9 @@ const client = new Client({
 // ── Config ────────────────────────────────────────────────────────
 const TOKEN = process.env.DISCORD_TOKEN;
 const DATA_FILE = '/app/data/data.json';
+const PORT = process.env.PORT || 3000;
+const WEBSITE_URL = process.env.WEBSITE_URL || '*';
+const GUILD_ID = '1499129162378514524';
 
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
 const KUNDEN_ROLE_ID = '1499472189420732421';
@@ -2196,6 +2201,180 @@ client.on('interactionCreate', async interaction => {
       return;
     }
   }
+});
+
+
+// ── Website API ───────────────────────────────────────────────────
+const app = express();
+
+app.use(cors({
+  origin: WEBSITE_URL === '*' ? true : WEBSITE_URL
+}));
+
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    bot: client.user ? client.user.tag : 'starting',
+    guildId: GUILD_ID
+  });
+});
+
+app.get('/api/stock', (req, res) => {
+  try {
+    const data = loadData();
+
+    const stock = STOCK_ITEMS.map(item => ({
+      id: item.id,
+      name: item.name,
+      emoji: item.emoji,
+      emojiId: item.emojiId,
+      price: item.price,
+      amount: data.stock[item.id] ?? 0
+    }));
+
+    return res.json({
+      success: true,
+      stock
+    });
+  } catch (e) {
+    console.error('api stock error:', e.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Stock konnte nicht geladen werden.'
+    });
+  }
+});
+
+app.post('/api/order', async (req, res) => {
+  try {
+    const {
+      discordId,
+      username,
+      items,
+      total,
+      paymentMethod,
+      note
+    } = req.body;
+
+    if (!discordId || !/^\d{17,20}$/.test(String(discordId))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bitte gib eine gültige Discord User-ID an.'
+      });
+    }
+
+    if (!username || String(username).trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bitte gib deinen Namen an.'
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Der Warenkorb ist leer.'
+      });
+    }
+
+    const guild = client.guilds.cache.get(GUILD_ID);
+
+    if (!guild) {
+      return res.status(500).json({
+        success: false,
+        error: 'Discord Server wurde nicht gefunden.'
+      });
+    }
+
+    const cleanName = cleanUsername(username);
+    const ticketOrderId = getNextTicketOrderId();
+    const ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
+
+    const existing = guild.channels.cache.find(c =>
+      c.name === ticketName || c.name === `closed-${ticketName}`
+    );
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: 'Für diese Bestellung existiert bereits ein Ticket.',
+        ticketUrl: `https://discord.com/channels/${guild.id}/${existing.id}`
+      });
+    }
+
+    const ticket = await guild.channels.create({
+      name: ticketName,
+      type: ChannelType.GuildText,
+      parent: TICKET_CATEGORY_ID,
+      topic: `owner:${discordId};type:bestellung;order:${ticketOrderId}`,
+      permissionOverwrites: [
+        { id: guild.id, deny: ['ViewChannel'] },
+        { id: discordId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+        ...STAFF_ROLE_IDS.map(roleId => ({
+          id: roleId,
+          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+        })),
+        {
+          id: client.user.id,
+          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels']
+        }
+      ]
+    });
+
+    const itemLines = items.map(item => {
+      const name = String(item.name || 'Unbekanntes Item').slice(0, 80);
+      const qty = Number(item.quantity || item.qty || 1);
+      const price = String(item.price || 'Unbekannt').slice(0, 40);
+      return `• **${name}** x${qty} — ${price}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor('#b10de7')
+      .setTitle(`🛒 Website-Bestellung #${ticketOrderId}`)
+      .setDescription(
+        `**Käufer:** <@${discordId}>\n` +
+        `**Name:** ${String(username).slice(0, 80)}\n` +
+        `**Zahlungsmethode:** ${paymentMethod ? String(paymentMethod).slice(0, 80) : 'Nicht angegeben'}\n` +
+        `**Gesamt:** ${total ? String(total).slice(0, 40) : 'Unbekannt'}\n\n` +
+        `**Produkte:**\n${itemLines}\n\n` +
+        `**Notiz:** ${note ? String(note).slice(0, 500) : 'Keine'}`
+      )
+      .setFooter({ text: 'Erstellt über die Website' })
+      .setTimestamp();
+
+    const closeRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('close_ticket')
+        .setLabel('Ticket schließen')
+        .setEmoji('🔒')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await ticket.send({
+      content: `<@${discordId}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
+      embeds: [embed],
+      components: [closeRow]
+    });
+
+    return res.json({
+      success: true,
+      ticketId: ticket.id,
+      ticketUrl: `https://discord.com/channels/${guild.id}/${ticket.id}`
+    });
+  } catch (e) {
+    console.error('api order error:', e);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Bestellung konnte nicht erstellt werden.'
+    });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Website API läuft auf Port ${PORT}`);
 });
 
 client.login(TOKEN);
