@@ -1,15 +1,19 @@
 {
-  "name": "hugosmp-invite-bot",
+  "name": "hugosmp-market-website",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "discord.js": "^14.15.0",
-    "@discordjs/rest": "^2.3.0",
-    "discord-api-types": "^0.37.97",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
-  }
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {}
 }
