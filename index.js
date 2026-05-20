@@ -886,8 +886,9 @@ async function registerCommands(guildId) {
 
     new SlashCommandBuilder()
       .setName('close')
-      .setDescription('Aktuelles Ticket schließen.')
+      .setDescription('Ticket schließen — aktuelles oder von einem bestimmten User.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('Ticket dieses Users schließen (optional)'))
       .toJSON(),
 
     new SlashCommandBuilder()
@@ -1725,12 +1726,38 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'close') {
+      const targetUser = interaction.options.getUser('user');
+
+      if (targetUser) {
+        // Find the ticket channel of that user
+        const ticketChannel = interaction.guild.channels.cache.find(c => {
+          const owner = getTicketOwnerId(c);
+          return owner === targetUser.id && !c.name.startsWith('closed-');
+        });
+
+        if (!ticketChannel) {
+          return interaction.reply({
+            content: `❌ Kein offenes Ticket für <@${targetUser.id}> gefunden.`,
+            ephemeral: true
+          });
+        }
+
+        await interaction.reply({
+          content: `🔒 Ticket von <@${targetUser.id}> wird geschlossen...`,
+          ephemeral: true
+        });
+
+        await closeTicket(ticketChannel, interaction.user, `Von ${interaction.user.tag} per /close geschlossen`);
+        return;
+      }
+
+      // No user specified — close current channel
       const channel = interaction.channel;
       const ownerId = getTicketOwnerId(channel);
 
       if (!ownerId) {
         return interaction.reply({
-          content: '❌ Dieser Befehl kann nur in einem Ticket-Channel verwendet werden.',
+          content: '❌ Dieser Befehl kann nur in einem Ticket-Channel verwendet werden (oder gib einen User an).',
           ephemeral: true
         });
       }
