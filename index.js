@@ -107,7 +107,7 @@ const STOCK_ITEMS = [
     name: 'Skeleton Spawner',
     emoji: '<:SkeletonSpawner:1504552157053980793>',
     emojiId: '1504552157053980793',
-    price: '4 €'
+    price: '6 €'
   },
 ];
 
@@ -933,6 +933,15 @@ async function registerCommands(guildId) {
           .addStringOption(o => o.setName('message_id').setDescription('Message-ID des Giveaways').setRequired(true))
           .addUserOption(o => o.setName('user').setDescription('Dieser User gewinnt garantiert').setRequired(true))
       )
+      .addSubcommand(sub =>
+        sub.setName('list').setDescription('Alle Teilnehmer eines Giveaways anzeigen')
+          .addStringOption(o => o.setName('message_id').setDescription('Message-ID des Giveaways').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('removeuser').setDescription('Einen User aus dem Giveaway entfernen')
+          .addStringOption(o => o.setName('message_id').setDescription('Message-ID des Giveaways').setRequired(true))
+          .addUserOption(o => o.setName('user').setDescription('Welcher User soll entfernt werden?').setRequired(true))
+      )
       .toJSON(),
 
   ];
@@ -1224,6 +1233,86 @@ client.on('interactionCreate', async interaction => {
         gw.zinkedWinner = user.id;
         saveData(data);
         return interaction.reply({ content: `🎰 Gezinkt! <@${user.id}> wird das Giveaway **${gw.prize}** gewinnen.`, ephemeral: true });
+      }
+
+      if (sub === 'list') {
+        const msgId = interaction.options.getString('message_id');
+        const data = loadData();
+        const gw = data.giveaways[msgId];
+        if (!gw) {
+          return interaction.reply({ content: '❌ Giveaway nicht gefunden!', ephemeral: true });
+        }
+
+        if (gw.participants.length === 0) {
+          return interaction.reply({ content: `📋 **${gw.prize}** — Noch keine Teilnehmer.`, ephemeral: true });
+        }
+
+        // Split into pages of 30 to avoid hitting embed limits
+        const chunkSize = 30;
+        const chunks = [];
+        for (let i = 0; i < gw.participants.length; i += chunkSize) {
+          chunks.push(gw.participants.slice(i, i + chunkSize));
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(`🎉 Teilnehmer — ${gw.prize}`)
+          .setDescription(
+            chunks[0].map((id, i) => `**${i + 1}.** <@${id}>`).join('\n')
+          )
+          .setFooter({ text: `${gw.participants.length} Teilnehmer gesamt${gw.zinkedWinner ? ` • 🎰 Gezinkt: ${gw.zinkedWinner}` : ''}` });
+
+        if (chunks.length > 1) {
+          embed.addFields(
+            ...chunks.slice(1).map((chunk, ci) => ({
+              name: '​',
+              value: chunk.map((id, i) => `**${ci * chunkSize + 30 + i + 1}.** <@${id}>`).join('\n'),
+              inline: false
+            }))
+          );
+        }
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      if (sub === 'removeuser') {
+        const msgId = interaction.options.getString('message_id');
+        const user = interaction.options.getUser('user');
+        const data = loadData();
+        const gw = data.giveaways[msgId];
+        if (!gw) {
+          return interaction.reply({ content: '❌ Giveaway nicht gefunden!', ephemeral: true });
+        }
+        if (gw.ended) {
+          return interaction.reply({ content: '❌ Giveaway ist bereits beendet!', ephemeral: true });
+        }
+
+        if (!gw.participants.includes(user.id)) {
+          return interaction.reply({ content: `❌ <@${user.id}> ist gar nicht im Giveaway!`, ephemeral: true });
+        }
+
+        gw.participants = gw.participants.filter(p => p !== user.id);
+
+        // Also remove zinken if it was this user
+        if (gw.zinkedWinner === user.id) {
+          gw.zinkedWinner = null;
+        }
+
+        saveData(data);
+
+        // Update the giveaway embed with new count
+        try {
+          const ch = client.channels.cache.get(gw.channelId);
+          if (ch) {
+            const msg = await ch.messages.fetch(msgId).catch(() => null);
+            if (msg) await msg.edit({ embeds: [buildGiveawayEmbed(gw, false)] });
+          }
+        } catch {}
+
+        return interaction.reply({
+          content: `✅ <@${user.id}> wurde aus dem Giveaway **${gw.prize}** entfernt. (Noch ${gw.participants.length} Teilnehmer)`,
+          ephemeral: true
+        });
       }
     }
 
