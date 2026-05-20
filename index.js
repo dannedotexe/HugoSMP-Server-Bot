@@ -714,6 +714,12 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
+  .setName('website')
+  .setDescription('Sendet den HugoSMP Market Website-Post.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .toJSON(),
+    
+    new SlashCommandBuilder()
       .setName('getorder')
       .setDescription('Sendet die Bestell-Anleitung.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -949,6 +955,37 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
 
+    if (interaction.commandName === 'website') {
+  const embed = new EmbedBuilder()
+    .setColor('#9B30FF')
+    .setTitle('🌐 HugoSMP Market ist online!')
+    .setDescription(
+      'Bestelle HugoSMP Geld, Items, Kits und mehr direkt über unsere Website.\n\n' +
+      '✅ Schnell & einfach bestellen\n' +
+      '✅ Discord Login\n' +
+      '✅ Sichere Bestellnummer\n' +
+      '✅ Support per Ticket\n\n' +
+      '🎟️ Bei Fragen öffnet ein Ticket in <#1499132947041751181>'
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('🌐 Website öffnen')
+      .setStyle(ButtonStyle.Link)
+      .setURL('https://hugosmpmarket.store')
+  );
+
+  await interaction.channel.send({
+    embeds: [embed],
+    components: [row]
+  });
+
+  return interaction.reply({
+    content: '✅ Website-Post gesendet!',
+    ephemeral: true
+  });
+}
+    
     if (interaction.commandName === 'say') {
       const text = interaction.options.getString('text');
 
