@@ -1563,6 +1563,40 @@ if (interaction.commandName === 'website') {
 
   
 if (interaction.isButton()) {
+
+  if (interaction.customId.startsWith('giveaway_join_')) {
+  const messageId = interaction.customId.replace('giveaway_join_', '');
+  const data = loadData();
+  const giveaway = data.giveaways[messageId];
+
+  if (!giveaway) {
+    return interaction.reply({ content: '❌ Giveaway nicht gefunden.', ephemeral: true });
+  }
+
+  if (giveaway.ended) {
+    return interaction.reply({ content: '❌ Dieses Giveaway ist bereits beendet.', ephemeral: true });
+  }
+
+  if ((giveaway.minInvites || 0) > getInvites(interaction.user.id)) {
+    return interaction.reply({
+      content: `❌ Du brauchst mindestens **${giveaway.minInvites} Invites**, um teilzunehmen.`,
+      ephemeral: true
+    });
+  }
+
+  if (giveaway.participants.includes(interaction.user.id)) {
+    return interaction.reply({ content: '❌ Du nimmst bereits teil.', ephemeral: true });
+  }
+
+  giveaway.participants.push(interaction.user.id);
+  data.giveaways[messageId] = giveaway;
+  saveData(data);
+
+  return interaction.reply({
+    content: `✅ Du nimmst am Giveaway teil! Teilnehmer: **${giveaway.participants.length}**`,
+    ephemeral: true
+  });
+}
     if (interaction.customId.startsWith('role_')) {
       const roleKey = interaction.customId.replace('role_', '');
       const roleId = PING_ROLES[roleKey];
