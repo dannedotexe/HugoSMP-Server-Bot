@@ -44,6 +44,8 @@ const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
+const PUNISH_LOG_CHANNEL_ID = TICKET_LOG_CHANNEL_ID; // Change to a dedicated mod-log channel ID if you have one
+
 const STAFF_ROLE_IDS = [
   '1499146219946250241',
   '1499159379902074880'
@@ -135,6 +137,8 @@ function loadData() {
 
       data.reviewedOrders = data.reviewedOrders || [];
       data.giveaways = data.giveaways || {};
+      data.warnings = data.warnings || {};
+      data.tempbans = data.tempbans || {};
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
       data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
@@ -172,6 +176,8 @@ function loadData() {
     reviewTicketDecisions: [],
     orderFormsSubmitted: {},
     giveaways: {},
+    warnings: {},
+    tempbans: {},
 
     stock: {}
   };
@@ -570,6 +576,56 @@ async function endGiveaway(messageId) {
   }
 }
 
+
+// ── Punish / Moderation helpers ──────────────────────────────────
+function addWarning(userId, moderatorId, reason) {
+  const data = loadData();
+  if (!data.warnings[userId]) data.warnings[userId] = [];
+  data.warnings[userId].push({
+    id: Date.now(),
+    moderatorId,
+    reason,
+    timestamp: Date.now()
+  });
+  saveData(data);
+  return data.warnings[userId].length;
+}
+
+function getWarnings(userId) {
+  const data = loadData();
+  return data.warnings[userId] || [];
+}
+
+function clearWarnings(userId) {
+  const data = loadData();
+  data.warnings[userId] = [];
+  saveData(data);
+}
+
+async function sendPunishLog(guild, { action, color, target, moderator, reason, duration, extra }) {
+  const logChannel = guild.channels.cache.get(PUNISH_LOG_CHANNEL_ID);
+  if (!logChannel) return;
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`🔨 ${action}`)
+    .addFields(
+      { name: '👤 User', value: `<@${target.id}> (${target.tag || target.id})`, inline: true },
+      { name: '🛡️ Moderator', value: `<@${moderator.id}>`, inline: true },
+      { name: '📝 Grund', value: reason || 'Kein Grund angegeben', inline: false }
+    )
+    .setTimestamp();
+
+  if (duration) embed.addFields({ name: '⏱️ Dauer', value: duration, inline: true });
+  if (extra) embed.addFields({ name: '📋 Info', value: extra, inline: false });
+
+  await logChannel.send({ embeds: [embed] }).catch(() => {});
+}
+
+async function tryDM(user, embed) {
+  try { await user.send({ embeds: [embed] }); } catch {}
+}
+
 // ── Invite cache ──────────────────────────────────────────────────
 const cachedInvites = new Map();
 
@@ -891,6 +947,78 @@ async function registerCommands(guildId) {
       .addUserOption(o => o.setName('user').setDescription('Ticket dieses Users schließen (optional)'))
       .toJSON(),
 
+
+    new SlashCommandBuilder()
+      .setName('warn')
+      .setDescription('Einem User eine Verwarnung geben')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund der Verwarnung').setRequired(true))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('warnings')
+      .setDescription('Verwarnungen eines Users anzeigen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('clearwarnings')
+      .setDescription('Alle Verwarnungen eines Users löschen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('mute')
+      .setDescription('Einen User timeouten (stummschalten)')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addStringOption(o => o.setName('dauer').setDescription('Dauer z.B. 10m, 1h, 1d (max 28d)').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('unmute')
+      .setDescription('Timeout eines Users aufheben')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('kick')
+      .setDescription('Einen User vom Server kicken')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('ban')
+      .setDescription('Einen User bannen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund'))
+      .addStringOption(o => o.setName('dauer').setDescription('Dauer z.B. 1h, 7d (leer = permanent)'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('unban')
+      .setDescription('Einen User entbannen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addStringOption(o => o.setName('user_id').setDescription('User-ID des gebannten Users').setRequired(true))
+      .addStringOption(o => o.setName('grund').setDescription('Grund'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('modlog')
+      .setDescription('Alle Strafen eines Users anzeigen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .toJSON(),
+
     new SlashCommandBuilder()
       .setName('setinvites')
       .setDescription('Set invites manually. Admin only.')
@@ -1006,6 +1134,31 @@ client.once('ready', async () => {
   }
 
   await updateStockPanel();
+
+  // Tempban expiry checker
+  setInterval(async () => {
+    const data = loadData();
+    const now = Date.now();
+    for (const [userId, ban] of Object.entries(data.tempbans)) {
+      if (ban.expiresAt && now >= ban.expiresAt) {
+        try {
+          const guild = client.guilds.cache.get(ban.guildId);
+          if (guild) {
+            await guild.members.unban(userId, 'Tempban abgelaufen');
+            await sendPunishLog(guild, {
+              action: 'Tempban abgelaufen — Auto-Unban',
+              color: '#00ff88',
+              target: { id: userId, tag: ban.userTag },
+              moderator: client.user,
+              reason: `Tempban von ${ban.duration} abgelaufen`
+            });
+          }
+        } catch {}
+        delete data.tempbans[userId];
+        saveData(data);
+      }
+    }
+  }, 30000);
 
   // Giveaway timer
   setInterval(async () => {
@@ -1776,6 +1929,304 @@ client.on('interactionCreate', async interaction => {
 
       await closeTicket(channel, interaction.user, `Von ${interaction.user.tag} per /close geschlossen`);
       return;
+    }
+
+
+    // ── /warn ──────────────────────────────────────────────────────
+    if (interaction.commandName === 'warn') {
+      const target = interaction.options.getUser('user');
+      const grund = interaction.options.getString('grund');
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+      if (!member) return interaction.reply({ content: '❌ User nicht auf dem Server gefunden.', ephemeral: true });
+
+      const warnCount = addWarning(target.id, interaction.user.id, grund);
+
+      const dmEmbed = new EmbedBuilder()
+        .setColor('#ffaa00')
+        .setTitle('⚠️ Du wurdest verwarnt!')
+        .setDescription(`**Server:** ${interaction.guild.name}`)
+        .addFields(
+          { name: '📝 Grund', value: grund },
+          { name: '📊 Verwarnungen gesamt', value: `${warnCount}` }
+        )
+        .setTimestamp();
+
+      await tryDM(target, dmEmbed);
+      await sendPunishLog(interaction.guild, {
+        action: `Verwarnung #${warnCount}`,
+        color: '#ffaa00',
+        target,
+        moderator: interaction.user,
+        reason: grund,
+        extra: `Gesamt: **${warnCount}** Verwarnung(en)`
+      });
+
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#ffaa00')
+          .setDescription(`✅ <@${target.id}> wurde verwarnt. (Verwarnung #${warnCount})
+📝 Grund: **${grund}**`)],
+        ephemeral: true
+      });
+    }
+
+    // ── /warnings ──────────────────────────────────────────────────
+    if (interaction.commandName === 'warnings') {
+      const target = interaction.options.getUser('user');
+      const warns = getWarnings(target.id);
+
+      if (warns.length === 0) {
+        return interaction.reply({ content: `✅ <@${target.id}> hat keine Verwarnungen.`, ephemeral: true });
+      }
+
+      const list = warns.map((w, i) =>
+        `**#${i + 1}** — ${w.reason}\n└ Von <@${w.moderatorId}> • <t:${Math.floor(w.timestamp / 1000)}:R>`
+      ).join('\n\n');
+
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#ffaa00')
+          .setTitle(`⚠️ Verwarnungen von ${target.tag || target.username}`)
+          .setDescription(list.slice(0, 4000))
+          .setFooter({ text: `${warns.length} Verwarnung(en) gesamt` })],
+        ephemeral: true
+      });
+    }
+
+    // ── /clearwarnings ─────────────────────────────────────────────
+    if (interaction.commandName === 'clearwarnings') {
+      const target = interaction.options.getUser('user');
+      const before = getWarnings(target.id).length;
+      clearWarnings(target.id);
+
+      await sendPunishLog(interaction.guild, {
+        action: 'Verwarnungen gelöscht',
+        color: '#888888',
+        target,
+        moderator: interaction.user,
+        reason: `${before} Verwarnung(en) wurden gelöscht`
+      });
+
+      return interaction.reply({ content: `✅ **${before}** Verwarnung(en) von <@${target.id}> gelöscht.`, ephemeral: true });
+    }
+
+    // ── /mute ──────────────────────────────────────────────────────
+    if (interaction.commandName === 'mute') {
+      const target = interaction.options.getUser('user');
+      const durStr = interaction.options.getString('dauer');
+      const grund = interaction.options.getString('grund') || 'Kein Grund angegeben';
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+      if (!member) return interaction.reply({ content: '❌ User nicht gefunden.', ephemeral: true });
+
+      const durMs = parseDuration(durStr);
+      if (!durMs) return interaction.reply({ content: '❌ Ungültige Dauer! Beispiele: `10m`, `1h`, `1d`', ephemeral: true });
+
+      const maxMs = 28 * 24 * 60 * 60 * 1000;
+      if (durMs > maxMs) return interaction.reply({ content: '❌ Maximale Timeout-Dauer ist 28 Tage.', ephemeral: true });
+
+      try {
+        await member.timeout(durMs, grund);
+
+        const dmEmbed = new EmbedBuilder()
+          .setColor('#ff6600')
+          .setTitle('🔇 Du wurdest gemutet!')
+          .setDescription(`**Server:** ${interaction.guild.name}`)
+          .addFields(
+            { name: '⏱️ Dauer', value: durStr },
+            { name: '📝 Grund', value: grund }
+          ).setTimestamp();
+
+        await tryDM(target, dmEmbed);
+        await sendPunishLog(interaction.guild, { action: 'Mute / Timeout', color: '#ff6600', target, moderator: interaction.user, reason: grund, duration: durStr });
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor('#ff6600')
+            .setDescription(`✅ <@${target.id}> wurde für **${durStr}** gemutet.
+📝 Grund: **${grund}**`)],
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({ content: `❌ Fehler: ${e.message}`, ephemeral: true });
+      }
+    }
+
+    // ── /unmute ────────────────────────────────────────────────────
+    if (interaction.commandName === 'unmute') {
+      const target = interaction.options.getUser('user');
+      const grund = interaction.options.getString('grund') || 'Kein Grund angegeben';
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+      if (!member) return interaction.reply({ content: '❌ User nicht gefunden.', ephemeral: true });
+
+      try {
+        await member.timeout(null, grund);
+        await sendPunishLog(interaction.guild, { action: 'Unmute', color: '#00ff88', target, moderator: interaction.user, reason: grund });
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor('#00ff88').setDescription(`✅ <@${target.id}> wurde entmutet.`)],
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({ content: `❌ Fehler: ${e.message}`, ephemeral: true });
+      }
+    }
+
+    // ── /kick ──────────────────────────────────────────────────────
+    if (interaction.commandName === 'kick') {
+      const target = interaction.options.getUser('user');
+      const grund = interaction.options.getString('grund') || 'Kein Grund angegeben';
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+      if (!member) return interaction.reply({ content: '❌ User nicht auf dem Server.', ephemeral: true });
+
+      const dmEmbed = new EmbedBuilder()
+        .setColor('#ff4444')
+        .setTitle('👢 Du wurdest gekickt!')
+        .setDescription(`**Server:** ${interaction.guild.name}`)
+        .addFields({ name: '📝 Grund', value: grund })
+        .setTimestamp();
+
+      await tryDM(target, dmEmbed);
+
+      try {
+        await member.kick(grund);
+        await sendPunishLog(interaction.guild, { action: 'Kick', color: '#ff4444', target, moderator: interaction.user, reason: grund });
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription(`✅ <@${target.id}> wurde gekickt.
+📝 Grund: **${grund}**`)],
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({ content: `❌ Fehler: ${e.message}`, ephemeral: true });
+      }
+    }
+
+    // ── /ban ───────────────────────────────────────────────────────
+    if (interaction.commandName === 'ban') {
+      const target = interaction.options.getUser('user');
+      const grund = interaction.options.getString('grund') || 'Kein Grund angegeben';
+      const durStr = interaction.options.getString('dauer');
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+      const durMs = durStr ? parseDuration(durStr) : null;
+      if (durStr && !durMs) return interaction.reply({ content: '❌ Ungültige Dauer! Beispiele: `1h`, `7d`', ephemeral: true });
+
+      const dmEmbed = new EmbedBuilder()
+        .setColor('#cc0000')
+        .setTitle('🔨 Du wurdest gebannt!')
+        .setDescription(`**Server:** ${interaction.guild.name}`)
+        .addFields(
+          { name: '📝 Grund', value: grund },
+          { name: '⏱️ Dauer', value: durStr || 'Permanent' }
+        ).setTimestamp();
+
+      if (member) await tryDM(target, dmEmbed);
+
+      try {
+        await interaction.guild.members.ban(target.id, { reason: grund, deleteMessageSeconds: 86400 });
+
+        if (durMs) {
+          const data = loadData();
+          data.tempbans[target.id] = {
+            guildId: interaction.guild.id,
+            userTag: target.tag || target.username,
+            expiresAt: Date.now() + durMs,
+            duration: durStr,
+            reason: grund
+          };
+          saveData(data);
+        }
+
+        await sendPunishLog(interaction.guild, {
+          action: durStr ? `Tempban (${durStr})` : 'Permanenter Ban',
+          color: '#cc0000',
+          target,
+          moderator: interaction.user,
+          reason: grund,
+          duration: durStr || 'Permanent'
+        });
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor('#cc0000')
+            .setDescription(`✅ <@${target.id}> wurde ${durStr ? `für **${durStr}**` : '**permanent**'} gebannt.
+📝 Grund: **${grund}**`)],
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({ content: `❌ Fehler: ${e.message}`, ephemeral: true });
+      }
+    }
+
+    // ── /unban ─────────────────────────────────────────────────────
+    if (interaction.commandName === 'unban') {
+      const userId = interaction.options.getString('user_id').trim();
+      const grund = interaction.options.getString('grund') || 'Kein Grund angegeben';
+
+      try {
+        const bannedUser = await interaction.guild.bans.fetch(userId).catch(() => null);
+        if (!bannedUser) return interaction.reply({ content: '❌ Dieser User ist nicht gebannt.', ephemeral: true });
+
+        await interaction.guild.members.unban(userId, grund);
+
+        const data = loadData();
+        delete data.tempbans[userId];
+        saveData(data);
+
+        await sendPunishLog(interaction.guild, {
+          action: 'Unban',
+          color: '#00ff88',
+          target: bannedUser.user,
+          moderator: interaction.user,
+          reason: grund
+        });
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor('#00ff88').setDescription(`✅ **${bannedUser.user.tag || userId}** wurde entbannt.
+📝 Grund: **${grund}**`)],
+          ephemeral: true
+        });
+      } catch (e) {
+        return interaction.reply({ content: `❌ Fehler: ${e.message}`, ephemeral: true });
+      }
+    }
+
+    // ── /modlog ────────────────────────────────────────────────────
+    if (interaction.commandName === 'modlog') {
+      const target = interaction.options.getUser('user');
+      const warns = getWarnings(target.id);
+      const data = loadData();
+      const tempban = data.tempbans[target.id];
+
+      const lines = [];
+
+      if (warns.length > 0) {
+        lines.push(`**⚠️ Verwarnungen (${warns.length})**`);
+        warns.slice(-5).forEach((w, i) => {
+          lines.push(`#${i + 1} ${w.reason} — <t:${Math.floor(w.timestamp / 1000)}:R> von <@${w.moderatorId}>`);
+        });
+        if (warns.length > 5) lines.push(`_...und ${warns.length - 5} weitere_`);
+      }
+
+      if (tempban) {
+        lines.push(`
+**🔨 Aktiver Tempban**`);
+        lines.push(`Läuft ab: <t:${Math.floor(tempban.expiresAt / 1000)}:R> | Grund: ${tempban.reason}`);
+      }
+
+      if (lines.length === 0) {
+        return interaction.reply({ content: `✅ <@${target.id}> hat keine Einträge im Modlog.`, ephemeral: true });
+      }
+
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(`📋 Modlog — ${target.username}`)
+          .setThumbnail(target.displayAvatarURL())
+          .setDescription(lines.join('\n'))
+          .setTimestamp()],
+        ephemeral: true
+      });
     }
 
     if (interaction.commandName === 'setinvites') {
