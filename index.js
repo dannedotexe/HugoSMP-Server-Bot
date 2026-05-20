@@ -6,7 +6,7 @@ const {
   AttachmentBuilder
 } = require('discord.js');
 
-const fs = require('fs'); //mac
+const fs = require('fs'); 
 const express = require('express');
 const cors = require('cors');
 
