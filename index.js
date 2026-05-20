@@ -874,6 +874,23 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('adduser')
+      .setDescription('Einen User zum aktuellen Ticket hinzufügen.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption(opt =>
+        opt.setName('user')
+          .setDescription('Welcher User soll hinzugefügt werden?')
+          .setRequired(true)
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('close')
+      .setDescription('Aktuelles Ticket schließen.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('setinvites')
       .setDescription('Set invites manually. Admin only.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -1545,6 +1562,106 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
+    if (interaction.commandName === 'adduser') {
+      const user = interaction.options.getUser('user');
+      const channel = interaction.channel;
+
+      // Check it's a ticket channel
+      const ownerId = getTicketOwnerId(channel);
+      if (!ownerId) {
+        return interaction.reply({
+          content: '❌ Dieser Befehl kann nur in einem Ticket-Channel verwendet werden.',
+          ephemeral: true
+        });
+      }
+
+      try {
+        await channel.permissionOverwrites.edit(user.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true
+        });
+
+        await channel.send({
+          content: `✅ <@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`
+        });
+
+        return interaction.reply({
+          content: `✅ <@${user.id}> wurde zum Ticket hinzugefügt!`,
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error('adduser error:', e);
+        return interaction.reply({
+          content: '❌ Fehler beim Hinzufügen des Users. Prüfe die Bot-Rechte.',
+          ephemeral: true
+        });
+      }
+    }
+
+    if (interaction.commandName === 'adduser') {
+      const user = interaction.options.getUser('user');
+      const channel = interaction.channel;
+      const ownerId = getTicketOwnerId(channel);
+
+      if (!ownerId) {
+        return interaction.reply({
+          content: '❌ Dieser Befehl kann nur in einem Ticket-Channel verwendet werden.',
+          ephemeral: true
+        });
+      }
+
+      try {
+        await channel.permissionOverwrites.edit(user.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true
+        });
+
+        await channel.send({
+          content: `✅ <@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`
+        });
+
+        return interaction.reply({
+          content: `✅ <@${user.id}> wurde zum Ticket hinzugefügt!`,
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error('adduser error:', e);
+        return interaction.reply({
+          content: '❌ Fehler beim Hinzufügen des Users. Prüfe die Bot-Rechte.',
+          ephemeral: true
+        });
+      }
+    }
+
+    if (interaction.commandName === 'close') {
+      const channel = interaction.channel;
+      const ownerId = getTicketOwnerId(channel);
+
+      if (!ownerId) {
+        return interaction.reply({
+          content: '❌ Dieser Befehl kann nur in einem Ticket-Channel verwendet werden.',
+          ephemeral: true
+        });
+      }
+
+      if (channel.parentId === CLOSED_TICKET_CATEGORY_ID || channel.name.startsWith('closed-')) {
+        return interaction.reply({
+          content: '❌ Dieses Ticket ist bereits geschlossen.',
+          ephemeral: true
+        });
+      }
+
+      await interaction.reply({
+        content: '🔒 Ticket wird geschlossen...',
+        ephemeral: true
+      });
+
+      await closeTicket(channel, interaction.user, `Von ${interaction.user.tag} per /close geschlossen`);
+      return;
+    }
+
     if (interaction.commandName === 'setinvites') {
       const user = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount');
@@ -1772,7 +1889,7 @@ client.on('interactionCreate', async interaction => {
       );
 
       if (existing) {
-        return interaction.update({ content: `❌ Du hast bereits ein Bestellungs-Ticket: <#${existing.id}>`, embeds: [], components: [] });
+        return interaction.reply({ content: `❌ Du hast bereits ein Bestellungs-Ticket: <#${existing.id}>`, ephemeral: true });
       }
 
       try {
@@ -1809,10 +1926,10 @@ client.on('interactionCreate', async interaction => {
           components: [ticketButtons]
         });
 
-        return interaction.update({ content: `✅ Bestellungs-Ticket erstellt: <#${ticket.id}>`, embeds: [], components: [] });
+        return interaction.reply({ content: `✅ Bestellungs-Ticket erstellt: <#${ticket.id}>`, ephemeral: true });
       } catch (e) {
         console.error('create order ticket (cat) error:', e);
-        return interaction.update({ content: '❌ Fehler beim Erstellen des Tickets. Prüfe die Bot-Rechte.', embeds: [], components: [] });
+        return interaction.reply({ content: '❌ Fehler beim Erstellen des Tickets. Prüfe die Bot-Rechte.', ephemeral: true });
       }
     }
 
