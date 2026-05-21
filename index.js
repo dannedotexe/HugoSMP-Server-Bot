@@ -44,7 +44,7 @@ const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
-const PUNISH_LOG_CHANNEL_ID = TICKET_LOG_CHANNEL_ID; // Change to a dedicated mod-log channel ID if you have one
+const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // ← Mod-Log Channel ID eintragen
 
 const STAFF_ROLE_IDS = [
   '1499146219946250241',
