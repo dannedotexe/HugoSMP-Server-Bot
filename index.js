@@ -2725,7 +2725,7 @@ client.on('interactionCreate', async interaction => {
         modal.addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('item').setLabel('Welche Schematic möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Castle Schematic v2').setRequired(true)
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Pickle Farm').setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
@@ -2740,7 +2740,7 @@ client.on('interactionCreate', async interaction => {
         modal.addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('item').setLabel('Welches Resource Pack möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. HugoSMP Default Pack v3').setRequired(true)
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. xyzoom 20k Royale Blue').setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
