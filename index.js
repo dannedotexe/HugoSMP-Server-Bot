@@ -146,7 +146,12 @@ function loadData() {
 
       if (!data.stock) data.stock = {};
 
-      STOCK_ITEMS.forEach(item => {
+      // Migrate hardcoded STOCK_ITEMS into data.stockItems on first run
+      if (!data.stockItems || data.stockItems.length === 0) {
+        data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
+      }
+
+      data.stockItems.forEach(item => {
         if (typeof data.stock[item.id] !== 'number') {
           data.stock[item.id] = 0;
         }
@@ -183,7 +188,8 @@ function loadData() {
     welcomeConfig: {},
     leaveConfig: {},
 
-    stock: {}
+    stock: {},
+    stockItems: JSON.parse(JSON.stringify(STOCK_ITEMS))
   };
 
   STOCK_ITEMS.forEach(item => {
@@ -721,7 +727,8 @@ async function updateLeaderboard() {
 function buildStockEmbed() {
   const data = loadData();
 
-  const lines = STOCK_ITEMS.map(item => {
+  const items = data.stockItems || STOCK_ITEMS;
+  const lines = items.map(item => {
     const amount = data.stock[item.id] ?? 0;
 
     const status = amount === 0
@@ -744,8 +751,9 @@ function buildStockEmbed() {
 function buildStockButtons() {
   const rows = [];
 
-  for (let i = 0; i < STOCK_ITEMS.length; i++) {
-    const item = STOCK_ITEMS[i];
+  const stockItemsList = loadData().stockItems || STOCK_ITEMS;
+  for (let i = 0; i < stockItemsList.length; i++) {
+    const item = stockItemsList[i];
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -1010,6 +1018,36 @@ async function registerCommands(guildId) {
       )
       .addSubcommand(sub =>
         sub.setName('info').setDescription('Aktuelle Konfiguration anzeigen')
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('stock')
+      .setDescription('Stock-Panel Items verwalten')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommand(sub =>
+        sub.setName('additem')
+          .setDescription('Neues Item zum Stock-Panel hinzufügen')
+          .addStringOption(o => o.setName('name').setDescription('Item-Name').setRequired(true))
+          .addStringOption(o => o.setName('preis').setDescription('Preis z.B. 1,50 €').setRequired(true))
+          .addStringOption(o => o.setName('emoji').setDescription('Emoji (Standard ✅ oder custom <:Name:ID>)').setRequired(true))
+          .addIntegerOption(o => o.setName('menge').setDescription('Startmenge (Standard: 0)').setMinValue(0))
+      )
+      .addSubcommand(sub =>
+        sub.setName('removeitem')
+          .setDescription('Item aus dem Stock-Panel entfernen')
+          .addStringOption(o => o.setName('id').setDescription('Item-ID (aus /stock listitems)').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('edititem')
+          .setDescription('Bestehendes Item bearbeiten')
+          .addStringOption(o => o.setName('id').setDescription('Item-ID (aus /stock listitems)').setRequired(true))
+          .addStringOption(o => o.setName('name').setDescription('Neuer Name'))
+          .addStringOption(o => o.setName('preis').setDescription('Neuer Preis'))
+          .addStringOption(o => o.setName('emoji').setDescription('Neues Emoji'))
+      )
+      .addSubcommand(sub =>
+        sub.setName('listitems').setDescription('Alle Stock-Items anzeigen')
       )
       .toJSON(),
 
@@ -2035,6 +2073,126 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
+
+
+    // ── /stock ─────────────────────────────────────────────────────────
+    if (interaction.commandName === 'stock') {
+      const sub = interaction.options.getSubcommand();
+      const data = loadData();
+      if (!data.stockItems) data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
+
+      if (sub === 'listitems') {
+        if (data.stockItems.length === 0) {
+          return interaction.reply({ content: '📭 Keine Items im Stock-Panel.', ephemeral: true });
+        }
+        const list = data.stockItems.map((item, i) =>
+          `**${i + 1}.** ${item.emoji} **${item.name}** — ${item.price}\n└ ID: \`${item.id}\` | Lager: ${data.stock[item.id] ?? 0}`
+        ).join('\n\n');
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#b10de7')
+            .setTitle('📦 Stock-Items')
+            .setDescription(list)],
+          ephemeral: true
+        });
+      }
+
+      if (sub === 'additem') {
+        const name   = interaction.options.getString('name');
+        const preis  = interaction.options.getString('preis');
+        const emoji  = interaction.options.getString('emoji');
+        const menge  = interaction.options.getInteger('menge') ?? 0;
+
+        // Generate ID from name
+        const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 30);
+
+        if (data.stockItems.find(i => i.id === id)) {
+          return interaction.reply({ content: `❌ Ein Item mit der ID \`${id}\` existiert bereits! Nutze einen anderen Namen.`, ephemeral: true });
+        }
+
+        // Extract emojiId for custom emojis
+        const customMatch = emoji.match(/<a?:[^:]+:(d+)>/);
+        const emojiId = customMatch ? customMatch[1] : null;
+
+        const newItem = { id, name, emoji, emojiId, price: preis };
+        data.stockItems.push(newItem);
+        data.stock[id] = menge;
+        saveData(data);
+        await updateStockPanel();
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#00ff88')
+            .setTitle('✅ Item hinzugefügt')
+            .addFields(
+              { name: '📦 Name', value: name, inline: true },
+              { name: '💰 Preis', value: preis, inline: true },
+              { name: '🔢 Startmenge', value: `${menge}`, inline: true },
+              { name: '🆔 ID', value: `\`${id}\``, inline: true },
+              { name: '😀 Emoji', value: emoji, inline: true }
+            )],
+          ephemeral: true
+        });
+      }
+
+      if (sub === 'removeitem') {
+        const id = interaction.options.getString('id');
+        const idx = data.stockItems.findIndex(i => i.id === id);
+
+        if (idx === -1) {
+          return interaction.reply({ content: `❌ Kein Item mit ID \`${id}\` gefunden. Nutze \`/stock listitems\` für alle IDs.`, ephemeral: true });
+        }
+
+        const removed = data.stockItems.splice(idx, 1)[0];
+        delete data.stock[id];
+        saveData(data);
+        await updateStockPanel();
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#ff4444')
+            .setDescription(`✅ **${removed.name}** wurde aus dem Stock-Panel entfernt.`)],
+          ephemeral: true
+        });
+      }
+
+      if (sub === 'edititem') {
+        const id    = interaction.options.getString('id');
+        const name  = interaction.options.getString('name');
+        const preis = interaction.options.getString('preis');
+        const emoji = interaction.options.getString('emoji');
+
+        const item = data.stockItems.find(i => i.id === id);
+        if (!item) {
+          return interaction.reply({ content: `❌ Kein Item mit ID \`${id}\` gefunden. Nutze \`/stock listitems\` für alle IDs.`, ephemeral: true });
+        }
+
+        if (name)  item.name  = name;
+        if (preis) item.price = preis;
+        if (emoji) {
+          item.emoji = emoji;
+          const customMatch = emoji.match(/<a?:[^:]+:(d+)>/);
+          item.emojiId = customMatch ? customMatch[1] : null;
+        }
+
+        saveData(data);
+        await updateStockPanel();
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#b10de7')
+            .setTitle('✅ Item aktualisiert')
+            .addFields(
+              { name: '📦 Name', value: item.name, inline: true },
+              { name: '💰 Preis', value: item.price, inline: true },
+              { name: '😀 Emoji', value: item.emoji, inline: true },
+              { name: '🆔 ID', value: `\`${item.id}\``, inline: true }
+            )],
+          ephemeral: true
+        });
+      }
+    }
 
     // ── /warn ──────────────────────────────────────────────────────
 
