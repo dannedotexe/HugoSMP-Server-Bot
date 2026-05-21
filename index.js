@@ -766,11 +766,15 @@ function buildStockButtons() {
         .setLabel('-1')
         .setStyle(ButtonStyle.Secondary),
 
-      new ButtonBuilder()
-        .setCustomId(`stock_set_${item.id}`)
-        .setLabel(item.name)
-        .setEmoji({ id: item.emojiId })
-        .setStyle(ButtonStyle.Primary),
+      (() => {
+        const btn = new ButtonBuilder()
+          .setCustomId(`stock_set_${item.id}`)
+          .setLabel(item.name)
+          .setStyle(ButtonStyle.Primary);
+        if (item.emojiId) btn.setEmoji({ id: item.emojiId });
+        else if (item.emoji && !item.emoji.startsWith('<')) btn.setEmoji(item.emoji);
+        return btn;
+      })(),
 
       new ButtonBuilder()
         .setCustomId(`stock_plus1_${item.id}`)
@@ -2111,11 +2115,25 @@ client.on('interactionCreate', async interaction => {
           return interaction.reply({ content: `❌ Ein Item mit der ID \`${id}\` existiert bereits! Nutze einen anderen Namen.`, ephemeral: true });
         }
 
-        // Extract emojiId for custom emojis
-        const customMatch = emoji.match(/<a?:[^:]+:(d+)>/);
-        const emojiId = customMatch ? customMatch[1] : null;
+        // Normalize emoji input — support <:Name:ID>, raw ID number, or standard emoji
+        let finalEmoji = emoji.trim();
+        let emojiId = null;
 
-        const newItem = { id, name, emoji, emojiId, price: preis };
+        const customMatch = finalEmoji.match(/<a?:([^:]+):(d+)>/);
+        const rawIdMatch  = finalEmoji.match(/^(d{15,20})$/);
+        const colonMatch  = finalEmoji.match(/:([^:]+):(d+)/);
+
+        if (customMatch) {
+          emojiId = customMatch[2];
+        } else if (rawIdMatch) {
+          emojiId = rawIdMatch[1];
+          finalEmoji = `<:item:${emojiId}>`;
+        } else if (colonMatch) {
+          emojiId = colonMatch[2];
+          finalEmoji = `<:${colonMatch[1]}:${emojiId}>`;
+        }
+
+        const newItem = { id, name, emoji: finalEmoji, emojiId, price: preis };
         data.stockItems.push(newItem);
         data.stock[id] = menge;
         saveData(data);
@@ -2172,8 +2190,14 @@ client.on('interactionCreate', async interaction => {
         if (preis) item.price = preis;
         if (emoji) {
           item.emoji = emoji;
-          const customMatch = emoji.match(/<a?:[^:]+:(d+)>/);
-          item.emojiId = customMatch ? customMatch[1] : null;
+          const editMatch = emoji.match(/<a?:([^:]+):(d+)>/);
+          const editRaw = emoji.match(/^(d{15,20})$/);
+          if (editMatch) {
+            item.emojiId = editMatch[2];
+          } else if (editRaw) {
+            item.emojiId = editRaw[1];
+            item.emoji = `<:item:${item.emojiId}>`;
+          }
         }
 
         saveData(data);
