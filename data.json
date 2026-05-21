@@ -3,5 +3,14 @@
   "counted": [],
   "pending": {},
   "leaderboardMessageId": null,
-  "nextOrderId": 1
+  "nextOrderId": 1,
+  "reviews": [],
+  "reviewedOrders": [],
+  "reviewTicketDecisions": [],
+  "orderFormsSubmitted": {},
+  "giveaways": {},
+  "warnings": {},
+  "tempbans": {},
+  "welcomeConfig": {},
+  "leaveConfig": {}
 }
