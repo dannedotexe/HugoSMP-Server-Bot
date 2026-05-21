@@ -151,6 +151,19 @@ function loadData() {
         data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
       }
 
+      // Fix any items where emoji was stored as a raw ID number
+      data.stockItems.forEach(item => {
+        if (item.emoji && /^d{15,20}$/.test(item.emoji.trim())) {
+          // Raw ID stored as emoji — build proper format
+          item.emojiId = item.emoji.trim();
+          item.emoji = `<:item:${item.emojiId}>`;
+        } else if (item.emoji) {
+          // Re-extract emojiId in case it got lost
+          const m = item.emoji.match(/<a?:([^:]+):(d+)>/);
+          if (m) item.emojiId = m[2];
+        }
+      });
+
       data.stockItems.forEach(item => {
         if (typeof data.stock[item.id] !== 'number') {
           data.stock[item.id] = 0;
@@ -811,13 +824,32 @@ async function updateStockPanel() {
             components: rows.slice(0, 5)
           });
 
-          if (data.stockButtonsMessageId && rows.length > 5) {
-            const buttonsMsg = await channel.messages.fetch(data.stockButtonsMessageId);
-
-            await buttonsMsg.edit({
-              content: '‎',
-              components: rows.slice(5)
-            });
+          if (rows.length > 5) {
+            // Need a second message for buttons 6-10
+            if (data.stockButtonsMessageId) {
+              try {
+                const buttonsMsg = await channel.messages.fetch(data.stockButtonsMessageId);
+                await buttonsMsg.edit({ content: '‎', components: rows.slice(5, 10) });
+              } catch {
+                // Message was deleted — create a new one
+                const newMsg = await channel.send({ content: '‎', components: rows.slice(5, 10) });
+                data.stockButtonsMessageId = newMsg.id;
+                saveData(data);
+              }
+            } else {
+              // No second message yet — create it
+              const newMsg = await channel.send({ content: '‎', components: rows.slice(5, 10) });
+              data.stockButtonsMessageId = newMsg.id;
+              saveData(data);
+            }
+          } else if (data.stockButtonsMessageId) {
+            // Items <= 5, delete the second message if it exists
+            try {
+              const buttonsMsg = await channel.messages.fetch(data.stockButtonsMessageId);
+              await buttonsMsg.delete();
+            } catch {}
+            data.stockButtonsMessageId = null;
+            saveData(data);
           }
         }
       } catch (e) {}
@@ -3259,7 +3291,7 @@ client.on('interactionCreate', async interaction => {
       const itemId = parts.slice(2).join('_');
 
       if (action === 'set') {
-        const item = STOCK_ITEMS.find(i => i.id === itemId);
+        const item = (loadData().stockItems || STOCK_ITEMS).find(i => i.id === itemId);
 
         if (!item) {
           return interaction.reply({
@@ -3301,10 +3333,10 @@ client.on('interactionCreate', async interaction => {
       saveData(data);
       await updateStockPanel();
 
-      const item = STOCK_ITEMS.find(i => i.id === itemId);
+      const item = (data.stockItems || STOCK_ITEMS).find(i => i.id === itemId);
 
       if (!item) {
-        return interaction.editReply('❌ Item nicht gefunden.');
+        return interaction.editReply(`✅ Bestand aktualisiert: ${current} → **${data.stock[itemId]}**`);
       }
 
       return interaction.editReply(
