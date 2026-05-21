@@ -2697,45 +2697,61 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: `❌ Du hast bereits ein offenes Ticket: <#${existingCheck.id}>`, ephemeral: true });
       }
 
-      // Show the order form modal BEFORE creating the ticket
+      // Show category-specific modal BEFORE creating the ticket
       const modal = new ModalBuilder()
         .setCustomId(`pre_order_modal_${interaction.customId}`)
-        .setTitle(`Bestellformular — ${cat.label}`);
+        .setTitle(`Bestellung — ${cat.label}`);
 
-      const itemInput = new TextInputBuilder()
-        .setCustomId('item')
-        .setLabel('Was möchtest du kaufen?')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('z.B. 1M Money, Elytra, Ancient Debris')
-        .setRequired(true);
-
-      const amountInput = new TextInputBuilder()
-        .setCustomId('amount')
-        .setLabel('Menge')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('z.B. 5')
-        .setRequired(true);
-
-      const ingameInput = new TextInputBuilder()
-        .setCustomId('ingame')
-        .setLabel('Ingame-Name')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Dein Minecraft Name')
-        .setRequired(true);
-
-      const paymentInput = new TextInputBuilder()
-        .setCustomId('payment')
-        .setLabel('Zahlungsmethode')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('z.B. PayPal, Paysafecard')
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(itemInput),
-        new ActionRowBuilder().addComponents(amountInput),
-        new ActionRowBuilder().addComponents(ingameInput),
-        new ActionRowBuilder().addComponents(paymentInput)
-      );
+      if (interaction.customId === 'ticket_cat_items_geld') {
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('item').setLabel('Was möchtest du kaufen?')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. 1M Money, Elytra, Ancient Debris').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('amount').setLabel('Menge')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. 5 Stück / 10M').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
+              .setStyle(TextInputStyle.Short).setPlaceholder('Dein Minecraft Name').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('payment').setLabel('Zahlungsmethode')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. PayPal, Paysafecard').setRequired(true)
+          )
+        );
+      } else if (interaction.customId === 'ticket_cat_schematics') {
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('item').setLabel('Welche Schematic möchtest du kaufen?')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Castle Schematic v2').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
+              .setStyle(TextInputStyle.Short).setPlaceholder('Dein Minecraft Name').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('payment').setLabel('Zahlungsmethode')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. PayPal, Paysafecard').setRequired(true)
+          )
+        );
+      } else if (interaction.customId === 'ticket_cat_resource_pack') {
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('item').setLabel('Welches Resource Pack möchtest du kaufen?')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. HugoSMP Default Pack v3').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
+              .setStyle(TextInputStyle.Short).setPlaceholder('Dein Minecraft Name').setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('payment').setLabel('Zahlungsmethode')
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. PayPal, Paysafecard').setRequired(true)
+          )
+        );
+      }
 
       return interaction.showModal(modal);
     }
@@ -3325,10 +3341,10 @@ client.on('interactionCreate', async interaction => {
       const cat = catMap[catKey];
       if (!cat) return;
 
-      const item     = interaction.fields.getTextInputValue('item');
-      const amount   = interaction.fields.getTextInputValue('amount');
-      const ingame   = interaction.fields.getTextInputValue('ingame');
-      const payment  = interaction.fields.getTextInputValue('payment');
+      const item    = interaction.fields.getTextInputValue('item');
+      const amount  = catKey === 'ticket_cat_items_geld' ? interaction.fields.getTextInputValue('amount') : null;
+      const ingame  = interaction.fields.getTextInputValue('ingame');
+      const payment = interaction.fields.getTextInputValue('payment');
 
       await interaction.deferReply({ ephemeral: true });
 
@@ -3355,25 +3371,38 @@ client.on('interactionCreate', async interaction => {
           .setColor('#b10de7')
           .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
           .setDescription(
-            `**Kategorie:** ${cat.emoji} ${cat.label}
-` +
-            `**Käufer:** <@${interaction.user.id}>
-
-` +
+            `**Kategorie:** ${cat.emoji} ${cat.label}\n` +
+            `**Käufer:** <@${interaction.user.id}>\n\n` +
             'Das Bestellformular wurde bereits ausgefüllt. Du kannst noch weitere Infos in den Chat schreiben.'
           )
           .setTimestamp();
 
-        // Form data embed
-        const formEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
-          .setTitle(`📋 Bestellformular #${ticketOrderId}`)
-          .addFields(
+        // Form data embed — fields differ per category
+        const formFields = [];
+        if (catKey === 'ticket_cat_items_geld') {
+          formFields.push(
             { name: '🛍️ Item', value: item, inline: true },
             { name: '🔢 Menge', value: amount, inline: true },
             { name: '⚔️ Ingame-Name', value: ingame, inline: true },
             { name: '💳 Zahlungsmethode', value: payment, inline: true }
-          )
+          );
+        } else if (catKey === 'ticket_cat_schematics') {
+          formFields.push(
+            { name: '📐 Schematic', value: item, inline: true },
+            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
+            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+          );
+        } else {
+          formFields.push(
+            { name: '🎨 Resource Pack', value: item, inline: true },
+            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
+            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+          );
+        }
+        const formEmbed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(`📋 Bestellformular #${ticketOrderId}`)
+          .addFields(...formFields)
           .setTimestamp();
 
         // Only close button — no order form button needed
