@@ -1309,7 +1309,14 @@ client.on('guildMemberAdd', async member => {
     if (wc.enabled && wc.channelId) {
       const wChannel = member.guild.channels.cache.get(wc.channelId);
       if (wChannel) {
-        const embed = buildWelcomeLeaveEmbed(wc.message || 'Willkommen {user} auf **{server}**! 🎉', member, wc.color);
+        const inviterText = usedInviterId
+          ? `\n👤 **Eingeladen von:** <@${usedInviterId}>`
+          : '\n👤 **Eingeladen von:** Unbekannt';
+        const embed = buildWelcomeLeaveEmbed(
+          (wc.message || 'Willkommen {user} auf **{server}**! 🎉') + inviterText,
+          member,
+          wc.color
+        );
         await wChannel.send({ embeds: [embed] }).catch(() => {});
       }
     }
@@ -2725,7 +2732,7 @@ client.on('interactionCreate', async interaction => {
         modal.addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('item').setLabel('Welche Schematic möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Pickle Farm').setRequired(true)
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Castle Schematic v2').setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
@@ -2740,7 +2747,7 @@ client.on('interactionCreate', async interaction => {
         modal.addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('item').setLabel('Welches Resource Pack möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. xyzoom 20k Royale Blue').setRequired(true)
+              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. HugoSMP Default Pack v3').setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
