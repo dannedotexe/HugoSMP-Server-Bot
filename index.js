@@ -44,7 +44,7 @@ const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
-const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // Change to a dedicated mod-log channel ID if you have one
+const PUNISH_LOG_CHANNEL_ID = TICKET_LOG_CHANNEL_ID; // Change to a dedicated mod-log channel ID if you have one
 
 const STAFF_ROLE_IDS = [
   '1499146219946250241',
@@ -139,6 +139,8 @@ function loadData() {
       data.giveaways = data.giveaways || {};
       data.warnings = data.warnings || {};
       data.tempbans = data.tempbans || {};
+      data.welcomeConfig = data.welcomeConfig || {};
+      data.leaveConfig = data.leaveConfig || {};
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
       data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
@@ -178,6 +180,8 @@ function loadData() {
     giveaways: {},
     warnings: {},
     tempbans: {},
+    welcomeConfig: {},
+    leaveConfig: {},
 
     stock: {}
   };
@@ -577,6 +581,23 @@ async function endGiveaway(messageId) {
 }
 
 
+
+// ── Welcome / Leave helpers ───────────────────────────────────────
+function buildWelcomeLeaveEmbed(template, member, color) {
+  const text = template
+    .replace(/{user}/g, `<@${member.id}>`)
+    .replace(/{username}/g, member.user.username)
+    .replace(/{server}/g, member.guild.name)
+    .replace(/{count}/g, member.guild.memberCount.toString());
+
+  return new EmbedBuilder()
+    .setColor(color || '#b10de7')
+    .setDescription(text)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+    .setFooter({ text: member.guild.name, iconURL: member.guild.iconURL() })
+    .setTimestamp();
+}
+
 // ── Punish / Moderation helpers ──────────────────────────────────
 function addWarning(userId, moderatorId, reason) {
   const data = loadData();
@@ -949,6 +970,50 @@ async function registerCommands(guildId) {
 
 
     new SlashCommandBuilder()
+      .setName('setwelcome')
+      .setDescription('Willkommensnachrichten konfigurieren')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommand(sub =>
+        sub.setName('set')
+          .setDescription('Willkommensnachricht einrichten')
+          .addChannelOption(o => o.setName('channel').setDescription('Kanal für Willkommensnachrichten').setRequired(true))
+          .addStringOption(o => o.setName('nachricht').setDescription('Nachricht. Nutze {user}, {server}, {count}').setRequired(true))
+          .addStringOption(o => o.setName('farbe').setDescription('Embed-Farbe (Hex, z.B. #00ff00)'))
+      )
+      .addSubcommand(sub =>
+        sub.setName('disable').setDescription('Willkommensnachrichten deaktivieren')
+      )
+      .addSubcommand(sub =>
+        sub.setName('preview').setDescription('Vorschau der aktuellen Willkommensnachricht')
+      )
+      .addSubcommand(sub =>
+        sub.setName('info').setDescription('Aktuelle Konfiguration anzeigen')
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('setleave')
+      .setDescription('Leave-Nachrichten konfigurieren')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommand(sub =>
+        sub.setName('set')
+          .setDescription('Leave-Nachricht einrichten')
+          .addChannelOption(o => o.setName('channel').setDescription('Kanal für Leave-Nachrichten').setRequired(true))
+          .addStringOption(o => o.setName('nachricht').setDescription('Nachricht. Nutze {user}, {server}, {count}').setRequired(true))
+          .addStringOption(o => o.setName('farbe').setDescription('Embed-Farbe (Hex, z.B. #ff0000)'))
+      )
+      .addSubcommand(sub =>
+        sub.setName('disable').setDescription('Leave-Nachrichten deaktivieren')
+      )
+      .addSubcommand(sub =>
+        sub.setName('preview').setDescription('Vorschau der aktuellen Leave-Nachricht')
+      )
+      .addSubcommand(sub =>
+        sub.setName('info').setDescription('Aktuelle Konfiguration anzeigen')
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('warn')
       .setDescription('Einem User eine Verwarnung geben')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -1238,12 +1303,44 @@ client.on('guildMemberAdd', async member => {
     } else {
       console.log(`⚠️ No invite found for ${member.user.tag}`);
     }
+    // Welcome message
+    const data = loadData();
+    const wc = data.welcomeConfig;
+    if (wc.enabled && wc.channelId) {
+      const wChannel = member.guild.channels.cache.get(wc.channelId);
+      if (wChannel) {
+        const embed = buildWelcomeLeaveEmbed(wc.message || 'Willkommen {user} auf **{server}**! 🎉', member, wc.color);
+        await wChannel.send({ embeds: [embed] }).catch(() => {});
+      }
+    }
+
   } catch (e) {
     console.error('guildMemberAdd error:', e.message);
   }
 });
 
-// ── Verify role gives invite count ────────────────────────────────
+// ── Leave message ────────────────────────────────────────────────────
+client.on('guildMemberRemove', async member => {
+  try {
+    const data = loadData();
+    const lc = data.leaveConfig;
+    if (!lc.enabled || !lc.channelId) return;
+
+    const lChannel = member.guild.channels.cache.get(lc.channelId);
+    if (!lChannel) return;
+
+    const embed = buildWelcomeLeaveEmbed(
+      lc.message || '**{username}** hat den Server verlassen. 👋',
+      member,
+      lc.color || '#ff4444'
+    );
+    await lChannel.send({ embeds: [embed] }).catch(() => {});
+  } catch (e) {
+    console.error('guildMemberRemove error:', e.message);
+  }
+});
+
+// ── Verify role gives invite count ────────────────────────────────────
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   try {
     const gotVerifyRole =
@@ -1933,6 +2030,149 @@ client.on('interactionCreate', async interaction => {
 
 
     // ── /warn ──────────────────────────────────────────────────────
+
+    // ── /setwelcome ────────────────────────────────────────────────
+    if (interaction.commandName === 'setwelcome') {
+      const sub = interaction.options.getSubcommand();
+      const data = loadData();
+
+      if (sub === 'set') {
+        const channel = interaction.options.getChannel('channel');
+        const nachricht = interaction.options.getString('nachricht');
+        const farbe = interaction.options.getString('farbe') || '#b10de7';
+
+        data.welcomeConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
+        saveData(data);
+
+        const previewEmbed = new EmbedBuilder()
+          .setColor(farbe)
+          .setTitle('✅ Willkommensnachricht gespeichert')
+          .addFields(
+            { name: '📢 Kanal', value: `<#${channel.id}>`, inline: true },
+            { name: '🎨 Farbe', value: farbe, inline: true },
+            { name: '📝 Nachricht', value: nachricht }
+          )
+          .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' });
+
+        return interaction.reply({ embeds: [previewEmbed], ephemeral: true });
+      }
+
+      if (sub === 'disable') {
+        data.welcomeConfig = { enabled: false };
+        saveData(data);
+        return interaction.reply({ content: '✅ Willkommensnachrichten **deaktiviert**.', ephemeral: true });
+      }
+
+      if (sub === 'preview') {
+        const wc = data.welcomeConfig;
+        if (!wc?.enabled) return interaction.reply({ content: '❌ Willkommensnachrichten sind nicht eingerichtet.', ephemeral: true });
+
+        const fakeEmbed = new EmbedBuilder()
+          .setColor(wc.color || '#b10de7')
+          .setDescription(
+            (wc.message || 'Willkommen {user} auf **{server}**! 🎉')
+              .replace(/{user}/g, `<@${interaction.user.id}>`)
+              .replace(/{username}/g, interaction.user.username)
+              .replace(/{server}/g, interaction.guild.name)
+              .replace(/{count}/g, interaction.guild.memberCount.toString())
+          )
+          .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
+          .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL() })
+          .setTimestamp();
+
+        return interaction.reply({ content: '👀 **Vorschau:**', embeds: [fakeEmbed], ephemeral: true });
+      }
+
+      if (sub === 'info') {
+        const wc = data.welcomeConfig;
+        if (!wc?.enabled) return interaction.reply({ content: '❌ Willkommensnachrichten sind nicht eingerichtet.', ephemeral: true });
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(wc.color || '#b10de7')
+            .setTitle('📋 Willkommens-Konfiguration')
+            .addFields(
+              { name: '📢 Kanal', value: `<#${wc.channelId}>`, inline: true },
+              { name: '🎨 Farbe', value: wc.color || '#b10de7', inline: true },
+              { name: '📝 Nachricht', value: wc.message || '(Standard)' }
+            )
+            .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
+          ephemeral: true
+        });
+      }
+    }
+
+    // ── /setleave ──────────────────────────────────────────────────
+    if (interaction.commandName === 'setleave') {
+      const sub = interaction.options.getSubcommand();
+      const data = loadData();
+
+      if (sub === 'set') {
+        const channel = interaction.options.getChannel('channel');
+        const nachricht = interaction.options.getString('nachricht');
+        const farbe = interaction.options.getString('farbe') || '#ff4444';
+
+        data.leaveConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
+        saveData(data);
+
+        const previewEmbed = new EmbedBuilder()
+          .setColor(farbe)
+          .setTitle('✅ Leave-Nachricht gespeichert')
+          .addFields(
+            { name: '📢 Kanal', value: `<#${channel.id}>`, inline: true },
+            { name: '🎨 Farbe', value: farbe, inline: true },
+            { name: '📝 Nachricht', value: nachricht }
+          )
+          .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' });
+
+        return interaction.reply({ embeds: [previewEmbed], ephemeral: true });
+      }
+
+      if (sub === 'disable') {
+        data.leaveConfig = { enabled: false };
+        saveData(data);
+        return interaction.reply({ content: '✅ Leave-Nachrichten **deaktiviert**.', ephemeral: true });
+      }
+
+      if (sub === 'preview') {
+        const lc = data.leaveConfig;
+        if (!lc?.enabled) return interaction.reply({ content: '❌ Leave-Nachrichten sind nicht eingerichtet.', ephemeral: true });
+
+        const fakeEmbed = new EmbedBuilder()
+          .setColor(lc.color || '#ff4444')
+          .setDescription(
+            (lc.message || '**{username}** hat den Server verlassen. 👋')
+              .replace(/{user}/g, `<@${interaction.user.id}>`)
+              .replace(/{username}/g, interaction.user.username)
+              .replace(/{server}/g, interaction.guild.name)
+              .replace(/{count}/g, interaction.guild.memberCount.toString())
+          )
+          .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 256 }))
+          .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL() })
+          .setTimestamp();
+
+        return interaction.reply({ content: '👀 **Vorschau:**', embeds: [fakeEmbed], ephemeral: true });
+      }
+
+      if (sub === 'info') {
+        const lc = data.leaveConfig;
+        if (!lc?.enabled) return interaction.reply({ content: '❌ Leave-Nachrichten sind nicht eingerichtet.', ephemeral: true });
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(lc.color || '#ff4444')
+            .setTitle('📋 Leave-Konfiguration')
+            .addFields(
+              { name: '📢 Kanal', value: `<#${lc.channelId}>`, inline: true },
+              { name: '🎨 Farbe', value: lc.color || '#ff4444', inline: true },
+              { name: '📝 Nachricht', value: lc.message || '(Standard)' }
+            )
+            .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
+          ephemeral: true
+        });
+      }
+    }
+
     if (interaction.commandName === 'warn') {
       const target = interaction.options.getUser('user');
       const grund = interaction.options.getString('grund');
@@ -2447,57 +2687,57 @@ client.on('interactionCreate', async interaction => {
       const cat = catMap[interaction.customId];
       if (!cat) return;
 
-      const cleanName = cleanUsername(interaction.user.username);
-      const ticketOrderId = getNextTicketOrderId();
-      const ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
+      // Check for existing ticket before showing modal
+      const existingCheck = interaction.guild.channels.cache.find(c => {
+        const owner = getTicketOwnerId(c);
+        return owner === interaction.user.id && c.type === ChannelType.GuildText &&
+          (c.parentId === TICKET_CATEGORY_ID) && !c.name.startsWith('closed-');
+      });
+      if (existingCheck) {
+        return interaction.reply({ content: `❌ Du hast bereits ein offenes Ticket: <#${existingCheck.id}>`, ephemeral: true });
+      }
 
-      const existing = interaction.guild.channels.cache.find(c =>
-        c.name === ticketName || c.name === `closed-${ticketName}`
+      // Show the order form modal BEFORE creating the ticket
+      const modal = new ModalBuilder()
+        .setCustomId(`pre_order_modal_${interaction.customId}`)
+        .setTitle(`Bestellformular — ${cat.label}`);
+
+      const itemInput = new TextInputBuilder()
+        .setCustomId('item')
+        .setLabel('Was möchtest du kaufen?')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. 1M Money, Elytra, Ancient Debris')
+        .setRequired(true);
+
+      const amountInput = new TextInputBuilder()
+        .setCustomId('amount')
+        .setLabel('Menge')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. 5')
+        .setRequired(true);
+
+      const ingameInput = new TextInputBuilder()
+        .setCustomId('ingame')
+        .setLabel('Ingame-Name')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Dein Minecraft Name')
+        .setRequired(true);
+
+      const paymentInput = new TextInputBuilder()
+        .setCustomId('payment')
+        .setLabel('Zahlungsmethode')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('z.B. PayPal, Paysafecard')
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(itemInput),
+        new ActionRowBuilder().addComponents(amountInput),
+        new ActionRowBuilder().addComponents(ingameInput),
+        new ActionRowBuilder().addComponents(paymentInput)
       );
 
-      if (existing) {
-        return interaction.reply({ content: `❌ Du hast bereits ein Bestellungs-Ticket: <#${existing.id}>`, ephemeral: true });
-      }
-
-      try {
-        const ticket = await interaction.guild.channels.create({
-          name: ticketName,
-          type: ChannelType.GuildText,
-          parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:bestellung;order:${ticketOrderId}`,
-          permissionOverwrites: [
-            { id: interaction.guild.id, deny: ['ViewChannel'] },
-            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-            ...STAFF_ROLE_IDS.map(roleId => ({ id: roleId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] })),
-            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
-          ]
-        });
-
-        const ticketEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
-          .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
-          .setDescription(
-            `**Kategorie:** ${cat.emoji} ${cat.label}\n\n` +
-            'Willkommen! Bitte klicke unten auf **Bestellformular ausfüllen**.\n\nDu kannst danach noch weitere Infos in den Chat schreiben.'
-          )
-          .setTimestamp();
-
-        const ticketButtons = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('order_form').setLabel('Bestellformular ausfüllen').setEmoji('📝').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
-        );
-
-        await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
-          embeds: [ticketEmbed],
-          components: [ticketButtons]
-        });
-
-        return interaction.reply({ content: `✅ Bestellungs-Ticket erstellt: <#${ticket.id}>`, ephemeral: true });
-      } catch (e) {
-        console.error('create order ticket (cat) error:', e);
-        return interaction.reply({ content: '❌ Fehler beim Erstellen des Tickets. Prüfe die Bot-Rechte.', ephemeral: true });
-      }
+      return interaction.showModal(modal);
     }
 
     if (interaction.customId === 'order_form') {
@@ -3073,6 +3313,88 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isModalSubmit()) {
+
+
+    if (interaction.customId.startsWith('pre_order_modal_')) {
+      const catKey = interaction.customId.replace('pre_order_modal_', '');
+      const catMap = {
+        'ticket_cat_items_geld': { label: 'Items & Geld', emoji: '💰' },
+        'ticket_cat_schematics': { label: 'Schematics', emoji: '📐' },
+        'ticket_cat_resource_pack': { label: 'Resource Pack', emoji: '🎨' }
+      };
+      const cat = catMap[catKey];
+      if (!cat) return;
+
+      const item     = interaction.fields.getTextInputValue('item');
+      const amount   = interaction.fields.getTextInputValue('amount');
+      const ingame   = interaction.fields.getTextInputValue('ingame');
+      const payment  = interaction.fields.getTextInputValue('payment');
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const cleanName = cleanUsername(interaction.user.username);
+      const ticketOrderId = getNextTicketOrderId();
+      const ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
+
+      try {
+        const ticket = await interaction.guild.channels.create({
+          name: ticketName,
+          type: ChannelType.GuildText,
+          parent: TICKET_CATEGORY_ID,
+          topic: `owner:${interaction.user.id};type:bestellung;order:${ticketOrderId}`,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: ['ViewChannel'] },
+            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            ...STAFF_ROLE_IDS.map(roleId => ({ id: roleId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] })),
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
+          ]
+        });
+
+        // Header embed
+        const headerEmbed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
+          .setDescription(
+            `**Kategorie:** ${cat.emoji} ${cat.label}
+` +
+            `**Käufer:** <@${interaction.user.id}>
+
+` +
+            'Das Bestellformular wurde bereits ausgefüllt. Du kannst noch weitere Infos in den Chat schreiben.'
+          )
+          .setTimestamp();
+
+        // Form data embed
+        const formEmbed = new EmbedBuilder()
+          .setColor('#b10de7')
+          .setTitle(`📋 Bestellformular #${ticketOrderId}`)
+          .addFields(
+            { name: '🛍️ Item', value: item, inline: true },
+            { name: '🔢 Menge', value: amount, inline: true },
+            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
+            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+          )
+          .setTimestamp();
+
+        // Only close button — no order form button needed
+        const ticketButtons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+        );
+
+        await ticket.send({
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
+          embeds: [headerEmbed, formEmbed],
+          components: [ticketButtons]
+        });
+
+        markOrderFormSubmitted(ticket.id);
+
+        return interaction.editReply({ content: `✅ Ticket erstellt: <#${ticket.id}>` });
+      } catch (e) {
+        console.error('pre_order_modal error:', e);
+        return interaction.editReply({ content: '❌ Fehler beim Erstellen des Tickets. Prüfe die Bot-Rechte.' });
+      }
+    }
 
     if (interaction.customId === 'order_form_modal') {
       const ownerId = getTicketOwnerId(interaction.channel);
