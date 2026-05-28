@@ -2852,12 +2852,15 @@ client.on('interactionCreate', async interaction => {
       const ticketName = `support-${cleanName}`.slice(0, 100);
 
       const existing = interaction.guild.channels.cache.find(c =>
-        c.name === ticketName || c.name === `closed-${ticketName}`
+        c.name === ticketName &&
+        c.type === ChannelType.GuildText &&
+        c.parentId === TICKET_CATEGORY_ID &&
+        !c.name.startsWith('closed-')
       );
 
       if (existing) {
         return interaction.reply({
-          content: `❌ Du hast bereits ein Support-Ticket: <#${existing.id}>`,
+          content: `❌ Du hast bereits ein offenes Support-Ticket: <#${existing.id}>`,
           ephemeral: true
         });
       }
