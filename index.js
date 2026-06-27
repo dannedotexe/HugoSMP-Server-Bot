@@ -1,3 +1,4 @@
+require("dotenv").config();
 const {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
