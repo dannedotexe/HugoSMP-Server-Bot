@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 
 const fs = require('fs'); 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -22,7 +23,7 @@ const client = new Client({
 
 // ── Config ────────────────────────────────────────────────────────
 const TOKEN = process.env.DISCORD_TOKEN;
-const DATA_FILE = '/app/data/data.json';
+const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
 const GUILD_ID = '1499129162378514524';
@@ -214,6 +215,7 @@ function loadData() {
 
 function saveData(data) {
   try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   } catch (e) {
     console.error('saveData error:', e.message);
@@ -687,8 +689,7 @@ async function cacheInvites(guild) {
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────
-function buildLeaderboardEmbed() {
-  const data = loadData();
+function buildLeaderboardEmbed(data = loadData()) {
   const botId = client.user.id;
 
   const sorted = Object.entries(data.invites)
@@ -712,25 +713,74 @@ function buildLeaderboardEmbed() {
     .setTimestamp();
 }
 
+function importInvitesFromLeaderboardMessage(data, message) {
+  const description = message.embeds?.[0]?.description;
+  if (!description) return false;
+
+  let changed = false;
+
+  for (const line of description.split('\n')) {
+    const userMatch = line.match(/<@!?(\d{17,20})>/);
+    const countMatch = line.match(/(?:\*\*)?(\d+)(?:\*\*)?\s+invite/i);
+
+    if (!userMatch || !countMatch) continue;
+
+    const userId = userMatch[1];
+    const count = Number(countMatch[1]);
+
+    if (!Number.isFinite(count)) continue;
+
+    if (data.invites[userId] === undefined) {
+      data.invites[userId] = count;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 async function updateLeaderboard() {
   try {
     const channel = client.channels.cache.get(LEADERBOARD_CHANNEL_ID);
     if (!channel) return;
 
     const data = loadData();
-    const embed = buildLeaderboardEmbed();
+    let leaderboardMessage = null;
 
     if (data.leaderboardMessageId) {
       try {
-        const msg = await channel.messages.fetch(data.leaderboardMessageId);
-        await msg.edit({ embeds: [embed] });
-        return;
+        leaderboardMessage = await channel.messages.fetch(data.leaderboardMessageId);
       } catch (e) {}
     }
 
-    const msg = await channel.send({ embeds: [embed] });
-    data.leaderboardMessageId = msg.id;
+    if (!leaderboardMessage) {
+      const messages = await channel.messages.fetch({ limit: 100 });
+      leaderboardMessage = messages
+        .filter(msg =>
+          msg.author?.id === client.user.id &&
+          msg.embeds?.some(msgEmbed => (msgEmbed.title || '').includes('Invite Leaderboard'))
+        )
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .first() || null;
+    }
+
+    if (leaderboardMessage && importInvitesFromLeaderboardMessage(data, leaderboardMessage)) {
+      saveData(data);
+    }
+
+    const embed = buildLeaderboardEmbed(data);
+
+    if (leaderboardMessage) {
+      await leaderboardMessage.edit({ embeds: [embed] });
+      data.leaderboardMessageId = leaderboardMessage.id;
+      saveData(data);
+      return leaderboardMessage;
+    }
+
+    leaderboardMessage = await channel.send({ embeds: [embed] });
+    data.leaderboardMessageId = leaderboardMessage.id;
     saveData(data);
+    return leaderboardMessage;
   } catch (e) {
     console.error('updateLeaderboard error:', e.message);
   }
@@ -1273,6 +1323,7 @@ client.once('ready', async () => {
   }
 
   await updateStockPanel();
+  await updateLeaderboard();
 
   // Tempban expiry checker
   setInterval(async () => {
@@ -1896,15 +1947,9 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        const msg = await interaction.channel.send({
-          embeds: [buildLeaderboardEmbed()]
-        });
+        await updateLeaderboard();
 
-        const data = loadData();
-        data.leaderboardMessageId = msg.id;
-        saveData(data);
-
-        return interaction.editReply('✅ Live Leaderboard gesendet!');
+        return interaction.editReply('✅ Live Leaderboard aktualisiert!');
       } catch (e) {
         return interaction.editReply('❌ Fehler.');
       }
