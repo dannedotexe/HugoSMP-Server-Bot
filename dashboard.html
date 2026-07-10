@@ -276,6 +276,14 @@
       text-overflow: ellipsis;
     }
 
+    .emoji-icon {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      vertical-align: -4px;
+      margin-right: 6px;
+    }
+
     .data-sub {
       color: var(--muted);
       font-size: 12px;
@@ -1065,6 +1073,7 @@
 
     function formatDuration(seconds) {
       const value = Number(seconds || 0);
+      if (value > 0 && value < 60) return '<1m';
       const days = Math.floor(value / 86400);
       const hours = Math.floor((value % 86400) / 3600);
       const minutes = Math.floor((value % 3600) / 60);
@@ -1094,6 +1103,23 @@
       div.className = 'avatar';
       div.textContent = (source?.username || source?.tag || source?.userId || '?').slice(0, 1).toUpperCase();
       return div;
+    }
+
+    function discordEmojiHtml(emoji) {
+      const value = String(emoji || '').trim();
+      const match = value.match(/^<(a?):([^:]+):(\d{15,20})>$/);
+      if (!match) return escapeHtml(value);
+
+      const animated = match[1] === 'a';
+      const name = match[2];
+      const id = match[3];
+      const ext = animated ? 'gif' : 'png';
+
+      return `<img class="emoji-icon" src="https://cdn.discordapp.com/emojis/${id}.${ext}?size=32&quality=lossless" alt="${escapeHtml(name)}">`;
+    }
+
+    function stockNameHtml(item) {
+      return `${discordEmojiHtml(item.emoji)}${escapeHtml(item.name)}`;
     }
 
     function escapeHtml(value) {
@@ -1186,6 +1212,12 @@
       return row;
     }
 
+    function rowHtml(titleHtml, sub, right) {
+      const row = rowText('', sub, right);
+      row.querySelector('.data-title').innerHTML = titleHtml;
+      return row;
+    }
+
     function renderMetric(label, value, sub) {
       const metric = document.createElement('section');
       metric.className = 'metric';
@@ -1231,7 +1263,7 @@
         important.forEach(item => {
           const klass = item.status === 'out' ? 'bad' : 'warn';
           const label = item.status === 'out' ? 'Ausverkauft' : 'Niedrig';
-          stock.appendChild(rowText(`${item.emoji || ''} ${item.name}`, `${item.price} - ${item.amount} auf Lager`, `<span class="pill ${klass}">${label}</span>`));
+          stock.appendChild(rowHtml(stockNameHtml(item), `${item.price} - ${item.amount} auf Lager`, `<span class="pill ${klass}">${label}</span>`));
         });
       }
     }
@@ -1320,7 +1352,7 @@
         row.className = 'data-row stock-row';
         const title = document.createElement('div');
         title.innerHTML = `
-          <div class="data-title">${escapeHtml(item.emoji || '')} ${escapeHtml(item.name)}</div>
+          <div class="data-title">${stockNameHtml(item)}</div>
           <div class="data-sub">${escapeHtml(item.id)}</div>
         `;
 
