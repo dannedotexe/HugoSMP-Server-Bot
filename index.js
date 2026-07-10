@@ -144,6 +144,11 @@ const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
 const TICKET_CATEGORY_ID = '1499147835528974356';
 const CLOSED_TICKET_CATEGORY_ID = '1499148006270963732';
 const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
+const DM_STAFF_CHANNEL_ID = process.env.DM_STAFF_CHANNEL_ID || TICKET_LOG_CHANNEL_ID;
+const DM_STAFF_MENTION = process.env.DM_STAFF_MENTION || '';
+const MAX_DASHBOARD_ATTACHMENTS = 5;
+const MAX_DASHBOARD_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
 
@@ -800,6 +805,9 @@ function ensureDmThread(data, user, userId) {
     globalName: null,
     avatarUrl: null,
     unreadCount: 0,
+    archived: false,
+    archivedAt: null,
+    answeredAt: null,
     lastMessageAt: null,
     messages: []
   };
@@ -810,6 +818,9 @@ function ensureDmThread(data, user, userId) {
   thread.avatarUrl = getUserAvatar(user) || thread.avatarUrl || null;
   thread.messages = Array.isArray(thread.messages) ? thread.messages : [];
   thread.unreadCount = Number(thread.unreadCount || 0);
+  thread.archived = Boolean(thread.archived);
+  thread.archivedAt = thread.archivedAt || null;
+  thread.answeredAt = thread.answeredAt || null;
 
   data.dmThreads[id] = thread;
   return thread;
@@ -828,6 +839,72 @@ function getMessageAttachments(message) {
     contentType: attachment.contentType || null,
     size: attachment.size || 0
   }));
+}
+
+function makeDashboardError(message, status = 400) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function sanitizeDashboardFileName(name) {
+  return String(name || 'attachment')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120) || 'attachment';
+}
+
+function normalizeDashboardAttachments(input) {
+  const attachments = Array.isArray(input) ? input : [];
+  if (attachments.length > MAX_DASHBOARD_ATTACHMENTS) {
+    throw makeDashboardError(`Maximal ${MAX_DASHBOARD_ATTACHMENTS} Anhänge pro Nachricht.`);
+  }
+
+  const files = [];
+  let totalBytes = 0;
+
+  for (const item of attachments) {
+    const raw = String(item?.data || '').trim();
+    if (!raw) continue;
+
+    const base64 = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw;
+    if (!/^[a-z0-9+/=\r\n]+$/i.test(base64)) {
+      throw makeDashboardError('Ein Anhang konnte nicht gelesen werden.');
+    }
+
+    const buffer = Buffer.from(base64, 'base64');
+    if (!buffer.length) continue;
+
+    if (buffer.length > MAX_DASHBOARD_ATTACHMENT_BYTES) {
+      throw makeDashboardError('Ein Anhang ist zu groß. Maximal 8 MB pro Datei.');
+    }
+
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES) {
+      throw makeDashboardError('Die Anhänge sind zusammen zu groß. Maximal 12 MB pro Nachricht.');
+    }
+
+    files.push({
+      attachment: buffer,
+      name: sanitizeDashboardFileName(item?.name)
+    });
+  }
+
+  return files;
+}
+
+function isDmThreadAnswered(thread) {
+  const messages = Array.isArray(thread?.messages) ? thread.messages : [];
+  let lastIn = 0;
+  let lastOut = 0;
+
+  for (const message of messages) {
+    if (message.direction === 'in') lastIn = Math.max(lastIn, Number(message.timestamp || 0));
+    if (message.direction === 'out') lastOut = Math.max(lastOut, Number(message.timestamp || 0));
+  }
+
+  return lastOut > 0 && lastOut >= lastIn;
 }
 
 function addDmThreadMessage({ user, userId, direction, content, discordMessageId, attachments = [] }) {
@@ -855,6 +932,11 @@ function addDmThreadMessage({ user, userId, direction, content, discordMessageId
   thread.lastMessageAt = timestamp;
   if (direction === 'in') {
     thread.unreadCount = (thread.unreadCount || 0) + 1;
+    thread.archived = false;
+    thread.archivedAt = null;
+  } else if (direction === 'out') {
+    thread.answeredAt = timestamp;
+    thread.unreadCount = 0;
   }
 
   saveData(data);
@@ -871,6 +953,11 @@ function serializeDmThread(thread, includeMessages = false) {
     globalName: thread.globalName || null,
     avatarUrl: thread.avatarUrl || null,
     unreadCount: Number(thread.unreadCount || 0),
+    archived: Boolean(thread.archived),
+    archivedAt: thread.archivedAt || null,
+    answeredAt: thread.answeredAt || null,
+    answered: isDmThreadAnswered(thread),
+    messageCount: messages.length,
     lastMessageAt: thread.lastMessageAt || lastMessage?.timestamp || null,
     lastMessage
   };
@@ -880,6 +967,96 @@ function serializeDmThread(thread, includeMessages = false) {
   }
 
   return base;
+}
+
+async function getDmUserInfo(userId, data = loadData()) {
+  const user = await client.users.fetch(userId).catch(() => null);
+  const guild = client.guilds.cache.get(GUILD_ID) || null;
+  const member = guild
+    ? await guild.members.fetch(userId).catch(() => null)
+    : null;
+
+  const roles = member
+    ? member.roles.cache
+      .filter(role => role.id !== guild.id)
+      .sort((a, b) => b.position - a.position)
+      .map(role => ({
+        id: role.id,
+        name: role.name,
+        color: role.hexColor && role.hexColor !== '#000000' ? role.hexColor : null
+      }))
+      .slice(0, 15)
+    : [];
+
+  const warnings = Array.isArray(data.warnings?.[userId]) ? data.warnings[userId] : [];
+  const recentWarnings = warnings.slice(-5).reverse().map((warning, index) => ({
+    number: warnings.length - index,
+    reason: warning.reason || 'Kein Grund angegeben',
+    moderatorId: warning.moderatorId || null,
+    timestamp: warning.timestamp || null
+  }));
+
+  return {
+    userId,
+    tag: getUserDisplayName(user, userId),
+    avatarUrl: getUserAvatar(user),
+    inGuild: Boolean(member),
+    joinedAt: member?.joinedTimestamp || null,
+    createdAt: user?.createdTimestamp || null,
+    roles,
+    invites: Number(data.invites?.[userId] || 0),
+    warningsCount: warnings.length,
+    warnings: recentWarnings
+  };
+}
+
+async function notifyStaffAboutDm(saved) {
+  if (!saved?.thread || !saved?.message || !DM_STAFF_CHANNEL_ID) return;
+
+  try {
+    const channel = await client.channels.fetch(DM_STAFF_CHANNEL_ID).catch(() => null);
+    if (!channel?.isTextBased?.()) return;
+
+    const { thread, message } = saved;
+    const contentPreview = message.content
+      ? message.content.slice(0, 1000)
+      : `${message.attachments?.length || 0} Anhang/Anhänge`;
+
+    const embed = new EmbedBuilder()
+      .setColor('#33c481')
+      .setTitle('Neue Dashboard-DM')
+      .setDescription(contentPreview || 'Neue Nachricht erhalten.')
+      .addFields(
+        { name: 'User', value: `<@${thread.userId}>`, inline: true },
+        { name: 'User-ID', value: thread.userId, inline: true },
+        { name: 'Ungelesen', value: String(thread.unreadCount || 1), inline: true }
+      )
+      .setTimestamp();
+
+    if (thread.avatarUrl) embed.setThumbnail(thread.avatarUrl);
+    if (message.attachments?.length) {
+      embed.addFields({
+        name: 'Anhänge',
+        value: message.attachments.map(file => file.name || 'Anhang').slice(0, 5).join(', '),
+        inline: false
+      });
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setURL(DASHBOARD_URL)
+        .setLabel('Dashboard öffnen')
+    );
+
+    await channel.send({
+      content: DM_STAFF_MENTION || undefined,
+      embeds: [embed],
+      components: [row]
+    }).catch(() => {});
+  } catch (e) {
+    console.error('dm staff notify error:', e.message);
+  }
 }
 
 // ── Invite cache ──────────────────────────────────────────────────
@@ -1675,13 +1852,15 @@ client.on('messageCreate', async message => {
     if (message.author?.bot) return;
     if (message.channel?.type !== ChannelType.DM) return;
 
-    addDmThreadMessage({
+    const saved = addDmThreadMessage({
       user: message.author,
       direction: 'in',
       content: message.content,
       discordMessageId: message.id,
       attachments: getMessageAttachments(message)
     });
+
+    await notifyStaffAboutDm(saved);
   } catch (e) {
     console.error('dm messageCreate error:', e.message);
   }
@@ -4261,7 +4440,7 @@ app.use(cors({
   origin: WEBSITE_URL === '*' ? true : WEBSITE_URL
 }));
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '16mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 function getDashboardToken(req) {
@@ -4291,16 +4470,17 @@ function requireDashboardAuth(req, res, next) {
   next();
 }
 
-async function sendDashboardDm(userId, content) {
+async function sendDashboardDm(userId, content, attachments = []) {
   const cleanContent = cleanDmContent(content);
+  const files = normalizeDashboardAttachments(attachments);
 
   if (!/^\d{17,20}$/.test(String(userId))) {
-    const err = new Error('Ungueltige Discord User-ID.');
+    const err = new Error('Ungültige Discord User-ID.');
     err.status = 400;
     throw err;
   }
 
-  if (!cleanContent) {
+  if (!cleanContent && files.length === 0) {
     const err = new Error('Nachricht darf nicht leer sein.');
     err.status = 400;
     throw err;
@@ -4313,12 +4493,17 @@ async function sendDashboardDm(userId, content) {
     throw err;
   }
 
-  const sent = await user.send(cleanContent);
+  const sent = await user.send({
+    content: cleanContent || undefined,
+    files
+  });
+
   const saved = addDmThreadMessage({
     user,
     direction: 'out',
     content: cleanContent,
-    discordMessageId: sent.id
+    discordMessageId: sent.id,
+    attachments: getMessageAttachments(sent)
   });
 
   return saved;
@@ -4357,14 +4542,33 @@ app.post('/api/dashboard/login', (req, res) => {
 
 app.get('/api/dashboard/threads', requireDashboardAuth, (req, res) => {
   const data = loadData();
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const filter = String(req.query.filter || 'active').trim().toLowerCase();
+
   const threads = Object.values(data.dmThreads || {})
     .map(thread => serializeDmThread(thread))
+    .filter(thread => {
+      if (filter === 'archived') return thread.archived;
+      if (thread.archived) return false;
+      if (filter === 'unread') return thread.unreadCount > 0;
+      if (filter === 'answered') return thread.answered;
+      return true;
+    })
+    .filter(thread => {
+      if (!search) return true;
+      return [
+        thread.userId,
+        thread.username,
+        thread.globalName,
+        thread.lastMessage?.content
+      ].some(value => String(value || '').toLowerCase().includes(search));
+    })
     .sort((a, b) => Number(b.lastMessageAt || 0) - Number(a.lastMessageAt || 0));
 
   res.json({ success: true, threads });
 });
 
-app.get('/api/dashboard/threads/:userId', requireDashboardAuth, (req, res) => {
+app.get('/api/dashboard/threads/:userId', requireDashboardAuth, async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   const data = loadData();
   const thread = data.dmThreads?.[userId];
@@ -4379,22 +4583,80 @@ app.get('/api/dashboard/threads/:userId', requireDashboardAuth, (req, res) => {
   thread.unreadCount = 0;
   saveData(data);
 
+  const serialized = serializeDmThread(thread, true);
+  serialized.userInfo = await getDmUserInfo(userId, data);
+
   res.json({
     success: true,
-    thread: serializeDmThread(thread, true)
+    thread: serialized
   });
+});
+
+app.patch('/api/dashboard/threads/:userId', requireDashboardAuth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  const data = loadData();
+  const thread = data.dmThreads?.[userId];
+
+  if (!thread) {
+    return res.status(404).json({
+      success: false,
+      error: 'Thread nicht gefunden.'
+    });
+  }
+
+  if (typeof req.body?.archived === 'boolean') {
+    thread.archived = req.body.archived;
+    thread.archivedAt = req.body.archived ? Date.now() : null;
+  }
+
+  if (req.body?.read === true) {
+    thread.unreadCount = 0;
+  }
+
+  saveData(data);
+
+  const serialized = serializeDmThread(thread, true);
+  serialized.userInfo = await getDmUserInfo(userId, data);
+
+  res.json({
+    success: true,
+    thread: serialized
+  });
+});
+
+app.delete('/api/dashboard/threads/:userId', requireDashboardAuth, (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  const data = loadData();
+
+  if (!data.dmThreads?.[userId]) {
+    return res.status(404).json({
+      success: false,
+      error: 'Thread nicht gefunden.'
+    });
+  }
+
+  delete data.dmThreads[userId];
+  saveData(data);
+
+  res.json({ success: true });
 });
 
 app.post('/api/dashboard/threads/:userId/messages', requireDashboardAuth, async (req, res) => {
   try {
-    const saved = await sendDashboardDm(String(req.params.userId || '').trim(), req.body?.content);
+    const saved = await sendDashboardDm(
+      String(req.params.userId || '').trim(),
+      req.body?.content,
+      req.body?.attachments
+    );
     const data = loadData();
     const thread = data.dmThreads?.[String(req.params.userId || '').trim()];
+    const serialized = thread ? serializeDmThread(thread, true) : null;
+    if (serialized) serialized.userInfo = await getDmUserInfo(thread.userId, data);
 
     return res.json({
       success: true,
       message: saved?.message || null,
-      thread: thread ? serializeDmThread(thread, true) : null
+      thread: serialized
     });
   } catch (e) {
     return res.status(e.status || 500).json({
@@ -4407,14 +4669,16 @@ app.post('/api/dashboard/threads/:userId/messages', requireDashboardAuth, async 
 app.post('/api/dashboard/dm', requireDashboardAuth, async (req, res) => {
   try {
     const userId = String(req.body?.userId || '').trim();
-    await sendDashboardDm(userId, req.body?.content);
+    await sendDashboardDm(userId, req.body?.content, req.body?.attachments);
 
     const data = loadData();
     const thread = data.dmThreads?.[userId];
+    const serialized = thread ? serializeDmThread(thread, true) : null;
+    if (serialized) serialized.userInfo = await getDmUserInfo(userId, data);
 
     return res.json({
       success: true,
-      thread: thread ? serializeDmThread(thread, true) : null
+      thread: serialized
     });
   } catch (e) {
     return res.status(e.status || 500).json({
