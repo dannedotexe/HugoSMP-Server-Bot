@@ -21,17 +21,32 @@ const DEFAULT_PRESENCE_CONFIG = {
 };
 
 function loadPresenceConfig() {
-  try {
-    if (!fs.existsSync(PRESENCE_CONFIG_FILE)) return DEFAULT_PRESENCE_CONFIG;
+  let config = DEFAULT_PRESENCE_CONFIG;
 
-    return {
-      ...DEFAULT_PRESENCE_CONFIG,
-      ...JSON.parse(fs.readFileSync(PRESENCE_CONFIG_FILE, 'utf8'))
-    };
+  try {
+    if (fs.existsSync(PRESENCE_CONFIG_FILE)) {
+      config = {
+        ...config,
+        ...JSON.parse(fs.readFileSync(PRESENCE_CONFIG_FILE, 'utf8'))
+      };
+    }
   } catch (e) {
     console.error('bot-presence.json error:', e.message);
-    return DEFAULT_PRESENCE_CONFIG;
   }
+
+  try {
+    const data = loadData();
+    if (data.presence && typeof data.presence === 'object') {
+      config = {
+        ...config,
+        ...data.presence
+      };
+    }
+  } catch (e) {
+    console.error('presence data error:', e.message);
+  }
+
+  return config;
 }
 
 function normalizePresenceStatus(status) {
@@ -225,6 +240,7 @@ function loadData() {
       data.tempbans = data.tempbans || {};
       data.welcomeConfig = data.welcomeConfig || {};
       data.leaveConfig = data.leaveConfig || {};
+      data.presence = data.presence || null;
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
       data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
@@ -284,6 +300,7 @@ function loadData() {
     tempbans: {},
     welcomeConfig: {},
     leaveConfig: {},
+    presence: null,
 
     stock: {},
     stockItems: JSON.parse(JSON.stringify(STOCK_ITEMS))
@@ -1318,6 +1335,45 @@ async function registerCommands(guildId) {
       .setDescription('Alle Strafen eines Users anzeigen')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('botstatus')
+      .setDescription('Bot-Status und Aktivitaet aendern.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addStringOption(o =>
+        o.setName('status')
+          .setDescription('Online-Status')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Online', value: 'online' },
+            { name: 'Abwesend', value: 'idle' },
+            { name: 'Nicht stoeren', value: 'dnd' },
+            { name: 'Offline anzeigen', value: 'offline' }
+          )
+      )
+      .addStringOption(o =>
+        o.setName('aktivitaet')
+          .setDescription('Was Discord neben dem Bot anzeigen soll')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Spielt', value: 'Playing' },
+            { name: 'Schaut', value: 'Watching' },
+            { name: 'Hoert', value: 'Listening' },
+            { name: 'Streamt', value: 'Streaming' },
+            { name: 'Tritt an', value: 'Competing' }
+          )
+      )
+      .addStringOption(o =>
+        o.setName('text')
+          .setDescription('Text neben dem Status')
+          .setRequired(true)
+          .setMaxLength(128)
+      )
+      .addStringOption(o =>
+        o.setName('url')
+          .setDescription('Nur fuer Streaming: Twitch/YouTube URL')
+      )
       .toJSON(),
 
     new SlashCommandBuilder()
@@ -2844,6 +2900,53 @@ client.on('interactionCreate', async interaction => {
           .setThumbnail(target.displayAvatarURL())
           .setDescription(lines.join('\n'))
           .setTimestamp()],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.commandName === 'botstatus') {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'Dafuer brauchst du Administrator-Rechte.', ephemeral: true });
+      }
+
+      const status = interaction.options.getString('status');
+      const activityType = interaction.options.getString('aktivitaet');
+      const activityName = interaction.options.getString('text');
+      const rawUrl = interaction.options.getString('url');
+      const activityUrl = activityType === 'Streaming' ? rawUrl : null;
+
+      if (activityType === 'Streaming' && !activityUrl) {
+        return interaction.reply({ content: 'Beim Typ Streaming brauchst du eine Twitch- oder YouTube-URL.', ephemeral: true });
+      }
+
+      if (activityUrl && !/^https?:\/\//i.test(activityUrl)) {
+        return interaction.reply({ content: 'Die Streaming-URL muss mit http:// oder https:// anfangen.', ephemeral: true });
+      }
+
+      const data = loadData();
+      data.presence = {
+        status,
+        activityType,
+        activityName,
+        activityUrl
+      };
+      saveData(data);
+      applyConfiguredPresence();
+
+      const labels = {
+        online: 'Online',
+        idle: 'Abwesend',
+        dnd: 'Nicht stoeren',
+        offline: 'Offline anzeigen',
+        Playing: 'Spielt',
+        Watching: 'Schaut',
+        Listening: 'Hoert',
+        Streaming: 'Streamt',
+        Competing: 'Tritt an'
+      };
+
+      return interaction.reply({
+        content: `Gespeichert: **${labels[status] || status}** - **${labels[activityType] || activityType} ${activityName}**`,
         ephemeral: true
       });
     }
