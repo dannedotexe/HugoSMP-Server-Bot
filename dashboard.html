@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HugoSMP Bot Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117;
+      --panel: #141b23;
+      --panel-2: #19232d;
+      --line: #2b3847;
+      --text: #edf2f7;
+      --muted: #94a3b8;
+      --accent: #33c481;
+      --accent-2: #4ea1ff;
+      --danger: #ef5c5c;
+      --warning: #f2b84b;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .35);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    button, input, textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #1d2935;
+      color: var(--text);
+      border-radius: 6px;
+      min-height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: #52677d; }
+    button.primary { background: var(--accent); color: #08130e; border-color: var(--accent); font-weight: 700; }
+    button.ghost { background: transparent; }
+    button.danger { background: #321b20; border-color: #5d2931; color: #ffb4bf; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #0f151c;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    input:focus, textarea:focus { border-color: var(--accent-2); }
+    textarea { resize: vertical; min-height: 96px; }
+
+    .hidden { display: none !important; }
+
+    .login-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .login-box {
+      width: min(440px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .login-box h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .login-box p {
+      color: var(--muted);
+      margin: 0 0 18px;
+    }
+
+    .topbar {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: #101720;
+      padding: 0 18px;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #061015;
+      font-weight: 900;
+    }
+
+    .brand strong { display: block; line-height: 1.1; }
+    .brand span { color: var(--muted); font-size: 13px; }
+
+    .layout {
+      height: calc(100vh - 58px);
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-head {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .split {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .split h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .new-dm {
+      display: grid;
+      gap: 8px;
+      padding-top: 6px;
+    }
+
+    .thread-list {
+      overflow: auto;
+      padding: 8px;
+    }
+
+    .thread {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      min-height: 58px;
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    .thread:hover, .thread.active {
+      background: var(--panel-2);
+      border-color: var(--line);
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #263444;
+      object-fit: cover;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .thread-main { min-width: 0; }
+    .thread-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 700;
+    }
+
+    .thread-last {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 3px;
+    }
+
+    .badge {
+      min-width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--warning);
+      color: #140d02;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 0 6px;
+    }
+
+    .conversation {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 66px minmax(0, 1fr) auto;
+      background: #0f141b;
+    }
+
+    .conversation-head {
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      min-width: 0;
+    }
+
+    .user-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .user-title strong {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .messages {
+      overflow: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .empty {
+      margin: auto;
+      color: var(--muted);
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.5;
+    }
+
+    .bubble {
+      max-width: min(680px, 84%);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .bubble.in {
+      align-self: flex-start;
+      background: #17212c;
+    }
+
+    .bubble.out {
+      align-self: flex-end;
+      background: #13271f;
+      border-color: #24553f;
+    }
+
+    .bubble-meta {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 7px;
+    }
+
+    .attachments {
+      margin-top: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .attachments a {
+      color: #9dccff;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      background: #101720;
+    }
+
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      padding: 10px 12px;
+      background: #1c2631;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      color: var(--text);
+      max-width: min(420px, calc(100vw - 32px));
+      z-index: 10;
+    }
+
+    .toast.error { border-color: #6c2931; color: #ffc4cb; }
+
+    @media (max-width: 860px) {
+      .layout {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: calc(100vh - 58px);
+      }
+
+      .sidebar {
+        min-height: 330px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .conversation {
+        min-height: 560px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginView" class="login-shell hidden">
+    <form id="loginForm" class="login-box">
+      <h1>Bot Dashboard</h1>
+      <p id="loginHint">Login mit dem Railway-Dashboard-Passwort.</p>
+      <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Passwort">
+      <div style="height: 12px"></div>
+      <button class="primary" type="submit">Einloggen</button>
+    </form>
+  </section>
+
+  <section id="appView" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">DM</div>
+        <div>
+          <strong>HugoSMP Bot Dashboard</strong>
+          <span id="botName">Bot startet...</span>
+        </div>
+      </div>
+      <button id="logoutBtn" class="ghost" type="button">Logout</button>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <div class="split">
+            <h2>DMs</h2>
+            <button id="refreshBtn" type="button">Refresh</button>
+          </div>
+          <div class="new-dm">
+            <input id="newUserId" inputmode="numeric" placeholder="Discord User-ID">
+            <textarea id="newMessage" placeholder="Neue DM schreiben"></textarea>
+            <button id="newSendBtn" class="primary" type="button">Neue DM senden</button>
+          </div>
+        </div>
+        <div id="threadList" class="thread-list"></div>
+      </aside>
+
+      <section class="conversation">
+        <div class="conversation-head">
+          <div class="user-title">
+            <div id="selectedAvatar" class="avatar">?</div>
+            <div>
+              <strong id="selectedName">Kein Thread ausgewaehlt</strong>
+              <span id="selectedId">User-ID</span>
+            </div>
+          </div>
+          <button id="copyIdBtn" type="button" disabled>User-ID kopieren</button>
+        </div>
+        <div id="messages" class="messages">
+          <div class="empty">Waehle links einen DM-Thread aus.</div>
+        </div>
+        <div class="composer">
+          <textarea id="replyText" placeholder="Antwort schreiben" disabled></textarea>
+          <button id="replyBtn" class="primary" type="button" disabled>Senden</button>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const state = {
+      token: localStorage.getItem('hugoDmDashboardToken') || '',
+      threads: [],
+      selectedUserId: null
+    };
+
+    const $ = id => document.getElementById(id);
+
+    function showToast(message, isError = false) {
+      const toast = $('toast');
+      toast.textContent = message;
+      toast.classList.toggle('error', isError);
+      toast.classList.remove('hidden');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.add('hidden'), 3200);
+    }
+
+    async function api(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      if (!options.noAuth && state.token) headers.Authorization = `Bearer ${state.token}`;
+
+      const response = await fetch(path, {
+        ...options,
+        headers,
+        body: options.body && typeof options.body !== 'string'
+          ? JSON.stringify(options.body)
+          : options.body
+      });
+
+      const data = await response.json().catch(() => ({ success: false, error: 'Server-Antwort war ungueltig.' }));
+      if (!response.ok || data.success === false) {
+        const error = new Error(data.error || 'Anfrage fehlgeschlagen.');
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    function formatTime(value) {
+      if (!value) return '';
+      return new Intl.DateTimeFormat('de-AT', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(new Date(value));
+    }
+
+    function preview(thread) {
+      const last = thread.lastMessage;
+      if (!last) return 'Noch keine Nachrichten';
+      if (last.content) return last.content;
+      if (last.attachments?.length) return `${last.attachments.length} Anhang`;
+      return 'Nachricht';
+    }
+
+    function avatarNode(thread) {
+      if (thread.avatarUrl) {
+        const img = document.createElement('img');
+        img.className = 'avatar';
+        img.src = thread.avatarUrl;
+        img.alt = '';
+        return img;
+      }
+      const div = document.createElement('div');
+      div.className = 'avatar';
+      div.textContent = (thread.username || thread.userId || '?').slice(0, 1).toUpperCase();
+      return div;
+    }
+
+    function renderThreads() {
+      const list = $('threadList');
+      list.replaceChildren();
+
+      if (!state.threads.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Noch keine DMs gespeichert.';
+        list.appendChild(empty);
+        return;
+      }
+
+      state.threads.forEach(thread => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `thread${thread.userId === state.selectedUserId ? ' active' : ''}`;
+        button.addEventListener('click', () => selectThread(thread.userId));
+
+        const main = document.createElement('div');
+        main.className = 'thread-main';
+
+        const name = document.createElement('div');
+        name.className = 'thread-name';
+        name.textContent = thread.globalName || thread.username || thread.userId;
+
+        const last = document.createElement('div');
+        last.className = 'thread-last';
+        last.textContent = preview(thread);
+
+        main.append(name, last);
+        button.append(avatarNode(thread), main);
+
+        if (thread.unreadCount > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = String(thread.unreadCount);
+          button.appendChild(badge);
+        }
+
+        list.appendChild(button);
+      });
+    }
+
+    function setSelectedHeader(thread) {
+      $('selectedName').textContent = thread ? (thread.globalName || thread.username || thread.userId) : 'Kein Thread ausgewaehlt';
+      $('selectedId').textContent = thread ? thread.userId : 'User-ID';
+      $('copyIdBtn').disabled = !thread;
+      $('replyText').disabled = !thread;
+      $('replyBtn').disabled = !thread;
+
+      const holder = $('selectedAvatar');
+      const parent = holder.parentElement;
+      const next = avatarNode(thread || { username: '?' });
+      next.id = 'selectedAvatar';
+      parent.replaceChild(next, holder);
+    }
+
+    function renderMessages(thread) {
+      const box = $('messages');
+      box.replaceChildren();
+
+      if (!thread?.messages?.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Keine Nachrichten in diesem Thread.';
+        box.appendChild(empty);
+        return;
+      }
+
+      thread.messages.forEach(message => {
+        const bubble = document.createElement('div');
+        bubble.className = `bubble ${message.direction === 'out' ? 'out' : 'in'}`;
+        bubble.textContent = message.content || '';
+
+        if (message.attachments?.length) {
+          const links = document.createElement('div');
+          links.className = 'attachments';
+          message.attachments.forEach(file => {
+            const link = document.createElement('a');
+            link.href = file.url;
+            link.target = '_blank';
+            link.rel = 'noreferrer';
+            link.textContent = file.name || 'Anhang';
+            links.appendChild(link);
+          });
+          bubble.appendChild(links);
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'bubble-meta';
+        meta.textContent = `${message.direction === 'out' ? 'Bot' : 'User'} - ${formatTime(message.timestamp)}`;
+        bubble.appendChild(meta);
+        box.appendChild(bubble);
+      });
+
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function loadThreads() {
+      const data = await api('/api/dashboard/threads');
+      state.threads = data.threads || [];
+      renderThreads();
+    }
+
+    async function refreshDashboard() {
+      await loadThreads();
+      if (!state.selectedUserId) return;
+
+      try {
+        const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`);
+        setSelectedHeader(data.thread);
+        renderMessages(data.thread);
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+    }
+
+    async function selectThread(userId) {
+      state.selectedUserId = userId;
+      renderThreads();
+      const data = await api(`/api/dashboard/threads/${encodeURIComponent(userId)}`);
+      setSelectedHeader(data.thread);
+      renderMessages(data.thread);
+      await loadThreads();
+    }
+
+    async function sendReply() {
+      if (!state.selectedUserId) return;
+      const content = $('replyText').value.trim();
+      if (!content) return;
+
+      $('replyBtn').disabled = true;
+      try {
+        const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}/messages`, {
+          method: 'POST',
+          body: { content }
+        });
+        $('replyText').value = '';
+        setSelectedHeader(data.thread);
+        renderMessages(data.thread);
+        await loadThreads();
+        showToast('DM gesendet.');
+      } catch (error) {
+        showToast(error.message, true);
+      } finally {
+        $('replyBtn').disabled = false;
+      }
+    }
+
+    async function sendNewDm() {
+      const userId = $('newUserId').value.trim();
+      const content = $('newMessage').value.trim();
+      if (!userId || !content) return showToast('User-ID und Nachricht eintragen.', true);
+
+      $('newSendBtn').disabled = true;
+      try {
+        const data = await api('/api/dashboard/dm', {
+          method: 'POST',
+          body: { userId, content }
+        });
+        $('newMessage').value = '';
+        state.selectedUserId = userId;
+        setSelectedHeader(data.thread);
+        renderMessages(data.thread);
+        await loadThreads();
+        showToast('DM gesendet.');
+      } catch (error) {
+        showToast(error.message, true);
+      } finally {
+        $('newSendBtn').disabled = false;
+      }
+    }
+
+    async function login(event) {
+      event.preventDefault();
+      const password = $('passwordInput').value;
+      try {
+        await api('/api/dashboard/login', {
+          method: 'POST',
+          noAuth: true,
+          body: { password }
+        });
+        state.token = password;
+        localStorage.setItem('hugoDmDashboardToken', password);
+        $('loginView').classList.add('hidden');
+        $('appView').classList.remove('hidden');
+        await loadThreads();
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    async function boot() {
+      try {
+        const status = await api('/api/dashboard/status', { noAuth: true });
+        $('botName').textContent = status.bot;
+
+        if (!status.configured) {
+          $('loginHint').textContent = 'DASHBOARD_PASSWORD ist in Railway noch nicht gesetzt.';
+          $('loginView').classList.remove('hidden');
+          return;
+        }
+
+        if (state.token) {
+          $('appView').classList.remove('hidden');
+          await loadThreads();
+        } else {
+          $('loginView').classList.remove('hidden');
+        }
+      } catch (error) {
+        state.token = '';
+        localStorage.removeItem('hugoDmDashboardToken');
+        $('appView').classList.add('hidden');
+        $('loginHint').textContent = 'Dashboard konnte nicht geladen werden.';
+        $('loginView').classList.remove('hidden');
+        showToast(error.message, true);
+      }
+    }
+
+    $('loginForm').addEventListener('submit', login);
+    $('refreshBtn').addEventListener('click', () => refreshDashboard().catch(error => showToast(error.message, true)));
+    $('replyBtn').addEventListener('click', sendReply);
+    $('newSendBtn').addEventListener('click', sendNewDm);
+    $('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem('hugoDmDashboardToken');
+      location.reload();
+    });
+    $('copyIdBtn').addEventListener('click', () => {
+      if (!state.selectedUserId) return;
+      navigator.clipboard?.writeText(state.selectedUserId);
+      showToast('User-ID kopiert.');
+    });
+
+    setInterval(() => {
+      if (!state.token || $('appView').classList.contains('hidden')) return;
+      refreshDashboard().catch(() => {});
+    }, 15000);
+
+    boot();
+  </script>
+</body>
+</html>
