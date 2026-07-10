@@ -1,15 +1,204 @@
-const {
+﻿const {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
   REST, Routes, SlashCommandBuilder, PermissionFlagsBits,
   ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
-  AttachmentBuilder
+  AttachmentBuilder, ActivityType
 } = require('discord.js');
 
 const fs = require('fs'); 
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+
+const CONFIG_FILE = process.env.CONFIG_FILE || path.join(__dirname, 'bot-config.json');
+
+const DEFAULT_CONFIG = {
+  ids: {
+    guild: '1499129162378514524',
+    channels: {
+      reviews: '1499131549826813962',
+      rules: '1499135456133255239',
+      rewardLog: '1500479671031169144',
+      leaderboard: '1499132426947919903',
+      ticketLog: '1499147413355626646',
+      stock: '1502271613968846878',
+      punishLog: '1506807507564232714'
+    },
+    roles: {
+      customer: '1499472189420732421',
+      verify: '1499149656951885956',
+      staff: [
+        '1499146219946250241',
+        '1499159379902074880'
+      ],
+      ping: {
+        giveaways: '1501296933732618360',
+        restocks: '1501297036719423700',
+        deals: '1501297197113938100',
+        news: '1501297279804641474'
+      }
+    },
+    categories: {
+      tickets: '1499147835528974356',
+      closedTickets: '1499148006270963732'
+    }
+  },
+  inviteRewards: {
+    requiredInvites: 8,
+    reward: '$1m on HugoSMP',
+    minAccountAgeDays: 7
+  },
+  branding: {
+    primaryColor: '#b10de7',
+    websitePostColor: '#9B30FF'
+  },
+  presence: {
+    status: 'online',
+    activity: {
+      type: 'Watching',
+      name: 'HugoSMP Market'
+    }
+  },
+  websitePost: {
+    title: '🌐 HugoSMP Market ist online!',
+    descriptionLines: [
+      'Bestelle HugoSMP Geld, Items, Kits und mehr direkt über unsere Website.',
+      '',
+      '✅ Schnell & einfach bestellen',
+      '✅ Discord Login',
+      '✅ Sichere Bestellnummer',
+      '✅ Support per Ticket',
+      '',
+      '🎟️ Bei Fragen öffnet ein Ticket in <#1499132947041751181>'
+    ],
+    buttonLabel: '🌐 Website öffnen',
+    url: 'https://hugosmpmarket.store'
+  },
+  stockItems: [
+    {
+      id: 'money',
+      name: '1M Money',
+      emoji: '<:Money:1502281700774772908>',
+      emojiId: '1502281700774772908',
+      price: '1,50 €'
+    },
+    {
+      id: 'elytra',
+      name: 'Elytra',
+      emoji: '<:Elytra:1502281765492883497>',
+      emojiId: '1502281765492883497',
+      price: '110 €'
+    },
+    {
+      id: 'mace',
+      name: 'Mace mit Windburst I',
+      emoji: '<:Mace:1502281825131692163>',
+      emojiId: '1502281825131692163',
+      price: '1,50 €'
+    },
+    {
+      id: 'deepslate',
+      name: 'Deepslate Emerald Ore',
+      emoji: '<:DeepslateEmeraldOre:1502281747667353610>',
+      emojiId: '1502281747667353610',
+      price: '0,70 €'
+    },
+    {
+      id: 'ancient',
+      name: 'Ancient Debris',
+      emoji: '<:Ancient:1502281804780933293>',
+      emojiId: '1502281804780933293',
+      price: '0,08 €'
+    },
+    {
+      id: 'gilded',
+      name: 'Gilded Blackstone',
+      emoji: '<:GildedBlackstone:1502281854051680469>',
+      emojiId: '1502281854051680469',
+      price: '0,04 €'
+    },
+    {
+      id: 'skeleton_spawner',
+      name: 'Skeleton Spawner',
+      emoji: '<:SkeletonSpawner:1504552157053980793>',
+      emojiId: '1504552157053980793',
+      price: '6 €'
+    }
+  ]
+};
+
+function mergeConfig(defaultValue, overrideValue) {
+  if (overrideValue === undefined) return defaultValue;
+  if (Array.isArray(defaultValue)) return Array.isArray(overrideValue) ? overrideValue : defaultValue;
+  if (!defaultValue || typeof defaultValue !== 'object') return overrideValue;
+  if (!overrideValue || typeof overrideValue !== 'object' || Array.isArray(overrideValue)) return defaultValue;
+
+  const merged = { ...defaultValue };
+  for (const [key, value] of Object.entries(overrideValue)) {
+    merged[key] = key in defaultValue ? mergeConfig(defaultValue[key], value) : value;
+  }
+  return merged;
+}
+
+function loadBotConfig() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return DEFAULT_CONFIG;
+
+    const userConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    return mergeConfig(DEFAULT_CONFIG, userConfig);
+  } catch (e) {
+    console.error('bot-config.json error:', e.message);
+    return DEFAULT_CONFIG;
+  }
+}
+
+const BOT_CONFIG = loadBotConfig();
+
+function normalizePresenceStatus(status) {
+  const value = String(status || 'online').toLowerCase();
+  if (value === 'offline') return 'invisible';
+  if (['online', 'idle', 'dnd', 'invisible'].includes(value)) return value;
+  return 'online';
+}
+
+function getActivityType(type) {
+  const value = String(type || 'Watching').toLowerCase();
+
+  const activityTypes = {
+    playing: ActivityType.Playing,
+    streaming: ActivityType.Streaming,
+    listening: ActivityType.Listening,
+    watching: ActivityType.Watching,
+    competing: ActivityType.Competing
+  };
+
+  return activityTypes[value] ?? ActivityType.Watching;
+}
+
+function applyConfiguredPresence() {
+  const presence = BOT_CONFIG.presence || {};
+  const activity = presence.activity || {};
+  const activities = [];
+
+  if (activity.name) {
+    const configuredActivity = {
+      name: activity.name,
+      type: getActivityType(activity.type)
+    };
+
+    if (configuredActivity.type === ActivityType.Streaming && activity.url) {
+      configuredActivity.url = activity.url;
+    }
+
+    activities.push(configuredActivity);
+  }
+
+  client.user.setPresence({
+    status: normalizePresenceStatus(presence.status),
+    activities
+  });
+}
 
 const client = new Client({
   intents: [
@@ -26,93 +215,38 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
-const GUILD_ID = '1499129162378514524';
+const GUILD_ID = BOT_CONFIG.ids.guild;
 
-const REVIEWS_CHANNEL_ID = '1499131549826813962';
-const KUNDEN_ROLE_ID = '1499472189420732421';
+const REVIEWS_CHANNEL_ID = BOT_CONFIG.ids.channels.reviews;
+const KUNDEN_ROLE_ID = BOT_CONFIG.ids.roles.customer;
 
-const REQUIRED_INVITES = 8;
-const REWARD = '$1m on HugoSMP';
+const REQUIRED_INVITES = BOT_CONFIG.inviteRewards.requiredInvites;
+const REWARD = BOT_CONFIG.inviteRewards.reward;
 
-const RULES_CHANNEL_ID = '1499135456133255239';
-const VERIFY_ROLE_ID = '1499149656951885956';
-const REWARD_LOG_ID = '1500479671031169144';
-const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
+const RULES_CHANNEL_ID = BOT_CONFIG.ids.channels.rules;
+const VERIFY_ROLE_ID = BOT_CONFIG.ids.roles.verify;
+const REWARD_LOG_ID = BOT_CONFIG.ids.channels.rewardLog;
+const LEADERBOARD_CHANNEL_ID = BOT_CONFIG.ids.channels.leaderboard;
 
-const TICKET_CATEGORY_ID = '1499147835528974356';
-const CLOSED_TICKET_CATEGORY_ID = '1499148006270963732';
-const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
+const TICKET_CATEGORY_ID = BOT_CONFIG.ids.categories.tickets;
+const CLOSED_TICKET_CATEGORY_ID = BOT_CONFIG.ids.categories.closedTickets;
+const TICKET_LOG_CHANNEL_ID = BOT_CONFIG.ids.channels.ticketLog;
 
-const STOCK_CHANNEL_ID = '1502271613968846878';
+const STOCK_CHANNEL_ID = BOT_CONFIG.ids.channels.stock;
 
-const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // ← Mod-Log Channel ID eintragen
+const PUNISH_LOG_CHANNEL_ID = BOT_CONFIG.ids.channels.punishLog;
 
-const STAFF_ROLE_IDS = [
-  '1499146219946250241',
-  '1499159379902074880'
-];
+const STAFF_ROLE_IDS = BOT_CONFIG.ids.roles.staff;
 
-const PING_ROLES = {
-  giveaways: '1501296933732618360',
-  restocks: '1501297036719423700',
-  deals: '1501297197113938100',
-  news: '1501297279804641474'
-};
+const PING_ROLES = BOT_CONFIG.ids.roles.ping;
 
-const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MIN_ACCOUNT_AGE_MS = BOT_CONFIG.inviteRewards.minAccountAgeDays * 24 * 60 * 60 * 1000;
+const PRIMARY_COLOR = BOT_CONFIG.branding.primaryColor;
+const WEBSITE_POST_COLOR = BOT_CONFIG.branding.websitePostColor || PRIMARY_COLOR;
+const WEBSITE_POST = BOT_CONFIG.websitePost;
 
 // ── Stock items ───────────────────────────────────────────────────
-const STOCK_ITEMS = [
-  {
-    id: 'money',
-    name: '1M Money',
-    emoji: '<:Money:1502281700774772908>',
-    emojiId: '1502281700774772908',
-    price: '1,50 €'
-  },
-  {
-    id: 'elytra',
-    name: 'Elytra',
-    emoji: '<:Elytra:1502281765492883497>',
-    emojiId: '1502281765492883497',
-    price: '110 €'
-  },
-  {
-    id: 'mace',
-    name: 'Mace mit Windburst I',
-    emoji: '<:Mace:1502281825131692163>',
-    emojiId: '1502281825131692163',
-    price: '1,50 €'
-  },
-  {
-    id: 'deepslate',
-    name: 'Deepslate Emerald Ore',
-    emoji: '<:DeepslateEmeraldOre:1502281747667353610>',
-    emojiId: '1502281747667353610',
-    price: '0,70 €'
-  },
-  {
-    id: 'ancient',
-    name: 'Ancient Debris',
-    emoji: '<:Ancient:1502281804780933293>',
-    emojiId: '1502281804780933293',
-    price: '0,08 €'
-  },
-  {
-    id: 'gilded',
-    name: 'Gilded Blackstone',
-    emoji: '<:GildedBlackstone:1502281854051680469>',
-    emojiId: '1502281854051680469',
-    price: '0,04 €'
-  },
-  {
-    id: 'skeleton_spawner',
-    name: 'Skeleton Spawner',
-    emoji: '<:SkeletonSpawner:1504552157053980793>',
-    emojiId: '1504552157053980793',
-    price: '6 €'
-  },
-];
+const STOCK_ITEMS = BOT_CONFIG.stockItems;
 
 // ── Data helpers ──────────────────────────────────────────────────
 function loadData() {
@@ -406,7 +540,7 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
     );
 
     const embed = new EmbedBuilder()
-      .setColor('#b10de7')
+      .setColor(PRIMARY_COLOR)
       .setTitle('🔒 Ticket geschlossen')
       .setDescription(
         `**Ticket:** ${channel.name}\n` +
@@ -537,7 +671,7 @@ function buildGiveawayEmbed(gw, ended = false) {
   if (gw.minAccountAgeDays > 0) reqs.push(`🗓️ Account älter als **${gw.minAccountAgeDays}** Tage`);
 
   const embed = new EmbedBuilder()
-    .setColor(ended ? '#888888' : '#b10de7')
+    .setColor(ended ? '#888888' : PRIMARY_COLOR)
     .setTitle(`🎉 GIVEAWAY — ${gw.prize}`)
     .setDescription(
       (reqs.length ? `**Voraussetzungen:**\n${reqs.join('\n')}\n\n` : '') +
@@ -612,7 +746,7 @@ function buildWelcomeLeaveEmbed(template, member, color) {
     .replace(/{count}/g, member.guild.memberCount.toString());
 
   return new EmbedBuilder()
-    .setColor(color || '#b10de7')
+    .setColor(color || PRIMARY_COLOR)
     .setDescription(text)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
     .setFooter({ text: member.guild.name, iconURL: member.guild.iconURL() })
@@ -706,7 +840,7 @@ function buildLeaderboardEmbed(data = loadData()) {
     : '*Noch keine Einladungen vorhanden.*';
 
   return new EmbedBuilder()
-    .setColor('#b10de7')
+    .setColor(PRIMARY_COLOR)
     .setTitle('🏆 Invite Leaderboard')
     .setDescription(lines)
     .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen → ${REWARD}` })
@@ -833,7 +967,7 @@ function buildStockEmbed() {
   }).join('\n\n');
 
   return new EmbedBuilder()
-    .setColor('#b10de7')
+    .setColor(PRIMARY_COLOR)
     .setTitle('🏪 Hugo Shop — Lagerbestand')
     .setDescription(lines)
     .setFooter({ text: 'Zuletzt aktualisiert' })
@@ -1300,7 +1434,7 @@ async function registerCommands(guildId) {
 // ── Invite Rewards Panel ──────────────────────────────────────────
 function buildPanel() {
   const embed = new EmbedBuilder()
-    .setColor('#b10de7')
+    .setColor(PRIMARY_COLOR)
     .setTitle('🎁 Invite Rewards')
     .setDescription(
       'Lade deine Freunde auf den Server ein und verdiene Belohnungen!\n\n' +
@@ -1341,6 +1475,7 @@ function buildPanel() {
 // ── Ready ─────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  applyConfiguredPresence();
 
   for (const guild of client.guilds.cache.values()) {
     try {
@@ -1667,7 +1802,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         const embed = new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle(`🎉 Teilnehmer — ${gw.prize}`)
           .setDescription(
             chunks[0].map((id, i) => `**${i + 1}.** <@${id}>`).join('\n')
@@ -1730,22 +1865,15 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'website') {
   const embed = new EmbedBuilder()
-    .setColor('#9B30FF')
-    .setTitle('🌐 HugoSMP Market ist online!')
-    .setDescription(
-      'Bestelle HugoSMP Geld, Items, Kits und mehr direkt über unsere Website.\n\n' +
-      '✅ Schnell & einfach bestellen\n' +
-      '✅ Discord Login\n' +
-      '✅ Sichere Bestellnummer\n' +
-      '✅ Support per Ticket\n\n' +
-      '🎟️ Bei Fragen öffnet ein Ticket in <#1499132947041751181>'
-    );
+    .setColor(WEBSITE_POST_COLOR)
+    .setTitle(WEBSITE_POST.title)
+    .setDescription(WEBSITE_POST.descriptionLines.join('\n'));
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel('🌐 Website öffnen')
+      .setLabel(WEBSITE_POST.buttonLabel)
       .setStyle(ButtonStyle.Link)
-      .setURL('https://hugosmpmarket.store')
+      .setURL(WEBSITE_POST.url)
   );
 
   await interaction.channel.send({
@@ -1772,7 +1900,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'getorder') {
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setTitle('✨ — DEINE BESTELLUNG ERHALTEN — ✨')
         .setDescription(
           '**SOBALD GEZAHLT WURDE** 💸\n' +
@@ -1802,7 +1930,7 @@ client.on('interactionCreate', async interaction => {
       const text = interaction.options.getString('text');
 
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setTitle(title)
         .setDescription(text)
         .setTimestamp();
@@ -1839,7 +1967,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'setuproles') {
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setDescription(
           '**Reagiert mit dem Emoji auf diese Nachricht, von dessen Kategorie ihr zukünftig gepingt werden möchtet:**\n\n' +
           '🎉 = Giveaways\n\n' +
@@ -1887,7 +2015,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'setupverify') {
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setTitle('Captcha Verification')
         .setDescription(
           'Press to Verify\n⬇️\n\n' +
@@ -1916,7 +2044,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'setuptickets') {
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setTitle('Ticket System')
         .setDescription(
           '**Create Ticket**\n\n' +
@@ -2201,7 +2329,7 @@ client.on('interactionCreate', async interaction => {
 
         return interaction.reply({
           embeds: [new EmbedBuilder()
-            .setColor('#b10de7')
+            .setColor(PRIMARY_COLOR)
             .setTitle('📦 Stock-Items')
             .setDescription(list)],
           ephemeral: true
@@ -2311,7 +2439,7 @@ client.on('interactionCreate', async interaction => {
 
         return interaction.reply({
           embeds: [new EmbedBuilder()
-            .setColor('#b10de7')
+            .setColor(PRIMARY_COLOR)
             .setTitle('✅ Item aktualisiert')
             .addFields(
               { name: '📦 Name', value: item.name, inline: true },
@@ -2334,7 +2462,7 @@ client.on('interactionCreate', async interaction => {
       if (sub === 'set') {
         const channel = interaction.options.getChannel('channel');
         const nachricht = interaction.options.getString('nachricht');
-        const farbe = interaction.options.getString('farbe') || '#b10de7';
+        const farbe = interaction.options.getString('farbe') || PRIMARY_COLOR;
 
         data.welcomeConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
         saveData(data);
@@ -2363,7 +2491,7 @@ client.on('interactionCreate', async interaction => {
         if (!wc?.enabled) return interaction.reply({ content: '❌ Willkommensnachrichten sind nicht eingerichtet.', ephemeral: true });
 
         const fakeEmbed = new EmbedBuilder()
-          .setColor(wc.color || '#b10de7')
+          .setColor(wc.color || PRIMARY_COLOR)
           .setDescription(
             (wc.message || 'Willkommen {user} auf **{server}**! 🎉')
               .replace(/{user}/g, `<@${interaction.user.id}>`)
@@ -2384,11 +2512,11 @@ client.on('interactionCreate', async interaction => {
 
         return interaction.reply({
           embeds: [new EmbedBuilder()
-            .setColor(wc.color || '#b10de7')
+            .setColor(wc.color || PRIMARY_COLOR)
             .setTitle('📋 Willkommens-Konfiguration')
             .addFields(
               { name: '📢 Kanal', value: `<#${wc.channelId}>`, inline: true },
-              { name: '🎨 Farbe', value: wc.color || '#b10de7', inline: true },
+              { name: '🎨 Farbe', value: wc.color || PRIMARY_COLOR, inline: true },
               { name: '📝 Nachricht', value: wc.message || '(Standard)' }
             )
             .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
@@ -2755,7 +2883,7 @@ client.on('interactionCreate', async interaction => {
 
       return interaction.reply({
         embeds: [new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle(`📋 Modlog — ${target.username}`)
           .setThumbnail(target.displayAvatarURL())
           .setDescription(lines.join('\n'))
@@ -2954,7 +3082,7 @@ client.on('interactionCreate', async interaction => {
         });
 
         const ticketEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle('🎫 Support')
           .setDescription('Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.')
           .setTimestamp();
@@ -3514,7 +3642,7 @@ client.on('interactionCreate', async interaction => {
         });
 
         const ticketEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle('✨ — DEIN REWARD EINLÖSEN — ✨')
           .setDescription(
             `💎 **Belohnungswert:** 1.000.000 $\n\n` +
@@ -3666,7 +3794,7 @@ client.on('interactionCreate', async interaction => {
 
         // Header embed
         const headerEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
           .setDescription(
             `**Kategorie:** ${cat.emoji} ${cat.label}\n` +
@@ -3698,7 +3826,7 @@ client.on('interactionCreate', async interaction => {
           );
         }
         const formEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+          .setColor(PRIMARY_COLOR)
           .setTitle(`📋 Bestellformular #${ticketOrderId}`)
           .addFields(...formFields)
           .setTimestamp();
@@ -3749,7 +3877,7 @@ client.on('interactionCreate', async interaction => {
       markOrderFormSubmitted(interaction.channel.id);
 
       const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+        .setColor(PRIMARY_COLOR)
         .setTitle(`🛒 Neue Bestellung${orderId !== 'none' ? ` #${orderId}` : ''}`)
         .addFields(
           { name: 'Item', value: item, inline: true },
@@ -4044,7 +4172,7 @@ app.post('/api/order', async (req, res) => {
     }).join('\n');
 
     const embed = new EmbedBuilder()
-      .setColor('#b10de7')
+      .setColor(PRIMARY_COLOR)
       .setTitle(`🛒 Website-Bestellung #${ticketOrderId}`)
       .setDescription(
         `**Käufer:** <@${discordId}>\n` +
