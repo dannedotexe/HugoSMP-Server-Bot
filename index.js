@@ -1339,7 +1339,7 @@ async function registerCommands(guildId) {
 
     new SlashCommandBuilder()
       .setName('botstatus')
-      .setDescription('Bot-Status und Aktivitaet aendern.')
+      .setDescription('Bot-Status und Aktivität ändern.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(o =>
         o.setName('status')
@@ -1348,18 +1348,18 @@ async function registerCommands(guildId) {
           .addChoices(
             { name: 'Online', value: 'online' },
             { name: 'Abwesend', value: 'idle' },
-            { name: 'Nicht stoeren', value: 'dnd' },
+            { name: 'Nicht stören', value: 'dnd' },
             { name: 'Offline anzeigen', value: 'offline' }
           )
       )
       .addStringOption(o =>
-        o.setName('aktivitaet')
+        o.setName('aktivität')
           .setDescription('Was Discord neben dem Bot anzeigen soll')
           .setRequired(true)
           .addChoices(
             { name: 'Spielt', value: 'Playing' },
             { name: 'Schaut', value: 'Watching' },
-            { name: 'Hoert', value: 'Listening' },
+            { name: 'Hört', value: 'Listening' },
             { name: 'Streamt', value: 'Streaming' },
             { name: 'Tritt an', value: 'Competing' }
           )
@@ -1372,7 +1372,7 @@ async function registerCommands(guildId) {
       )
       .addStringOption(o =>
         o.setName('url')
-          .setDescription('Nur fuer Streaming: Twitch/YouTube URL')
+          .setDescription('Nur für Streaming: Twitch/YouTube URL')
       )
       .toJSON(),
 
@@ -2906,11 +2906,11 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'botstatus') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: 'Dafuer brauchst du Administrator-Rechte.', ephemeral: true });
+        return interaction.reply({ content: 'Dafür brauchst du Administrator-Rechte.', ephemeral: true });
       }
 
       const status = interaction.options.getString('status');
-      const activityType = interaction.options.getString('aktivitaet');
+      const activityType = interaction.options.getString('aktivität');
       const activityName = interaction.options.getString('text');
       const rawUrl = interaction.options.getString('url');
       const activityUrl = activityType === 'Streaming' ? rawUrl : null;
@@ -2936,11 +2936,11 @@ client.on('interactionCreate', async interaction => {
       const labels = {
         online: 'Online',
         idle: 'Abwesend',
-        dnd: 'Nicht stoeren',
+        dnd: 'Nicht stören',
         offline: 'Offline anzeigen',
         Playing: 'Spielt',
         Watching: 'Schaut',
-        Listening: 'Hoert',
+        Listening: 'Hört',
         Streaming: 'Streamt',
         Competing: 'Tritt an'
       };
