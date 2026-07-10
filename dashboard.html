@@ -8,17 +8,17 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0d1117;
-      --panel: #141b23;
-      --panel-2: #19232d;
-      --panel-3: #101720;
-      --line: #2b3847;
-      --text: #edf2f7;
+      --bg: #0b1017;
+      --surface: #111923;
+      --surface-2: #172231;
+      --surface-3: #1d2a3a;
+      --line: #2a3a4d;
+      --text: #eef5fb;
       --muted: #94a3b8;
-      --accent: #33c481;
-      --accent-2: #4ea1ff;
-      --danger: #ef5c5c;
-      --warning: #f2b84b;
+      --accent: #35d48a;
+      --accent-blue: #62a8ff;
+      --accent-amber: #f5b84b;
+      --danger: #f06d7a;
       --shadow: 0 18px 60px rgba(0, 0, 0, .35);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -28,17 +28,17 @@
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
+      background: radial-gradient(circle at top left, rgba(53, 212, 138, .08), transparent 30%), var(--bg);
       color: var(--text);
     }
 
-    button, input, textarea {
+    button, input, textarea, select {
       font: inherit;
     }
 
     button {
       border: 1px solid var(--line);
-      background: #1d2935;
+      background: #182332;
       color: var(--text);
       border-radius: 6px;
       min-height: 36px;
@@ -47,25 +47,26 @@
     }
 
     button:hover { border-color: #52677d; }
-    button.primary { background: var(--accent); color: #08130e; border-color: var(--accent); font-weight: 700; }
+    button.primary { background: var(--accent); color: #07120d; border-color: var(--accent); font-weight: 800; }
     button.ghost { background: transparent; }
-    button.danger { background: #321b20; border-color: #5d2931; color: #ffb4bf; }
+    button.danger { background: #351c24; border-color: #6d2d38; color: #ffc1ca; }
     button.small { min-height: 32px; padding: 0 10px; font-size: 13px; }
     button:disabled { opacity: .55; cursor: not-allowed; }
 
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       border: 1px solid var(--line);
-      background: #0f151c;
+      background: #0c131c;
       color: var(--text);
       border-radius: 6px;
       padding: 10px 12px;
       outline: none;
     }
 
-    input:focus, textarea:focus { border-color: var(--accent-2); }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent-blue); }
     input[type="file"] { padding: 8px; color: var(--muted); }
     textarea { resize: vertical; min-height: 96px; }
+    label { color: var(--muted); font-size: 12px; display: grid; gap: 6px; }
 
     .hidden { display: none !important; }
 
@@ -78,7 +79,7 @@
 
     .login-box {
       width: min(440px, 100%);
-      background: var(--panel);
+      background: rgba(17, 25, 35, .96);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
@@ -96,14 +97,18 @@
     }
 
     .topbar {
-      height: 58px;
-      display: flex;
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      gap: 16px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel-3);
-      padding: 0 18px;
+      background: rgba(12, 18, 27, .94);
+      padding: 10px 18px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(10px);
     }
 
     .brand {
@@ -114,8 +119,8 @@
     }
 
     .mark {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       border-radius: 7px;
       display: block;
       object-fit: cover;
@@ -126,8 +131,176 @@
     .brand strong { display: block; line-height: 1.1; }
     .brand span { color: var(--muted); font-size: 13px; }
 
-    .layout {
-      height: calc(100vh - 58px);
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: auto;
+      padding-bottom: 1px;
+    }
+
+    .nav button {
+      min-height: 34px;
+      white-space: nowrap;
+      color: var(--muted);
+      background: transparent;
+    }
+
+    .nav button.active {
+      color: #07120d;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 800;
+    }
+
+    .app-shell {
+      min-height: calc(100vh - 62px);
+    }
+
+    .workspace {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .page-head h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .page-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(17, 25, 35, .92);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+    }
+
+    .metric {
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+      min-height: 104px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .metric strong {
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .metric small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel {
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-grid .wide { grid-column: 1 / -1; }
+
+    .row-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .data-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0d151f;
+    }
+
+    .data-main {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .data-title {
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .data-sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill.good { color: #abf4ca; border-color: #2d6d4c; }
+    .pill.warn { color: #ffd68a; border-color: #775423; }
+    .pill.bad { color: #ffc1ca; border-color: #72313c; }
+
+    .dm-layout {
+      height: calc(100vh - 62px);
       display: grid;
       grid-template-columns: 340px minmax(0, 1fr) 310px;
     }
@@ -137,7 +310,7 @@
       display: flex;
       flex-direction: column;
       border-right: 1px solid var(--line);
-      background: var(--panel);
+      background: rgba(17, 25, 35, .96);
     }
 
     .sidebar-head {
@@ -173,7 +346,7 @@
     }
 
     .filter-row button.active {
-      color: #08130e;
+      color: #07120d;
       border-color: var(--accent);
       background: var(--accent);
       font-weight: 800;
@@ -212,13 +385,11 @@
     }
 
     .thread:hover, .thread.active {
-      background: var(--panel-2);
+      background: var(--surface-2);
       border-color: var(--line);
     }
 
-    .thread.archived {
-      opacity: .78;
-    }
+    .thread.archived { opacity: .78; }
 
     .avatar {
       width: 42px;
@@ -239,7 +410,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .thread-last {
@@ -274,7 +445,7 @@
       min-width: 22px;
       height: 22px;
       border-radius: 999px;
-      background: var(--warning);
+      background: var(--accent-amber);
       color: #140d02;
       display: grid;
       place-items: center;
@@ -287,7 +458,7 @@
       min-width: 0;
       display: grid;
       grid-template-rows: 66px minmax(0, 1fr) auto;
-      background: #0f141b;
+      background: #0d121a;
     }
 
     .conversation-head {
@@ -359,7 +530,7 @@
 
     .bubble.out {
       align-self: flex-end;
-      background: #13271f;
+      background: #10251c;
       border-color: #24553f;
     }
 
@@ -385,7 +556,6 @@
     .message-content h1 { font-size: 24px; }
     .message-content h2 { font-size: 20px; }
     .message-content h3 { font-size: 17px; }
-
     .message-content strong { font-weight: 800; }
     .message-content em { font-style: italic; }
     .message-content u { text-underline-offset: 2px; }
@@ -433,9 +603,7 @@
       transition: color .12s ease;
     }
 
-    .message-content .md-spoiler:hover {
-      color: var(--text);
-    }
+    .message-content .md-spoiler:hover { color: var(--text); }
 
     .attachments {
       margin-top: 8px;
@@ -456,7 +624,7 @@
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: end;
-      background: var(--panel-3);
+      background: rgba(12, 18, 27, .95);
     }
 
     .reply-stack {
@@ -468,7 +636,7 @@
     .info-panel {
       overflow: auto;
       border-left: 1px solid var(--line);
-      background: var(--panel);
+      background: rgba(17, 25, 35, .96);
       padding: 14px;
     }
 
@@ -485,7 +653,7 @@
     .info-section {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #101720;
+      background: #0d151f;
       padding: 12px;
     }
 
@@ -539,6 +707,16 @@
       overflow-wrap: anywhere;
     }
 
+    .stock-row {
+      grid-template-columns: minmax(220px, 1.3fr) minmax(130px, .7fr) 96px 90px;
+    }
+
+    .stock-edit {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+    }
+
     .toast {
       position: fixed;
       right: 16px;
@@ -555,10 +733,18 @@
 
     .toast.error { border-color: #6c2931; color: #ffc4cb; }
 
-    @media (max-width: 1120px) {
-      .layout {
-        grid-template-columns: 320px minmax(0, 1fr);
+    @media (max-width: 1180px) {
+      .topbar {
+        grid-template-columns: 1fr auto;
       }
+
+      .nav {
+        grid-column: 1 / -1;
+        order: 3;
+      }
+
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dm-layout { grid-template-columns: 320px minmax(0, 1fr); }
 
       .info-panel {
         grid-column: 1 / -1;
@@ -569,17 +755,12 @@
     }
 
     @media (max-width: 760px) {
-      .topbar {
-        height: auto;
-        min-height: 58px;
-        align-items: flex-start;
-        padding: 12px;
-      }
-
-      .layout {
+      .workspace { padding: 12px; }
+      .metric-grid, .panel-grid, .form-grid { grid-template-columns: 1fr; }
+      .dm-layout {
         grid-template-columns: 1fr;
         height: auto;
-        min-height: calc(100vh - 58px);
+        min-height: calc(100vh - 62px);
       }
 
       .sidebar {
@@ -588,17 +769,14 @@
         border-bottom: 1px solid var(--line);
       }
 
-      .conversation {
-        min-height: 560px;
-      }
-
-      .conversation-head, .composer {
-        grid-template-columns: 1fr;
-      }
-
+      .conversation { min-height: 560px; }
       .conversation-head {
         align-items: flex-start;
         flex-direction: column;
+      }
+
+      .composer, .stock-row {
+        grid-template-columns: 1fr;
       }
 
       .head-actions {
@@ -627,67 +805,200 @@
           <span id="botName">Bot startet...</span>
         </div>
       </div>
+      <nav class="nav" aria-label="Dashboard Bereiche">
+        <button class="active" data-view="overview" type="button">Übersicht</button>
+        <button data-view="dms" type="button">DMs</button>
+        <button data-view="presence" type="button">Bot-Status</button>
+        <button data-view="invites" type="button">Invites</button>
+        <button data-view="stock" type="button">Stock</button>
+        <button data-view="users" type="button">User</button>
+      </nav>
       <button id="logoutBtn" class="ghost" type="button">Logout</button>
     </header>
 
-    <main class="layout">
-      <aside class="sidebar">
-        <div class="sidebar-head">
-          <div class="split">
-            <h2>DMs</h2>
-            <button id="refreshBtn" class="small" type="button">Refresh</button>
+    <div class="app-shell">
+      <main id="overviewView" class="workspace dashboard-view">
+        <div class="page-head">
+          <div>
+            <h1>Übersicht</h1>
+            <p>Schneller Blick auf Bot, Server, DMs, Invites und Lager.</p>
           </div>
-          <input id="threadSearch" type="search" placeholder="User-ID oder Name suchen">
-          <div class="filter-row" aria-label="DM-Filter">
-            <button class="active" data-filter="active" type="button">Alle</button>
-            <button data-filter="unread" type="button">Ungelesen</button>
-            <button data-filter="answered" type="button">Beantwortet</button>
-            <button data-filter="archived" type="button">Archiviert</button>
-          </div>
-          <div class="new-dm">
-            <input id="newUserId" inputmode="numeric" placeholder="Discord User-ID">
-            <textarea id="newMessage" placeholder="Neue DM schreiben"></textarea>
-            <input id="newFiles" type="file" multiple>
-            <div id="newFileList" class="selected-files"></div>
-            <button id="newSendBtn" class="primary" type="button">Neue DM senden</button>
-          </div>
+          <button id="overviewRefreshBtn" class="small" type="button">Refresh</button>
         </div>
-        <div id="threadList" class="thread-list"></div>
-      </aside>
+        <div id="overviewMetrics" class="metric-grid"></div>
+        <div class="panel-grid">
+          <section class="panel">
+            <h2>Top Invites</h2>
+            <div id="overviewInvites" class="row-list"></div>
+          </section>
+          <section class="panel">
+            <h2>Stock Warnungen</h2>
+            <div id="overviewStock" class="row-list"></div>
+          </section>
+        </div>
+      </main>
 
-      <section class="conversation">
-        <div class="conversation-head">
-          <div class="user-title">
-            <div id="selectedAvatar" class="avatar">?</div>
-            <div>
-              <strong id="selectedName">Kein Thread ausgewählt</strong>
-              <span id="selectedId">User-ID</span>
+      <main id="dmView" class="dm-layout dashboard-view hidden">
+        <aside class="sidebar">
+          <div class="sidebar-head">
+            <div class="split">
+              <h2>DMs</h2>
+              <button id="refreshBtn" class="small" type="button">Refresh</button>
+            </div>
+            <input id="threadSearch" type="search" placeholder="User-ID oder Name suchen">
+            <div class="filter-row" aria-label="DM-Filter">
+              <button class="active" data-filter="active" type="button">Alle</button>
+              <button data-filter="unread" type="button">Ungelesen</button>
+              <button data-filter="answered" type="button">Beantwortet</button>
+              <button data-filter="archived" type="button">Archiviert</button>
+            </div>
+            <div class="new-dm">
+              <input id="newUserId" inputmode="numeric" placeholder="Discord User-ID">
+              <textarea id="newMessage" placeholder="Neue DM schreiben"></textarea>
+              <input id="newFiles" type="file" multiple>
+              <div id="newFileList" class="selected-files"></div>
+              <button id="newSendBtn" class="primary" type="button">Neue DM senden</button>
             </div>
           </div>
-          <div class="head-actions">
-            <button id="copyIdBtn" class="small" type="button" disabled>User-ID kopieren</button>
-            <button id="archiveBtn" class="small" type="button" disabled>Archivieren</button>
-            <button id="deleteThreadBtn" class="small danger" type="button" disabled>Löschen</button>
-          </div>
-        </div>
-        <div id="messages" class="messages">
-          <div class="empty">Wähle links einen DM-Thread aus.</div>
-        </div>
-        <div class="composer">
-          <div class="reply-stack">
-            <textarea id="replyText" placeholder="Antwort schreiben" disabled></textarea>
-            <input id="replyFiles" type="file" multiple disabled>
-            <div id="replyFileList" class="selected-files"></div>
-          </div>
-          <button id="replyBtn" class="primary" type="button" disabled>Senden</button>
-        </div>
-      </section>
+          <div id="threadList" class="thread-list"></div>
+        </aside>
 
-      <aside class="info-panel">
-        <h2>User-Info</h2>
-        <div id="userInfo" class="empty">Kein User ausgewählt.</div>
-      </aside>
-    </main>
+        <section class="conversation">
+          <div class="conversation-head">
+            <div class="user-title">
+              <div id="selectedAvatar" class="avatar">?</div>
+              <div>
+                <strong id="selectedName">Kein Thread ausgewählt</strong>
+                <span id="selectedId">User-ID</span>
+              </div>
+            </div>
+            <div class="head-actions">
+              <button id="copyIdBtn" class="small" type="button" disabled>User-ID kopieren</button>
+              <button id="archiveBtn" class="small" type="button" disabled>Archivieren</button>
+              <button id="deleteThreadBtn" class="small danger" type="button" disabled>Löschen</button>
+            </div>
+          </div>
+          <div id="messages" class="messages">
+            <div class="empty">Wähle links einen DM-Thread aus.</div>
+          </div>
+          <div class="composer">
+            <div class="reply-stack">
+              <textarea id="replyText" placeholder="Antwort schreiben" disabled></textarea>
+              <input id="replyFiles" type="file" multiple disabled>
+              <div id="replyFileList" class="selected-files"></div>
+            </div>
+            <button id="replyBtn" class="primary" type="button" disabled>Senden</button>
+          </div>
+        </section>
+
+        <aside class="info-panel">
+          <h2>User-Info</h2>
+          <div id="dmUserInfo" class="empty">Kein User ausgewählt.</div>
+        </aside>
+      </main>
+
+      <main id="presenceView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Bot-Status</h1>
+            <p>Online-Status und Aktivität direkt im Dashboard ändern.</p>
+          </div>
+        </div>
+        <section class="panel">
+          <form id="presenceForm" class="form-grid">
+            <label>Status
+              <select id="presenceStatus">
+                <option value="online">Online</option>
+                <option value="idle">Abwesend</option>
+                <option value="dnd">Nicht stören</option>
+                <option value="offline">Offline anzeigen</option>
+              </select>
+            </label>
+            <label>Aktivität
+              <select id="presenceActivityType">
+                <option value="Playing">Spielt</option>
+                <option value="Watching">Schaut</option>
+                <option value="Listening">Hört</option>
+                <option value="Streaming">Streamt</option>
+                <option value="Competing">Tritt an</option>
+              </select>
+            </label>
+            <label class="wide">Text
+              <input id="presenceActivityName" placeholder="HugoSMP Market">
+            </label>
+            <label class="wide">Streaming-URL
+              <input id="presenceActivityUrl" placeholder="Nur nötig bei Streaming">
+            </label>
+            <div class="wide">
+              <button class="primary" type="submit">Status speichern</button>
+            </div>
+          </form>
+        </section>
+      </main>
+
+      <main id="invitesView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Invites</h1>
+            <p>Leaderboard ansehen und Invite-Zahlen korrigieren.</p>
+          </div>
+          <button id="invitesRefreshBtn" class="small" type="button">Refresh</button>
+        </div>
+        <section class="panel">
+          <form id="inviteSetForm" class="form-grid">
+            <label>User-ID
+              <input id="inviteUserId" inputmode="numeric" placeholder="Discord User-ID">
+            </label>
+            <label>Invites
+              <input id="inviteAmount" type="number" min="0" step="1" placeholder="0">
+            </label>
+            <div class="wide">
+              <button class="primary" type="submit">Invites setzen</button>
+            </div>
+          </form>
+        </section>
+        <section class="panel">
+          <h2>Leaderboard</h2>
+          <div id="inviteList" class="row-list"></div>
+        </section>
+      </main>
+
+      <main id="stockView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Stock</h1>
+            <p>Lager, Preise und Item-Anzeige direkt bearbeiten.</p>
+          </div>
+          <button id="stockRefreshBtn" class="small" type="button">Refresh</button>
+        </div>
+        <section class="panel">
+          <div id="stockList" class="row-list"></div>
+        </section>
+      </main>
+
+      <main id="usersView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>User Lookup</h1>
+            <p>Rollen, Join-Datum, Invites und Warnungen per User-ID prüfen.</p>
+          </div>
+        </div>
+        <section class="panel">
+          <form id="userLookupForm" class="form-grid">
+            <label class="wide">Discord User-ID
+              <input id="lookupUserId" inputmode="numeric" placeholder="Discord User-ID">
+            </label>
+            <div class="wide">
+              <button class="primary" type="submit">User laden</button>
+            </div>
+          </form>
+        </section>
+        <section class="panel">
+          <h2>User-Info</h2>
+          <div id="lookupUserInfo" class="empty">Noch kein User geladen.</div>
+        </section>
+      </main>
+    </div>
   </section>
 
   <div id="toast" class="toast hidden"></div>
@@ -699,11 +1010,13 @@
 
     const state = {
       token: localStorage.getItem('hugoDmDashboardToken') || '',
+      currentView: 'overview',
       threads: [],
       selectedUserId: null,
       selectedThread: null,
       filter: 'active',
-      search: ''
+      search: '',
+      stock: []
     };
 
     const $ = id => document.getElementById(id);
@@ -750,6 +1063,16 @@
       }).format(new Date(value));
     }
 
+    function formatDuration(seconds) {
+      const value = Number(seconds || 0);
+      const days = Math.floor(value / 86400);
+      const hours = Math.floor((value % 86400) / 3600);
+      const minutes = Math.floor((value % 3600) / 60);
+      if (days > 0) return `${days}d ${hours}h`;
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
+    }
+
     function preview(thread) {
       const last = thread.lastMessage;
       if (!last) return 'Noch keine Nachrichten';
@@ -758,18 +1081,18 @@
       return 'Nachricht';
     }
 
-    function avatarNode(thread) {
-      if (thread?.avatarUrl) {
+    function avatarNode(source) {
+      if (source?.avatarUrl) {
         const img = document.createElement('img');
         img.className = 'avatar';
-        img.src = thread.avatarUrl;
+        img.src = source.avatarUrl;
         img.alt = '';
         return img;
       }
 
       const div = document.createElement('div');
       div.className = 'avatar';
-      div.textContent = (thread?.username || thread?.userId || '?').slice(0, 1).toUpperCase();
+      div.textContent = (source?.username || source?.tag || source?.userId || '?').slice(0, 1).toUpperCase();
       return div;
     }
 
@@ -843,6 +1166,226 @@
       return restoreMarkdownPlaceholders(html, placeholders);
     }
 
+    function rowText(title, sub, right) {
+      const row = document.createElement('div');
+      row.className = 'data-row';
+      const main = document.createElement('div');
+      main.className = 'data-main';
+      const text = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'data-title';
+      name.textContent = title;
+      const meta = document.createElement('div');
+      meta.className = 'data-sub';
+      meta.textContent = sub || '';
+      text.append(name, meta);
+      main.appendChild(text);
+      const side = document.createElement('div');
+      side.innerHTML = right || '';
+      row.append(main, side);
+      return row;
+    }
+
+    function renderMetric(label, value, sub) {
+      const metric = document.createElement('section');
+      metric.className = 'metric';
+      const l = document.createElement('span');
+      l.textContent = label;
+      const v = document.createElement('strong');
+      v.textContent = value;
+      const s = document.createElement('small');
+      s.textContent = sub || '';
+      metric.append(l, v, s);
+      return metric;
+    }
+
+    async function loadOverview() {
+      const data = await api('/api/dashboard/overview');
+      const overview = data.overview;
+      const metrics = $('overviewMetrics');
+      metrics.replaceChildren(
+        renderMetric('Server', overview.guild.memberCount ?? '-', `${overview.guild.name} - ${overview.guild.activeTickets} offene Tickets`),
+        renderMetric('DMs', overview.dms.unread, `${overview.dms.open} offen, ${overview.dms.archived} archiviert`),
+        renderMetric('Stock', `${overview.stock.low + overview.stock.out}`, `${overview.stock.low} niedrig, ${overview.stock.out} ausverkauft`),
+        renderMetric('Bot', formatDuration(overview.bot.uptimeSeconds), `${overview.bot.presence.status} - ${overview.bot.presence.activityName || 'keine Aktivität'}`)
+      );
+
+      const invites = $('overviewInvites');
+      invites.replaceChildren();
+      if (!overview.invites.top.length) {
+        invites.appendChild(emptyNode('Noch keine Invites.'));
+      } else {
+        overview.invites.top.forEach(row => {
+          const item = rowText(`#${row.rank} ${row.username}`, row.userId, `<span class="pill good">${row.invites} Invites</span>`);
+          item.querySelector('.data-main').prepend(avatarNode(row));
+          invites.appendChild(item);
+        });
+      }
+
+      const stock = $('overviewStock');
+      stock.replaceChildren();
+      const important = overview.stock.items.filter(item => item.status !== 'ok');
+      if (!important.length) {
+        stock.appendChild(rowText('Alles gut', 'Keine niedrigen oder leeren Stock-Items.', '<span class="pill good">OK</span>'));
+      } else {
+        important.forEach(item => {
+          const klass = item.status === 'out' ? 'bad' : 'warn';
+          const label = item.status === 'out' ? 'Ausverkauft' : 'Niedrig';
+          stock.appendChild(rowText(`${item.emoji || ''} ${item.name}`, `${item.price} - ${item.amount} auf Lager`, `<span class="pill ${klass}">${label}</span>`));
+        });
+      }
+    }
+
+    async function loadPresence() {
+      const data = await api('/api/dashboard/presence');
+      const presence = data.presence;
+      $('presenceStatus').value = presence.status === 'invisible' ? 'offline' : presence.status;
+      $('presenceActivityType').value = presence.activityType || 'Watching';
+      $('presenceActivityName').value = presence.activityName || '';
+      $('presenceActivityUrl').value = presence.activityUrl || '';
+    }
+
+    async function savePresence(event) {
+      event.preventDefault();
+      try {
+        const data = await api('/api/dashboard/presence', {
+          method: 'PATCH',
+          body: {
+            status: $('presenceStatus').value,
+            activityType: $('presenceActivityType').value,
+            activityName: $('presenceActivityName').value,
+            activityUrl: $('presenceActivityUrl').value
+          }
+        });
+        $('presenceStatus').value = data.presence.status === 'invisible' ? 'offline' : data.presence.status;
+        showToast('Bot-Status gespeichert.');
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    async function loadInvites() {
+      const data = await api('/api/dashboard/invites');
+      const list = $('inviteList');
+      list.replaceChildren();
+
+      if (!data.invites.length) {
+        list.appendChild(emptyNode('Noch keine Invites gespeichert.'));
+        return;
+      }
+
+      data.invites.forEach(row => {
+        const item = rowText(`#${row.rank} ${row.username}`, row.userId, `<span class="pill good">${row.invites}</span>`);
+        item.querySelector('.data-main').prepend(avatarNode(row));
+        list.appendChild(item);
+      });
+    }
+
+    async function saveInviteAmount(event) {
+      event.preventDefault();
+      const userId = $('inviteUserId').value.trim();
+      const amount = Number($('inviteAmount').value);
+
+      try {
+        await api(`/api/dashboard/invites/${encodeURIComponent(userId)}`, {
+          method: 'PATCH',
+          body: { amount }
+        });
+        $('inviteUserId').value = '';
+        $('inviteAmount').value = '';
+        await loadInvites();
+        showToast('Invites gespeichert und Leaderboard aktualisiert.');
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    async function loadStock() {
+      const data = await api('/api/dashboard/stock');
+      state.stock = data.stock || [];
+      renderStock();
+    }
+
+    function renderStock() {
+      const list = $('stockList');
+      list.replaceChildren();
+
+      if (!state.stock.length) {
+        list.appendChild(emptyNode('Keine Stock-Items gefunden.'));
+        return;
+      }
+
+      state.stock.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'data-row stock-row';
+        const title = document.createElement('div');
+        title.innerHTML = `
+          <div class="data-title">${escapeHtml(item.emoji || '')} ${escapeHtml(item.name)}</div>
+          <div class="data-sub">${escapeHtml(item.id)}</div>
+        `;
+
+        const edits = document.createElement('div');
+        edits.className = 'stock-edit';
+        edits.innerHTML = `
+          <input id="stockName_${item.id}" value="${escapeHtml(item.name)}" aria-label="Name">
+          <input id="stockPrice_${item.id}" value="${escapeHtml(item.price)}" aria-label="Preis">
+        `;
+
+        const amount = document.createElement('input');
+        amount.id = `stockAmount_${item.id}`;
+        amount.type = 'number';
+        amount.min = '0';
+        amount.step = '1';
+        amount.value = String(item.amount || 0);
+        amount.setAttribute('aria-label', 'Menge');
+
+        const save = document.createElement('button');
+        save.className = 'primary small';
+        save.type = 'button';
+        save.textContent = 'Speichern';
+        save.addEventListener('click', () => saveStockItem(item.id));
+
+        row.append(title, edits, amount, save);
+        list.appendChild(row);
+      });
+    }
+
+    async function saveStockItem(itemId) {
+      try {
+        const data = await api(`/api/dashboard/stock/${encodeURIComponent(itemId)}`, {
+          method: 'PATCH',
+          body: {
+            name: $(`stockName_${itemId}`).value,
+            price: $(`stockPrice_${itemId}`).value,
+            amount: Number($(`stockAmount_${itemId}`).value)
+          }
+        });
+        state.stock = data.stock || [];
+        renderStock();
+        showToast('Stock gespeichert und Discord-Panel aktualisiert.');
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    async function lookupUser(event) {
+      event.preventDefault();
+      const userId = $('lookupUserId').value.trim();
+      try {
+        const data = await api(`/api/dashboard/users/${encodeURIComponent(userId)}`);
+        renderUserInfo('lookupUserInfo', data.userInfo, 'Noch kein User geladen.');
+      } catch (error) {
+        showToast(error.message, true);
+      }
+    }
+
+    function emptyNode(text) {
+      const node = document.createElement('div');
+      node.className = 'empty';
+      node.textContent = text;
+      return node;
+    }
+
     function setActionButtons(thread) {
       $('copyIdBtn').disabled = !thread;
       $('archiveBtn').disabled = !thread;
@@ -858,10 +1401,7 @@
       list.replaceChildren();
 
       if (!state.threads.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty';
-        empty.textContent = state.search ? 'Keine passenden DMs gefunden.' : 'Noch keine DMs gespeichert.';
-        list.appendChild(empty);
+        list.appendChild(emptyNode(state.search ? 'Keine passenden DMs gefunden.' : 'Noch keine DMs gespeichert.'));
         return;
       }
 
@@ -939,10 +1479,7 @@
       box.replaceChildren();
 
       if (!thread?.messages?.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty';
-        empty.textContent = thread ? 'Keine Nachrichten in diesem Thread.' : 'Wähle links einen DM-Thread aus.';
-        box.appendChild(empty);
+        box.appendChild(emptyNode(thread ? 'Keine Nachrichten in diesem Thread.' : 'Wähle links einen DM-Thread aus.'));
         return;
       }
 
@@ -981,19 +1518,20 @@
       box.scrollTop = box.scrollHeight;
     }
 
-    function renderUserInfo(info) {
-      const box = $('userInfo');
+    function renderUserInfo(containerId, info, emptyText = 'Kein User ausgewählt.') {
+      const box = $(containerId);
       box.className = info ? 'info-card' : 'empty';
       box.replaceChildren();
 
       if (!info) {
-        box.textContent = 'Kein User ausgewählt.';
+        box.textContent = emptyText;
         return;
       }
 
       const overview = document.createElement('section');
       overview.className = 'info-section';
       overview.append(sectionTitle('Übersicht'));
+      overview.append(infoRow('User', info.tag || info.userId));
       overview.append(infoRow('Server', info.inGuild ? 'auf dem Server' : 'nicht auf dem Server'));
       overview.append(infoRow('Join-Datum', info.joinedAt ? formatTime(info.joinedAt, true) : '-'));
       overview.append(infoRow('Account', info.createdAt ? formatTime(info.createdAt, true) : '-'));
@@ -1064,7 +1602,7 @@
       state.selectedThread = null;
       setSelectedHeader(null);
       renderMessages(null);
-      renderUserInfo(null);
+      renderUserInfo('dmUserInfo', null);
       $('replyText').value = '';
       $('replyFiles').value = '';
       updateFileList('replyFiles', 'replyFileList');
@@ -1088,7 +1626,7 @@
         const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`);
         setSelectedHeader(data.thread);
         renderMessages(data.thread);
-        renderUserInfo(data.thread?.userInfo);
+        renderUserInfo('dmUserInfo', data.thread?.userInfo);
       } catch (error) {
         if (error.status === 404) {
           clearSelection();
@@ -1105,7 +1643,7 @@
       const data = await api(`/api/dashboard/threads/${encodeURIComponent(userId)}`);
       setSelectedHeader(data.thread);
       renderMessages(data.thread);
-      renderUserInfo(data.thread?.userInfo);
+      renderUserInfo('dmUserInfo', data.thread?.userInfo);
       await loadThreads();
     }
 
@@ -1153,12 +1691,12 @@
 
     async function sendReply() {
       if (!state.selectedUserId) return;
-      const content = $('replyText').value.trim();
-      const attachments = await readAttachments('replyFiles');
-      if (!content && !attachments.length) return;
-
       $('replyBtn').disabled = true;
       try {
+        const content = $('replyText').value.trim();
+        const attachments = await readAttachments('replyFiles');
+        if (!content && !attachments.length) return;
+
         const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}/messages`, {
           method: 'POST',
           body: { content, attachments }
@@ -1168,7 +1706,7 @@
         updateFileList('replyFiles', 'replyFileList');
         setSelectedHeader(data.thread);
         renderMessages(data.thread);
-        renderUserInfo(data.thread?.userInfo);
+        renderUserInfo('dmUserInfo', data.thread?.userInfo);
         await loadThreads();
         showToast('DM gesendet.');
       } catch (error) {
@@ -1179,15 +1717,15 @@
     }
 
     async function sendNewDm() {
-      const userId = $('newUserId').value.trim();
-      const content = $('newMessage').value.trim();
-      const attachments = await readAttachments('newFiles');
-      if (!userId || (!content && !attachments.length)) {
-        return showToast('User-ID und Nachricht oder Anhang eintragen.', true);
-      }
-
       $('newSendBtn').disabled = true;
       try {
+        const userId = $('newUserId').value.trim();
+        const content = $('newMessage').value.trim();
+        const attachments = await readAttachments('newFiles');
+        if (!userId || (!content && !attachments.length)) {
+          return showToast('User-ID und Nachricht oder Anhang eintragen.', true);
+        }
+
         const data = await api('/api/dashboard/dm', {
           method: 'POST',
           body: { userId, content, attachments }
@@ -1198,7 +1736,7 @@
         state.selectedUserId = userId;
         setSelectedHeader(data.thread);
         renderMessages(data.thread);
-        renderUserInfo(data.thread?.userInfo);
+        renderUserInfo('dmUserInfo', data.thread?.userInfo);
         await loadThreads();
         showToast('DM gesendet.');
       } catch (error) {
@@ -1219,7 +1757,7 @@
         });
         setSelectedHeader(data.thread);
         renderMessages(data.thread);
-        renderUserInfo(data.thread?.userInfo);
+        renderUserInfo('dmUserInfo', data.thread?.userInfo);
         await loadThreads();
         showToast(archived ? 'Thread archiviert.' : 'Thread wiederhergestellt.');
       } catch (error) {
@@ -1250,6 +1788,26 @@
       sendFn().catch(error => showToast(error.message, true));
     }
 
+    async function loadCurrentView() {
+      if (state.currentView === 'overview') return loadOverview();
+      if (state.currentView === 'dms') return refreshDashboard();
+      if (state.currentView === 'presence') return loadPresence();
+      if (state.currentView === 'invites') return loadInvites();
+      if (state.currentView === 'stock') return loadStock();
+      return Promise.resolve();
+    }
+
+    async function showView(view) {
+      state.currentView = view;
+      document.querySelectorAll('.dashboard-view').forEach(section => {
+        section.classList.toggle('hidden', section.id !== `${view}View` && !(view === 'dms' && section.id === 'dmView'));
+      });
+      document.querySelectorAll('[data-view]').forEach(button => {
+        button.classList.toggle('active', button.dataset.view === view);
+      });
+      await loadCurrentView();
+    }
+
     async function login(event) {
       event.preventDefault();
       const password = $('passwordInput').value;
@@ -1263,7 +1821,7 @@
         localStorage.setItem('hugoDmDashboardToken', password);
         $('loginView').classList.add('hidden');
         $('appView').classList.remove('hidden');
-        await loadThreads();
+        await showView('overview');
       } catch (error) {
         showToast(error.message, true);
       }
@@ -1282,7 +1840,7 @@
 
         if (state.token) {
           $('appView').classList.remove('hidden');
-          await loadThreads();
+          await showView('overview');
         } else {
           $('loginView').classList.remove('hidden');
         }
@@ -1297,7 +1855,13 @@
     }
 
     $('loginForm').addEventListener('submit', login);
+    $('overviewRefreshBtn').addEventListener('click', () => loadOverview().catch(error => showToast(error.message, true)));
     $('refreshBtn').addEventListener('click', () => refreshDashboard().catch(error => showToast(error.message, true)));
+    $('presenceForm').addEventListener('submit', savePresence);
+    $('inviteSetForm').addEventListener('submit', saveInviteAmount);
+    $('invitesRefreshBtn').addEventListener('click', () => loadInvites().catch(error => showToast(error.message, true)));
+    $('stockRefreshBtn').addEventListener('click', () => loadStock().catch(error => showToast(error.message, true)));
+    $('userLookupForm').addEventListener('submit', lookupUser);
     $('replyBtn').addEventListener('click', () => sendReply().catch(error => showToast(error.message, true)));
     $('newSendBtn').addEventListener('click', () => sendNewDm().catch(error => showToast(error.message, true)));
     $('replyText').addEventListener('keydown', event => sendOnEnter(event, sendReply));
@@ -1320,6 +1884,9 @@
         loadThreads().catch(error => showToast(error.message, true));
       });
     });
+    document.querySelectorAll('[data-view]').forEach(button => {
+      button.addEventListener('click', () => showView(button.dataset.view).catch(error => showToast(error.message, true)));
+    });
     $('logoutBtn').addEventListener('click', () => {
       localStorage.removeItem('hugoDmDashboardToken');
       location.reload();
@@ -1332,7 +1899,7 @@
 
     setInterval(() => {
       if (!state.token || $('appView').classList.contains('hidden')) return;
-      refreshDashboard().catch(() => {});
+      loadCurrentView().catch(() => {});
     }, 15000);
 
     boot();

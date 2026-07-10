@@ -4470,6 +4470,113 @@ function requireDashboardAuth(req, res, next) {
   next();
 }
 
+function getDashboardPresence() {
+  const presence = loadPresenceConfig();
+
+  return {
+    status: normalizePresenceStatus(presence.status),
+    activityType: presence.activityType || DEFAULT_PRESENCE_CONFIG.activityType,
+    activityName: presence.activityName || '',
+    activityUrl: presence.activityUrl || ''
+  };
+}
+
+function getDashboardStock(data = loadData()) {
+  return (data.stockItems || STOCK_ITEMS).map(item => {
+    const amount = Number(data.stock?.[item.id] || 0);
+
+    return {
+      id: item.id,
+      name: item.name,
+      emoji: item.emoji,
+      emojiId: item.emojiId || null,
+      price: item.price,
+      amount,
+      status: amount === 0 ? 'out' : amount <= 5 ? 'low' : 'ok'
+    };
+  });
+}
+
+async function getDashboardInviteRows(data = loadData(), limit = 25) {
+  const rows = Object.entries(data.invites || {})
+    .filter(([userId, amount]) => userId !== client.user?.id && Number(amount) > 0)
+    .sort(([, a], [, b]) => Number(b) - Number(a))
+    .slice(0, limit);
+
+  return Promise.all(rows.map(async ([userId, amount], index) => {
+    const user = await client.users.fetch(userId).catch(() => null);
+
+    return {
+      rank: index + 1,
+      userId,
+      username: getUserDisplayName(user, userId),
+      avatarUrl: getUserAvatar(user),
+      invites: Number(amount || 0)
+    };
+  }));
+}
+
+function getDashboardDmStats(data = loadData()) {
+  const threads = Object.values(data.dmThreads || {});
+
+  return {
+    total: threads.length,
+    unread: threads.reduce((sum, thread) => sum + Number(thread.unreadCount || 0), 0),
+    archived: threads.filter(thread => thread.archived).length,
+    open: threads.filter(thread => !thread.archived).length,
+    lastMessageAt: threads.reduce((latest, thread) => Math.max(latest, Number(thread.lastMessageAt || 0)), 0) || null
+  };
+}
+
+async function getDashboardOverview() {
+  const data = loadData();
+  const guild = client.guilds.cache.get(GUILD_ID) || null;
+  const stock = getDashboardStock(data);
+  const topInvites = await getDashboardInviteRows(data, 5);
+
+  return {
+    bot: {
+      tag: client.user ? client.user.tag : 'starting',
+      id: client.user?.id || null,
+      uptimeSeconds: Math.floor(process.uptime()),
+      presence: getDashboardPresence()
+    },
+    guild: {
+      id: GUILD_ID,
+      name: guild?.name || 'HugoSMP',
+      memberCount: guild?.memberCount || null,
+      channelCount: guild?.channels?.cache?.size || 0,
+      activeTickets: guild
+        ? guild.channels.cache.filter(channel =>
+          channel.type === ChannelType.GuildText && channel.parentId === TICKET_CATEGORY_ID
+        ).size
+        : 0,
+      closedTickets: guild
+        ? guild.channels.cache.filter(channel =>
+          channel.type === ChannelType.GuildText && channel.parentId === CLOSED_TICKET_CATEGORY_ID
+        ).size
+        : 0
+    },
+    dms: getDashboardDmStats(data),
+    stock: {
+      totalItems: stock.length,
+      out: stock.filter(item => item.status === 'out').length,
+      low: stock.filter(item => item.status === 'low').length,
+      items: stock
+    },
+    invites: {
+      totalUsers: Object.keys(data.invites || {}).length,
+      totalInvites: Object.values(data.invites || {}).reduce((sum, amount) => sum + Number(amount || 0), 0),
+      top: topInvites
+    },
+    moderation: {
+      warnedUsers: Object.keys(data.warnings || {}).filter(userId => (data.warnings[userId] || []).length > 0).length,
+      totalWarnings: Object.values(data.warnings || {}).reduce((sum, warnings) => sum + (Array.isArray(warnings) ? warnings.length : 0), 0),
+      activeTempbans: Object.keys(data.tempbans || {}).length
+    }
+  };
+}
+
 async function sendDashboardDm(userId, content, attachments = []) {
   const cleanContent = cleanDmContent(content);
   const files = normalizeDashboardAttachments(attachments);
@@ -4538,6 +4645,162 @@ app.post('/api/dashboard/login', (req, res) => {
   }
 
   return res.json({ success: true });
+});
+
+app.get('/api/dashboard/overview', requireDashboardAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      overview: await getDashboardOverview()
+    });
+  } catch (e) {
+    console.error('dashboard overview error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Übersicht konnte nicht geladen werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/presence', requireDashboardAuth, (req, res) => {
+  res.json({
+    success: true,
+    presence: getDashboardPresence()
+  });
+});
+
+app.patch('/api/dashboard/presence', requireDashboardAuth, (req, res) => {
+  const status = normalizePresenceStatus(req.body?.status);
+  const activityType = String(req.body?.activityType || 'Watching').trim();
+  const activityName = cleanDmContent(req.body?.activityName || '').slice(0, 128);
+  const activityUrl = activityType === 'Streaming'
+    ? String(req.body?.activityUrl || '').trim()
+    : null;
+
+  if (activityType === 'Streaming' && !/^https?:\/\//i.test(activityUrl || '')) {
+    return res.status(400).json({
+      success: false,
+      error: 'Streaming braucht eine Twitch- oder YouTube-URL.'
+    });
+  }
+
+  const data = loadData();
+  data.presence = {
+    status,
+    activityType,
+    activityName,
+    activityUrl
+  };
+  saveData(data);
+  applyConfiguredPresence();
+
+  res.json({
+    success: true,
+    presence: getDashboardPresence()
+  });
+});
+
+app.get('/api/dashboard/invites', requireDashboardAuth, async (req, res) => {
+  try {
+    const data = loadData();
+    res.json({
+      success: true,
+      invites: await getDashboardInviteRows(data, 50),
+      totals: {
+        users: Object.keys(data.invites || {}).length,
+        invites: Object.values(data.invites || {}).reduce((sum, amount) => sum + Number(amount || 0), 0)
+      }
+    });
+  } catch (e) {
+    console.error('dashboard invites error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Invites konnten nicht geladen werden.'
+    });
+  }
+});
+
+app.patch('/api/dashboard/invites/:userId', requireDashboardAuth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  const amount = Number(req.body?.amount);
+
+  if (!/^\d{17,20}$/.test(userId) || !Number.isInteger(amount) || amount < 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'User-ID und Invite-Zahl prüfen.'
+    });
+  }
+
+  setInvites(userId, amount);
+  await updateLeaderboard();
+
+  const data = loadData();
+  res.json({
+    success: true,
+    invites: await getDashboardInviteRows(data, 50)
+  });
+});
+
+app.get('/api/dashboard/stock', requireDashboardAuth, (req, res) => {
+  res.json({
+    success: true,
+    stock: getDashboardStock()
+  });
+});
+
+app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res) => {
+  const itemId = String(req.params.itemId || '').trim();
+  const amount = Number(req.body?.amount);
+  const data = loadData();
+  const item = (data.stockItems || STOCK_ITEMS).find(stockItem => stockItem.id === itemId);
+
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: 'Stock-Item nicht gefunden.'
+    });
+  }
+
+  if (!Number.isInteger(amount) || amount < 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Menge muss eine ganze Zahl ab 0 sein.'
+    });
+  }
+
+  data.stock[itemId] = amount;
+
+  if (typeof req.body?.name === 'string' && req.body.name.trim()) item.name = req.body.name.trim().slice(0, 80);
+  if (typeof req.body?.price === 'string' && req.body.price.trim()) item.price = req.body.price.trim().slice(0, 40);
+  if (typeof req.body?.emoji === 'string' && req.body.emoji.trim()) {
+    item.emoji = req.body.emoji.trim().slice(0, 80);
+    const customMatch = item.emoji.match(/<a?:([^:]+):(\d+)>/);
+    item.emojiId = customMatch ? customMatch[2] : item.emojiId || null;
+  }
+
+  saveData(data);
+  await updateStockPanel();
+
+  res.json({
+    success: true,
+    stock: getDashboardStock(loadData())
+  });
+});
+
+app.get('/api/dashboard/users/:userId', requireDashboardAuth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+
+  if (!/^\d{17,20}$/.test(userId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Ungültige Discord User-ID.'
+    });
+  }
+
+  res.json({
+    success: true,
+    userInfo: await getDmUserInfo(userId)
+  });
 });
 
 app.get('/api/dashboard/threads', requireDashboardAuth, (req, res) => {
@@ -4700,7 +4963,7 @@ app.get('/api/stock', (req, res) => {
   try {
     const data = loadData();
 
-    const stock = STOCK_ITEMS.map(item => ({
+    const stock = (data.stockItems || STOCK_ITEMS).map(item => ({
       id: item.id,
       name: item.name,
       emoji: item.emoji,
