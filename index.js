@@ -739,6 +739,35 @@ function importInvitesFromLeaderboardMessage(data, message) {
   return changed;
 }
 
+function leaderboardMessageHasInviteCounts(message) {
+  const description = message.embeds?.[0]?.description;
+  if (!description) return false;
+
+  return description
+    .split('\n')
+    .some(line =>
+      /<@!?\d{17,20}>/.test(line) &&
+      /(?:\*\*)?\d+(?:\*\*)?\s+invite/i.test(line)
+    );
+}
+
+async function findExistingLeaderboardMessage(channel, preferWithInvites = false) {
+  const messages = await channel.messages.fetch({ limit: 100 });
+  const leaderboards = messages
+    .filter(msg =>
+      msg.author?.id === client.user.id &&
+      msg.embeds?.some(msgEmbed => (msgEmbed.title || '').includes('Invite Leaderboard'))
+    )
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  if (preferWithInvites) {
+    const messageWithInvites = leaderboards.find(leaderboardMessageHasInviteCounts);
+    if (messageWithInvites) return messageWithInvites;
+  }
+
+  return leaderboards.first() || null;
+}
+
 async function updateLeaderboard() {
   try {
     const channel = client.channels.cache.get(LEADERBOARD_CHANNEL_ID);
@@ -746,6 +775,7 @@ async function updateLeaderboard() {
 
     const data = loadData();
     let leaderboardMessage = null;
+    const shouldPreferImportSource = Object.keys(data.invites || {}).length === 0;
 
     if (data.leaderboardMessageId) {
       try {
@@ -753,15 +783,14 @@ async function updateLeaderboard() {
       } catch (e) {}
     }
 
-    if (!leaderboardMessage) {
-      const messages = await channel.messages.fetch({ limit: 100 });
-      leaderboardMessage = messages
-        .filter(msg =>
-          msg.author?.id === client.user.id &&
-          msg.embeds?.some(msgEmbed => (msgEmbed.title || '').includes('Invite Leaderboard'))
-        )
-        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-        .first() || null;
+    if (
+      !leaderboardMessage ||
+      (shouldPreferImportSource && !leaderboardMessageHasInviteCounts(leaderboardMessage))
+    ) {
+      const foundLeaderboardMessage = await findExistingLeaderboardMessage(channel, shouldPreferImportSource);
+      if (foundLeaderboardMessage) {
+        leaderboardMessage = foundLeaderboardMessage;
+      }
     }
 
     if (leaderboardMessage && importInvitesFromLeaderboardMessage(data, leaderboardMessage)) {
