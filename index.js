@@ -2910,7 +2910,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       const status = interaction.options.getString('status');
-      const activityType = interaction.options.getString('aktivität');
+      const activityType = interaction.options.getString('aktivität') || interaction.options.getString('aktivitaet');
       const activityName = interaction.options.getString('text');
       const rawUrl = interaction.options.getString('url');
       const activityUrl = activityType === 'Streaming' ? rawUrl : null;
