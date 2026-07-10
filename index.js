@@ -127,6 +127,7 @@ const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://hugosmp-server-bot-production.up.railway.app/dashboard';
 const GUILD_ID = '1499129162378514524';
 
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
@@ -1229,6 +1230,12 @@ async function registerCommands(guildId) {
   .setDescription('Sendet den HugoSMP Market Website-Post.')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('dashboard')
+      .setDescription('Schickt dir den Bot-Dashboard-Link.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
     
     new SlashCommandBuilder()
       .setName('getorder')
@@ -2029,6 +2036,19 @@ client.on('interactionCreate', async interaction => {
   });
 }
     
+    if (interaction.commandName === 'dashboard') {
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'Dafür brauchst du Administrator-Rechte.', ephemeral: true });
+      }
+
+      return interaction.reply({
+        content:
+          `Dashboard: ${DASHBOARD_URL}\n\n` +
+          'Login ist dein `DASHBOARD_PASSWORD` aus Railway.',
+        ephemeral: true
+      });
+    }
+
     if (interaction.commandName === 'say') {
       const text = interaction.options.getString('text');
 
