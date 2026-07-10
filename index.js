@@ -1377,45 +1377,6 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     new SlashCommandBuilder()
-      .setName('präsenz')
-      .setDescription('Bot-Status und Aktivität ändern.')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addStringOption(o =>
-        o.setName('status')
-          .setDescription('Online-Status')
-          .setRequired(true)
-          .addChoices(
-            { name: 'Online', value: 'online' },
-            { name: 'Abwesend', value: 'idle' },
-            { name: 'Nicht stören', value: 'dnd' },
-            { name: 'Offline anzeigen', value: 'offline' }
-          )
-      )
-      .addStringOption(o =>
-        o.setName('aktivität')
-          .setDescription('Was Discord neben dem Bot anzeigen soll')
-          .setRequired(true)
-          .addChoices(
-            { name: 'Spielt', value: 'Playing' },
-            { name: 'Schaut', value: 'Watching' },
-            { name: 'Hört', value: 'Listening' },
-            { name: 'Streamt', value: 'Streaming' },
-            { name: 'Tritt an', value: 'Competing' }
-          )
-      )
-      .addStringOption(o =>
-        o.setName('text')
-          .setDescription('Text neben dem Status')
-          .setRequired(true)
-          .setMaxLength(128)
-      )
-      .addStringOption(o =>
-        o.setName('url')
-          .setDescription('Nur für Streaming: Twitch/YouTube URL')
-      )
-      .toJSON(),
-
-    new SlashCommandBuilder()
       .setName('setinvites')
       .setDescription('Set invites manually. Admin only.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -2943,7 +2904,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    if (interaction.commandName === 'botstatus' || interaction.commandName === 'präsenz') {
+    if (interaction.commandName === 'botstatus') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({ content: 'Dafür brauchst du Administrator-Rechte.', ephemeral: true });
       }
