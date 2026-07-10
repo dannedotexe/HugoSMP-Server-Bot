@@ -4262,6 +4262,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '1mb' }));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 function getDashboardToken(req) {
   const auth = req.get('authorization') || '';

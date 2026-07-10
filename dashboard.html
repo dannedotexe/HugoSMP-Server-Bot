@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HugoSMP Bot Dashboard</title>
+  <link rel="icon" href="/assets/dashboard-icon.jpg">
   <style>
     :root {
       color-scheme: dark;
@@ -113,11 +114,10 @@
       width: 34px;
       height: 34px;
       border-radius: 7px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #061015;
-      font-weight: 900;
+      display: block;
+      object-fit: cover;
+      border: 1px solid #3b4c60;
+      background: #0b1017;
     }
 
     .brand strong { display: block; line-height: 1.1; }
@@ -377,7 +377,7 @@
   <section id="appView" class="hidden">
     <header class="topbar">
       <div class="brand">
-        <div class="mark">DM</div>
+        <img class="mark" src="/assets/dashboard-icon.jpg" alt="">
         <div>
           <strong>HugoSMP Bot Dashboard</strong>
           <span id="botName">Bot startet...</span>
@@ -671,6 +671,12 @@
       }
     }
 
+    function sendOnEnter(event, sendFn) {
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      event.preventDefault();
+      sendFn();
+    }
+
     async function login(event) {
       event.preventDefault();
       const password = $('passwordInput').value;
@@ -721,6 +727,8 @@
     $('refreshBtn').addEventListener('click', () => refreshDashboard().catch(error => showToast(error.message, true)));
     $('replyBtn').addEventListener('click', sendReply);
     $('newSendBtn').addEventListener('click', sendNewDm);
+    $('replyText').addEventListener('keydown', event => sendOnEnter(event, sendReply));
+    $('newMessage').addEventListener('keydown', event => sendOnEnter(event, sendNewDm));
     $('logoutBtn').addEventListener('click', () => {
       localStorage.removeItem('hugoDmDashboardToken');
       location.reload();
