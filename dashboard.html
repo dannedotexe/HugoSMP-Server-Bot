@@ -721,12 +721,12 @@
     }
 
     .stock-row {
-      grid-template-columns: minmax(220px, 1.3fr) minmax(130px, .7fr) 96px 90px;
+      grid-template-columns: minmax(220px, 1fr) minmax(270px, 1.35fr) 96px 96px;
     }
 
     .stock-edit {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -894,6 +894,10 @@
       }
 
       .composer, .stock-row, .management-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .stock-edit {
         grid-template-columns: 1fr;
       }
 
@@ -1334,7 +1338,7 @@
 
     const state = {
       token: localStorage.getItem('hugoDmDashboardToken') || '',
-      currentView: 'overview',
+      currentView: localStorage.getItem('hugoDashboardCurrentView') || 'overview',
       threads: [],
       selectedUserId: null,
       selectedThread: null,
@@ -1353,7 +1357,8 @@
       orderStatus: 'active',
       staff: [],
       shopStock: [],
-      shopChannels: []
+      shopChannels: [],
+      pending: {}
     };
 
     const $ = id => document.getElementById(id);
@@ -1365,6 +1370,26 @@
       toast.classList.remove('hidden');
       clearTimeout(showToast.timer);
       showToast.timer = setTimeout(() => toast.classList.add('hidden'), 3200);
+    }
+
+    function isEditingElement(element = document.activeElement) {
+      if (!element) return false;
+      const tag = element.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable;
+    }
+
+    function shouldPauseAutoRefresh() {
+      return isEditingElement() || Object.keys(state.pending).length > 0;
+    }
+
+    async function withPending(key, action) {
+      if (state.pending[key]) return;
+      state.pending[key] = true;
+      try {
+        return await action();
+      } finally {
+        delete state.pending[key];
+      }
     }
 
     async function api(path, options = {}) {
@@ -1776,49 +1801,57 @@
     }
 
     async function sendTicketMessage() {
-      if (!state.selectedTicketId) return;
-      const content = $('ticketMessageText').value.trim();
-      if (!content) return;
+      return withPending(`ticketMessage:${state.selectedTicketId || 'none'}`, async () => {
+        if (!state.selectedTicketId) return;
+        const content = $('ticketMessageText').value.trim();
+        if (!content) return;
 
-      const data = await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/message`, {
-        method: 'POST',
-        body: { content }
+        const data = await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/message`, {
+          method: 'POST',
+          body: { content }
+        });
+        $('ticketMessageText').value = '';
+        renderTicketDetail(data);
+        showToast('Nachricht ins Ticket gesendet.');
       });
-      $('ticketMessageText').value = '';
-      renderTicketDetail(data);
-      showToast('Nachricht ins Ticket gesendet.');
     }
 
     async function saveTicketNote() {
-      if (!state.selectedTicketId) return;
-      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/meta`, {
-        method: 'PATCH',
-        body: { note: $('ticketNote').value }
+      return withPending(`ticketNote:${state.selectedTicketId || 'none'}`, async () => {
+        if (!state.selectedTicketId) return;
+        await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/meta`, {
+          method: 'PATCH',
+          body: { note: $('ticketNote').value }
+        });
+        await selectTicket(state.selectedTicketId);
+        await loadTickets();
+        showToast('Ticket-Notiz gespeichert.');
       });
-      await selectTicket(state.selectedTicketId);
-      await loadTickets();
-      showToast('Ticket-Notiz gespeichert.');
     }
 
     async function closeSelectedTicket() {
-      if (!state.selectedTicketId) return;
-      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/close`, {
-        method: 'POST',
-        body: { reason: 'Per Dashboard geschlossen' }
+      return withPending(`ticketClose:${state.selectedTicketId || 'none'}`, async () => {
+        if (!state.selectedTicketId) return;
+        await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/close`, {
+          method: 'POST',
+          body: { reason: 'Per Dashboard geschlossen' }
+        });
+        await loadTickets();
+        await selectTicket(state.selectedTicketId);
+        showToast('Ticket geschlossen.');
       });
-      await loadTickets();
-      await selectTicket(state.selectedTicketId);
-      showToast('Ticket geschlossen.');
     }
 
     async function reopenSelectedTicket() {
-      if (!state.selectedTicketId) return;
-      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/reopen`, {
-        method: 'POST'
+      return withPending(`ticketReopen:${state.selectedTicketId || 'none'}`, async () => {
+        if (!state.selectedTicketId) return;
+        await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/reopen`, {
+          method: 'POST'
+        });
+        await loadTickets();
+        await selectTicket(state.selectedTicketId);
+        showToast('Ticket wieder geöffnet.');
       });
-      await loadTickets();
-      await selectTicket(state.selectedTicketId);
-      showToast('Ticket wieder geöffnet.');
     }
 
     async function downloadTicketTranscript() {
@@ -1936,55 +1969,63 @@
     }
 
     async function saveOrderStatus() {
-      if (!state.selectedOrderId) return;
-      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}`, {
-        method: 'PATCH',
-        body: {
-          status: $('orderStatusSelect').value,
-          note: $('orderNote').value
-        }
+      return withPending(`orderSave:${state.selectedOrderId || 'none'}`, async () => {
+        if (!state.selectedOrderId) return;
+        const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}`, {
+          method: 'PATCH',
+          body: {
+            status: $('orderStatusSelect').value,
+            note: $('orderNote').value
+          }
+        });
+        renderOrderDetail(data);
+        await loadOrders();
+        showToast('Bestellung gespeichert.');
       });
-      renderOrderDetail(data);
-      await loadOrders();
-      showToast('Bestellung gespeichert.');
     }
 
     async function completeOrder() {
-      if (!state.selectedOrderId) return;
-      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/complete`, {
-        method: 'POST'
+      return withPending(`orderComplete:${state.selectedOrderId || 'none'}`, async () => {
+        if (!state.selectedOrderId) return;
+        const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/complete`, {
+          method: 'POST'
+        });
+        renderOrderDetail(data);
+        await loadOrders();
+        showToast('Bestellung fertig markiert und Bewertungsbutton gesendet.');
       });
-      renderOrderDetail(data);
-      await loadOrders();
-      showToast('Bestellung fertig markiert und Bewertungsbutton gesendet.');
     }
 
     async function assignOrder() {
-      if (!state.selectedOrderId) return;
-      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/assign`, {
-        method: 'POST',
-        body: { staffId: $('orderAssigneeSelect').value }
+      return withPending(`orderAssign:${state.selectedOrderId || 'none'}`, async () => {
+        if (!state.selectedOrderId) return;
+        const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/assign`, {
+          method: 'POST',
+          body: { staffId: $('orderAssigneeSelect').value }
+        });
+        renderOrderDetail(data);
+        await loadOrders();
+        showToast($('orderAssigneeSelect').value ? 'Bestellung zugewiesen.' : 'Bearbeiter entfernt.');
       });
-      renderOrderDetail(data);
-      await loadOrders();
-      showToast($('orderAssigneeSelect').value ? 'Bestellung zugewiesen.' : 'Bearbeiter entfernt.');
     }
 
     async function sendOrderInvoiceFromDashboard() {
-      if (!state.selectedOrderId) return;
-      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/invoice`, {
-        method: 'POST',
-        body: {
-          itemsText: $('invoiceItems').value,
-          total: $('invoiceTotal').value,
-          payment: $('invoicePayment').value,
-          ingame: $('invoiceIngame').value,
-          note: $('invoiceNote').value
-        }
+      return withPending(`orderInvoice:${state.selectedOrderId || 'none'}`, async () => {
+        if (!state.selectedOrderId) return;
+        const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/invoice`, {
+          method: 'POST',
+          body: {
+            itemsText: $('invoiceItems').value,
+            total: $('invoiceTotal').value,
+            payment: $('invoicePayment').value,
+            ingame: $('invoiceIngame').value,
+            note: $('invoiceNote').value
+          }
+        });
+        renderOrderDetail(data);
+        await loadOrders();
+        showToast('Rechnung ins Ticket gesendet.');
       });
-      renderOrderDetail(data);
-      await loadOrders();
-      showToast('Rechnung ins Ticket gesendet.');
     }
 
     function openSelectedOrder() {
@@ -1992,14 +2033,16 @@
     }
 
     async function closeSelectedOrder() {
-      if (!state.selectedOrderId) return;
-      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedOrderId)}/close`, {
-        method: 'POST',
-        body: { reason: 'Bestellung per Dashboard geschlossen' }
+      return withPending(`orderClose:${state.selectedOrderId || 'none'}`, async () => {
+        if (!state.selectedOrderId) return;
+        await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedOrderId)}/close`, {
+          method: 'POST',
+          body: { reason: 'Bestellung per Dashboard geschlossen' }
+        });
+        await loadOrders();
+        await selectOrder(state.selectedOrderId);
+        showToast('Order-Ticket geschlossen.');
       });
-      await loadOrders();
-      await selectOrder(state.selectedOrderId);
-      showToast('Order-Ticket geschlossen.');
     }
 
     async function loadShop() {
@@ -2029,44 +2072,48 @@
 
     async function postShopPanel(event) {
       event.preventDefault();
-      const itemIds = [...$('shopItemList').querySelectorAll('input[type="checkbox"]:checked')]
-        .map(input => input.value);
+      return withPending('shopPanelPost', async () => {
+        const itemIds = [...$('shopItemList').querySelectorAll('input[type="checkbox"]:checked')]
+          .map(input => input.value);
 
-      const data = await api('/api/dashboard/shop/panel', {
-        method: 'POST',
-        body: {
-          channelId: $('shopPanelChannel').value,
-          title: $('shopPanelTitle').value,
-          description: $('shopPanelDescription').value,
-          itemIds,
-          includeSale: $('shopPanelIncludeSale').checked
-        }
+        const data = await api('/api/dashboard/shop/panel', {
+          method: 'POST',
+          body: {
+            channelId: $('shopPanelChannel').value,
+            title: $('shopPanelTitle').value,
+            description: $('shopPanelDescription').value,
+            itemIds,
+            includeSale: $('shopPanelIncludeSale').checked
+          }
+        });
+
+        showToast('Shop-Panel gepostet.');
+        if (data.messageUrl) window.open(data.messageUrl, '_blank', 'noreferrer');
       });
-
-      showToast('Shop-Panel gepostet.');
-      if (data.messageUrl) window.open(data.messageUrl, '_blank', 'noreferrer');
     }
 
     async function postSale(event) {
       event.preventDefault();
-      const selected = state.shopStock.find(item => item.id === $('saleItem').value);
-      const data = await api('/api/dashboard/shop/sale', {
-        method: 'POST',
-        body: {
-          channelId: $('saleChannel').value,
-          itemId: $('saleItem').value,
-          itemName: selected?.name || '',
-          title: $('saleTitle').value,
-          discount: $('saleDiscount').value,
-          until: $('saleUntil').value,
-          description: $('saleDescription').value,
-          mentionDeals: $('saleMentionDeals').checked
-        }
-      });
+      return withPending('shopSalePost', async () => {
+        const selected = state.shopStock.find(item => item.id === $('saleItem').value);
+        const data = await api('/api/dashboard/shop/sale', {
+          method: 'POST',
+          body: {
+            channelId: $('saleChannel').value,
+            itemId: $('saleItem').value,
+            itemName: selected?.name || '',
+            title: $('saleTitle').value,
+            discount: $('saleDiscount').value,
+            until: $('saleUntil').value,
+            description: $('saleDescription').value,
+            mentionDeals: $('saleMentionDeals').checked
+          }
+        });
 
-      showToast('Angebot gepostet.');
-      if (data.offer?.messageUrl) window.open(data.offer.messageUrl, '_blank', 'noreferrer');
-      await loadShop();
+        showToast('Angebot gepostet.');
+        if (data.offer?.messageUrl) window.open(data.offer.messageUrl, '_blank', 'noreferrer');
+        await loadShop();
+      });
     }
 
     async function loadOverview() {
@@ -2197,6 +2244,7 @@
         const edits = document.createElement('div');
         edits.className = 'stock-edit';
         edits.innerHTML = `
+          <input id="stockEmoji_${item.id}" value="${escapeHtml(item.emoji || '')}" aria-label="Emoji">
           <input id="stockName_${item.id}" value="${escapeHtml(item.name)}" aria-label="Name">
           <input id="stockPrice_${item.id}" value="${escapeHtml(item.price)}" aria-label="Preis">
         `;
@@ -2221,21 +2269,24 @@
     }
 
     async function saveStockItem(itemId) {
-      try {
-        const data = await api(`/api/dashboard/stock/${encodeURIComponent(itemId)}`, {
-          method: 'PATCH',
-          body: {
-            name: $(`stockName_${itemId}`).value,
-            price: $(`stockPrice_${itemId}`).value,
-            amount: Number($(`stockAmount_${itemId}`).value)
-          }
-        });
-        state.stock = data.stock || [];
-        renderStock();
-        showToast('Stock gespeichert und Discord-Panel aktualisiert.');
-      } catch (error) {
-        showToast(error.message, true);
-      }
+      return withPending(`stock:${itemId}`, async () => {
+        try {
+          const data = await api(`/api/dashboard/stock/${encodeURIComponent(itemId)}`, {
+            method: 'PATCH',
+            body: {
+              emoji: $(`stockEmoji_${itemId}`).value,
+              name: $(`stockName_${itemId}`).value,
+              price: $(`stockPrice_${itemId}`).value,
+              amount: Number($(`stockAmount_${itemId}`).value)
+            }
+          });
+          state.stock = data.stock || [];
+          renderStock();
+          showToast('Stock gespeichert und Discord-Panel aktualisiert.');
+        } catch (error) {
+          showToast(error.message, true);
+        }
+      });
     }
 
     async function lookupUser(event) {
@@ -2560,96 +2611,104 @@
     }
 
     async function sendReply() {
-      if (!state.selectedUserId) return;
-      $('replyBtn').disabled = true;
-      try {
-        const content = $('replyText').value.trim();
-        const attachments = await readAttachments('replyFiles');
-        if (!content && !attachments.length) return;
+      return withPending(`dmReply:${state.selectedUserId || 'none'}`, async () => {
+        if (!state.selectedUserId) return;
+        $('replyBtn').disabled = true;
+        try {
+          const content = $('replyText').value.trim();
+          const attachments = await readAttachments('replyFiles');
+          if (!content && !attachments.length) return;
 
-        const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}/messages`, {
-          method: 'POST',
-          body: { content, attachments }
-        });
-        $('replyText').value = '';
-        $('replyFiles').value = '';
-        updateFileList('replyFiles', 'replyFileList');
-        setSelectedHeader(data.thread);
-        renderMessages(data.thread);
-        renderUserInfo('dmUserInfo', data.thread?.userInfo);
-        await loadThreads();
-        showToast('DM gesendet.');
-      } catch (error) {
-        showToast(error.message, true);
-      } finally {
-        $('replyBtn').disabled = !state.selectedUserId;
-      }
+          const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}/messages`, {
+            method: 'POST',
+            body: { content, attachments }
+          });
+          $('replyText').value = '';
+          $('replyFiles').value = '';
+          updateFileList('replyFiles', 'replyFileList');
+          setSelectedHeader(data.thread);
+          renderMessages(data.thread);
+          renderUserInfo('dmUserInfo', data.thread?.userInfo);
+          await loadThreads();
+          showToast('DM gesendet.');
+        } catch (error) {
+          showToast(error.message, true);
+        } finally {
+          $('replyBtn').disabled = !state.selectedUserId;
+        }
+      });
     }
 
     async function sendNewDm() {
-      $('newSendBtn').disabled = true;
-      try {
-        const userId = $('newUserId').value.trim();
-        const content = $('newMessage').value.trim();
-        const attachments = await readAttachments('newFiles');
-        if (!userId || (!content && !attachments.length)) {
-          return showToast('User-ID und Nachricht oder Anhang eintragen.', true);
-        }
+      return withPending('dmNew', async () => {
+        $('newSendBtn').disabled = true;
+        try {
+          const userId = $('newUserId').value.trim();
+          const content = $('newMessage').value.trim();
+          const attachments = await readAttachments('newFiles');
+          if (!userId || (!content && !attachments.length)) {
+            return showToast('User-ID und Nachricht oder Anhang eintragen.', true);
+          }
 
-        const data = await api('/api/dashboard/dm', {
-          method: 'POST',
-          body: { userId, content, attachments }
-        });
-        $('newMessage').value = '';
-        $('newFiles').value = '';
-        updateFileList('newFiles', 'newFileList');
-        state.selectedUserId = userId;
-        setSelectedHeader(data.thread);
-        renderMessages(data.thread);
-        renderUserInfo('dmUserInfo', data.thread?.userInfo);
-        await loadThreads();
-        showToast('DM gesendet.');
-      } catch (error) {
-        showToast(error.message, true);
-      } finally {
-        $('newSendBtn').disabled = false;
-      }
+          const data = await api('/api/dashboard/dm', {
+            method: 'POST',
+            body: { userId, content, attachments }
+          });
+          $('newMessage').value = '';
+          $('newFiles').value = '';
+          updateFileList('newFiles', 'newFileList');
+          state.selectedUserId = userId;
+          setSelectedHeader(data.thread);
+          renderMessages(data.thread);
+          renderUserInfo('dmUserInfo', data.thread?.userInfo);
+          await loadThreads();
+          showToast('DM gesendet.');
+        } catch (error) {
+          showToast(error.message, true);
+        } finally {
+          $('newSendBtn').disabled = false;
+        }
+      });
     }
 
     async function toggleArchive() {
-      if (!state.selectedUserId || !state.selectedThread) return;
-      const archived = !state.selectedThread.archived;
+      return withPending(`dmArchive:${state.selectedUserId || 'none'}`, async () => {
+        if (!state.selectedUserId || !state.selectedThread) return;
+        const archived = !state.selectedThread.archived;
 
-      try {
-        const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`, {
-          method: 'PATCH',
-          body: { archived }
-        });
-        setSelectedHeader(data.thread);
-        renderMessages(data.thread);
-        renderUserInfo('dmUserInfo', data.thread?.userInfo);
-        await loadThreads();
-        showToast(archived ? 'Thread archiviert.' : 'Thread wiederhergestellt.');
-      } catch (error) {
-        showToast(error.message, true);
-      }
+        try {
+          const data = await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`, {
+            method: 'PATCH',
+            body: { archived }
+          });
+          setSelectedHeader(data.thread);
+          renderMessages(data.thread);
+          renderUserInfo('dmUserInfo', data.thread?.userInfo);
+          await loadThreads();
+          showToast(archived ? 'Thread archiviert.' : 'Thread wiederhergestellt.');
+        } catch (error) {
+          showToast(error.message, true);
+        }
+      });
     }
 
     async function deleteThread() {
-      if (!state.selectedUserId) return;
-      const ok = confirm('Diesen DM-Thread wirklich löschen? Neue DMs vom User legen später wieder einen Thread an.');
-      if (!ok) return;
+      return withPending(`dmDelete:${state.selectedUserId || 'none'}`, async () => {
+        if (!state.selectedUserId) return;
+        const ok = confirm('Diesen DM-Thread wirklich löschen? Neue DMs vom User legen später wieder einen Thread an.');
+        if (!ok) return;
 
-      try {
-        await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`, {
-          method: 'DELETE'
-        });
-        clearSelection();
-        await loadThreads();
-        showToast('Thread gelöscht.');
-      } catch (error) {
-        showToast(error.message, true);
-      }
+        try {
+          await api(`/api/dashboard/threads/${encodeURIComponent(state.selectedUserId)}`, {
+            method: 'DELETE'
+          });
+          clearSelection();
+          await loadThreads();
+          showToast('Thread gelöscht.');
+        } catch (error) {
+          showToast(error.message, true);
+        }
+      });
     }
 
     function sendOnEnter(event, sendFn) {
@@ -2667,11 +2726,15 @@
       if (state.currentView === 'invites') return loadInvites();
       if (state.currentView === 'stock') return loadStock();
       if (state.currentView === 'shop') return loadShop();
+      if (state.currentView === 'users') return Promise.resolve();
       return Promise.resolve();
     }
 
     async function showView(view) {
+      const targetId = view === 'dms' ? 'dmView' : `${view}View`;
+      if (!$(targetId)) view = 'overview';
       state.currentView = view;
+      localStorage.setItem('hugoDashboardCurrentView', view);
       document.querySelectorAll('.dashboard-view').forEach(section => {
         section.classList.toggle('hidden', section.id !== `${view}View` && !(view === 'dms' && section.id === 'dmView'));
       });
@@ -2694,7 +2757,7 @@
         localStorage.setItem('hugoDmDashboardToken', password);
         $('loginView').classList.add('hidden');
         $('appView').classList.remove('hidden');
-        await showView('overview');
+        await showView(state.currentView || 'overview');
       } catch (error) {
         showToast(error.message, true);
       }
@@ -2713,7 +2776,7 @@
 
         if (state.token) {
           $('appView').classList.remove('hidden');
-          await showView('overview');
+          await showView(state.currentView || 'overview');
         } else {
           $('loginView').classList.remove('hidden');
         }
@@ -2802,6 +2865,7 @@
 
     setInterval(() => {
       if (!state.token || $('appView').classList.contains('hidden')) return;
+      if (shouldPauseAutoRefresh()) return;
       loadCurrentView().catch(() => {});
     }, 15000);
 

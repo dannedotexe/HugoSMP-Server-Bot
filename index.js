@@ -691,7 +691,7 @@ function buildOrderTicketButtons() {
     new ButtonBuilder()
       .setCustomId('order_assign_self')
       .setLabel('Übernehmen')
-      .setEmoji('🧑‍💼')
+      .setEmoji('📌')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('close_ticket')
@@ -874,7 +874,8 @@ async function sendOrderInvoice(channel, invoice, { automatic = false } = {}) {
     content: invoice.ownerId
       ? `<@${invoice.ownerId}> ${automatic ? 'hier ist deine Bestellübersicht:' : 'hier ist deine Rechnung:'}`
       : undefined,
-    embeds: [buildOrderInvoiceEmbed(invoice, { title: automatic ? 'Bestellübersicht' : 'Rechnung' })]
+    embeds: [buildOrderInvoiceEmbed(invoice, { title: automatic ? 'Bestellübersicht' : 'Rechnung' })],
+    allowedMentions: invoice.ownerId ? { users: [invoice.ownerId] } : undefined
   });
 
   updateDashboardOrderMeta(channel.id, {
@@ -982,11 +983,32 @@ function stockStatusText(amount) {
   return `${amount} auf Lager`;
 }
 
+function joinEmbedLines(lines, limit = 3600) {
+  const output = [];
+  let length = 0;
+
+  for (const line of lines) {
+    const nextLength = length + line.length + (output.length ? 2 : 0);
+    if (nextLength > limit) {
+      output.push('... weitere Items im Stock-Tab');
+      break;
+    }
+    output.push(line);
+    length = nextLength;
+  }
+
+  return output.join('\n\n') || 'Keine Items ausgewählt.';
+}
+
 function getLatestShopOffer(data = loadData()) {
   return Array.isArray(data.shopOffers) && data.shopOffers.length ? data.shopOffers[0] : null;
 }
 
 function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data = loadData()) {
+  if (Array.isArray(itemIds) && itemIds.length === 0) {
+    throw makeDashboardError('Wähle mindestens ein Item aus.', 400);
+  }
+
   const wanted = Array.isArray(itemIds) && itemIds.length
     ? new Set(itemIds.map(String))
     : null;
@@ -1008,7 +1030,7 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
     .setDescription(
       `${cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500)}\n\n` +
       `${offer ? `**Aktuelles Angebot:** ${offer.title} - ${offer.discount}\n\n` : ''}` +
-      lines.join('\n\n')
+      joinEmbedLines(lines)
     )
     .setFooter({ text: 'Bestellung per Button starten' })
     .setTimestamp();
@@ -1207,9 +1229,10 @@ async function sendOrderReviewRequest(channel, ownerId, orderId) {
     content:
       `✅ Bestellung für <@${ownerId}> wurde als **fertig** markiert!\n` +
       `**Order-ID:** ${reviewOrderId}\n\n` +
-      `<@${ownerId}>, bitte bewertete den Shop!\n\n` +
+      `<@${ownerId}>, bitte bewerte den Shop!\n\n` +
       `> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
-    components: [row]
+    components: [row],
+    allowedMentions: { users: [ownerId] }
   });
 
   updateDashboardOrderMeta(channel.id, {
@@ -3912,7 +3935,7 @@ client.on('interactionCreate', async interaction => {
         content:
           `✅ Bestellung für ${user} wurde als **fertig** markiert!\n` +
           `**Order-ID:** ${orderId}\n\n` +
-          `${user}, bitte bewertete den Shop!\n\n` +
+          `${user}, bitte bewerte den Shop!\n\n` +
           `> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
         components: [row]
       });
@@ -5437,10 +5460,10 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
 
   if (typeof req.body?.name === 'string' && req.body.name.trim()) item.name = req.body.name.trim().slice(0, 80);
   if (typeof req.body?.price === 'string' && req.body.price.trim()) item.price = req.body.price.trim().slice(0, 40);
-  if (typeof req.body?.emoji === 'string' && req.body.emoji.trim()) {
+  if (typeof req.body?.emoji === 'string') {
     item.emoji = req.body.emoji.trim().slice(0, 80);
     const customMatch = item.emoji.match(/<a?:([^:]+):(\d+)>/);
-    item.emojiId = customMatch ? customMatch[2] : item.emojiId || null;
+    item.emojiId = customMatch ? customMatch[2] : null;
   }
 
   saveData(data);
@@ -5795,12 +5818,14 @@ app.post('/api/dashboard/orders/:channelId/assign', requireDashboardAuth, async 
     const currentMeta = getOrderDashboardMeta(data, channelId);
 
     if (!staffId) {
-      updateDashboardOrderMeta(channelId, {
-        assigneeId: null,
-        assigneeName: null
-      });
+      if (currentMeta.assigneeId) {
+        updateDashboardOrderMeta(channelId, {
+          assigneeId: null,
+          assigneeName: null
+        });
 
-      await channel.send('📌 Bearbeiter wurde entfernt.').catch(() => {});
+        await channel.send('📌 Bearbeiter wurde entfernt.').catch(() => {});
+      }
 
       return res.json({
         success: true,
@@ -5813,13 +5838,21 @@ app.post('/api/dashboard/orders/:channelId/assign', requireDashboardAuth, async 
       throw makeDashboardError('Dieser User ist kein Staff-Mitglied.', 400);
     }
 
+    const assigneeName = getUserDisplayName(member.user, member.id);
+    const changedAssignee = currentMeta.assigneeId !== member.id;
+
     updateDashboardOrderMeta(channelId, {
       assigneeId: member.id,
-      assigneeName: getUserDisplayName(member.user, member.id),
+      assigneeName,
       status: currentMeta.status === 'offen' ? 'bearbeitung' : currentMeta.status
     });
 
-    await channel.send(`📌 <@${member.id}> bearbeitet jetzt Bestellung #${getTicketOrderId(channel)}.`).catch(() => {});
+    if (changedAssignee) {
+      await channel.send({
+        content: `📌 <@${member.id}> bearbeitet jetzt Bestellung #${getTicketOrderId(channel)}.`,
+        allowedMentions: { users: [member.id] }
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
