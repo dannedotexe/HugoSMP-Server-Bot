@@ -262,6 +262,11 @@
       background: #0d151f;
     }
 
+    .data-row.active {
+      border-color: #2d8158;
+      background: #10241b;
+    }
+
     .data-main {
       min-width: 0;
       display: flex;
@@ -725,6 +730,75 @@
       gap: 8px;
     }
 
+    .management-layout {
+      display: grid;
+      grid-template-columns: 380px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar select,
+    .toolbar input {
+      width: auto;
+      min-width: 150px;
+    }
+
+    .detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+
+    .message-log {
+      max-height: 430px;
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .log-message {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      background: #0d151f;
+    }
+
+    .log-message strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .log-message time {
+      color: var(--muted);
+      font-size: 11px;
+      margin-left: 6px;
+      font-weight: 400;
+    }
+
+    .embed-preview {
+      margin-top: 8px;
+      border-left: 3px solid var(--accent-blue);
+      padding: 7px 9px;
+      background: #101a25;
+      color: #dbe7f3;
+      font-size: 13px;
+    }
+
+    .embed-preview b {
+      display: block;
+      margin-bottom: 4px;
+    }
+
     .toast {
       position: fixed;
       right: 16px;
@@ -783,7 +857,7 @@
         flex-direction: column;
       }
 
-      .composer, .stock-row {
+      .composer, .stock-row, .management-layout {
         grid-template-columns: 1fr;
       }
 
@@ -816,6 +890,8 @@
       <nav class="nav" aria-label="Dashboard Bereiche">
         <button class="active" data-view="overview" type="button">Übersicht</button>
         <button data-view="dms" type="button">DMs</button>
+        <button data-view="tickets" type="button">Tickets</button>
+        <button data-view="orders" type="button">Bestellungen</button>
         <button data-view="presence" type="button">Bot-Status</button>
         <button data-view="invites" type="button">Invites</button>
         <button data-view="stock" type="button">Stock</button>
@@ -903,6 +979,109 @@
           <h2>User-Info</h2>
           <div id="dmUserInfo" class="empty">Kein User ausgewählt.</div>
         </aside>
+      </main>
+
+      <main id="ticketsView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Tickets</h1>
+            <p>Support-, Reward- und Bestell-Tickets lesen, beantworten, schließen oder wieder öffnen.</p>
+          </div>
+          <div class="toolbar">
+            <select id="ticketStateFilter">
+              <option value="open">Offen</option>
+              <option value="closed">Geschlossen</option>
+              <option value="all">Alle</option>
+            </select>
+            <select id="ticketTypeFilter">
+              <option value="all">Alle Typen</option>
+              <option value="support">Support</option>
+              <option value="bestellung">Bestellung</option>
+              <option value="reward">Reward</option>
+            </select>
+            <button id="ticketsRefreshBtn" class="small" type="button">Refresh</button>
+          </div>
+        </div>
+        <section class="management-layout">
+          <div class="panel">
+            <h2>Ticket-Liste</h2>
+            <div id="ticketList" class="row-list"></div>
+          </div>
+          <div class="panel">
+            <h2 id="ticketDetailTitle">Kein Ticket ausgewählt</h2>
+            <div id="ticketDetailMeta" class="row-list"></div>
+            <div class="detail-actions">
+              <button id="ticketOpenBtn" class="small" type="button" disabled>Discord öffnen</button>
+              <button id="ticketCloseBtn" class="small danger" type="button" disabled>Schließen</button>
+              <button id="ticketReopenBtn" class="small primary" type="button" disabled>Wieder öffnen</button>
+              <button id="ticketTranscriptBtn" class="small" type="button" disabled>Transcript</button>
+            </div>
+            <label>Ticket-Notiz
+              <textarea id="ticketNote" placeholder="Interne Notiz fürs Dashboard" disabled></textarea>
+            </label>
+            <div style="height: 8px"></div>
+            <button id="ticketNoteSaveBtn" class="small" type="button" disabled>Notiz speichern</button>
+            <div style="height: 12px"></div>
+            <label>Nachricht ins Ticket
+              <textarea id="ticketMessageText" placeholder="Antwort in den Ticket-Channel schreiben" disabled></textarea>
+            </label>
+            <div style="height: 8px"></div>
+            <button id="ticketSendMessageBtn" class="primary small" type="button" disabled>Senden</button>
+            <div style="height: 14px"></div>
+            <h2>Letzte Nachrichten</h2>
+            <div id="ticketMessages" class="message-log"></div>
+          </div>
+        </section>
+      </main>
+
+      <main id="ordersView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Bestellungen</h1>
+            <p>Order-Tickets verwalten, Status setzen und Bewertung anfordern.</p>
+          </div>
+          <div class="toolbar">
+            <select id="orderStatusFilter">
+              <option value="active">Aktiv</option>
+              <option value="done">Fertig</option>
+              <option value="cancelled">Storniert</option>
+              <option value="all">Alle</option>
+            </select>
+            <button id="ordersRefreshBtn" class="small" type="button">Refresh</button>
+          </div>
+        </div>
+        <section class="management-layout">
+          <div class="panel">
+            <h2>Order-Liste</h2>
+            <div id="orderList" class="row-list"></div>
+          </div>
+          <div class="panel">
+            <h2 id="orderDetailTitle">Keine Bestellung ausgewählt</h2>
+            <div id="orderDetailMeta" class="row-list"></div>
+            <div class="form-grid">
+              <label>Status
+                <select id="orderStatusSelect" disabled>
+                  <option value="offen">Offen</option>
+                  <option value="bearbeitung">In Bearbeitung</option>
+                  <option value="bezahlt">Bezahlt</option>
+                  <option value="fertig">Fertig</option>
+                  <option value="storniert">Storniert</option>
+                </select>
+              </label>
+              <label class="wide">Order-Notiz
+                <textarea id="orderNote" placeholder="Interne Notiz zur Bestellung" disabled></textarea>
+              </label>
+            </div>
+            <div class="detail-actions">
+              <button id="orderSaveBtn" class="small" type="button" disabled>Status speichern</button>
+              <button id="orderCompleteBtn" class="small primary" type="button" disabled>Fertig + Bewertung</button>
+              <button id="orderOpenBtn" class="small" type="button" disabled>Discord öffnen</button>
+              <button id="orderCloseBtn" class="small danger" type="button" disabled>Ticket schließen</button>
+            </div>
+            <h2>Letzte Nachrichten</h2>
+            <div id="orderMessages" class="message-log"></div>
+          </div>
+        </section>
       </main>
 
       <main id="presenceView" class="workspace dashboard-view hidden">
@@ -1024,7 +1203,16 @@
       selectedThread: null,
       filter: 'active',
       search: '',
-      stock: []
+      stock: [],
+      tickets: [],
+      selectedTicketId: null,
+      selectedTicket: null,
+      ticketState: 'open',
+      ticketType: 'all',
+      orders: [],
+      selectedOrderId: null,
+      selectedOrder: null,
+      orderStatus: 'active'
     };
 
     const $ = id => document.getElementById(id);
@@ -1229,6 +1417,328 @@
       s.textContent = sub || '';
       metric.append(l, v, s);
       return metric;
+    }
+
+    function ticketTypeLabel(type) {
+      return ({
+        support: 'Support',
+        bestellung: 'Bestellung',
+        reward: 'Reward'
+      })[type] || type || 'Ticket';
+    }
+
+    function ticketStatePill(state) {
+      return state === 'closed'
+        ? '<span class="pill bad">geschlossen</span>'
+        : '<span class="pill good">offen</span>';
+    }
+
+    function orderStatusPill(status) {
+      const map = {
+        offen: ['Offen', 'warn'],
+        bearbeitung: ['In Bearbeitung', 'warn'],
+        bezahlt: ['Bezahlt', 'good'],
+        fertig: ['Fertig', 'good'],
+        storniert: ['Storniert', 'bad']
+      };
+      const [label, klass] = map[status] || [status || 'Offen', 'warn'];
+      return `<span class="pill ${klass}">${label}</span>`;
+    }
+
+    function renderManagementMessages(targetId, messages) {
+      const box = $(targetId);
+      box.replaceChildren();
+
+      if (!messages?.length) {
+        box.appendChild(emptyNode('Keine Nachrichten gefunden.'));
+        return;
+      }
+
+      messages.forEach(message => {
+        const item = document.createElement('article');
+        item.className = 'log-message';
+
+        const author = document.createElement('strong');
+        author.textContent = message.author || 'Unbekannt';
+        const time = document.createElement('time');
+        time.textContent = formatTime(message.timestamp);
+        author.appendChild(time);
+        item.appendChild(author);
+
+        if (message.content) {
+          const content = document.createElement('div');
+          content.className = 'message-content';
+          content.innerHTML = renderDiscordMarkdown(message.content);
+          item.appendChild(content);
+        }
+
+        if (message.embeds?.length) {
+          message.embeds.forEach(embed => {
+            const preview = document.createElement('div');
+            preview.className = 'embed-preview';
+            preview.innerHTML = `
+              ${embed.title ? `<b>${escapeHtml(embed.title)}</b>` : ''}
+              ${embed.description ? `<div>${renderDiscordMarkdown(embed.description)}</div>` : ''}
+              ${(embed.fields || []).map(field => `<div><b>${escapeHtml(field.name)}</b>${renderDiscordMarkdown(field.value)}</div>`).join('')}
+            `;
+            item.appendChild(preview);
+          });
+        }
+
+        if (message.attachments?.length) {
+          const links = document.createElement('div');
+          links.className = 'attachments';
+          message.attachments.forEach(file => {
+            const link = document.createElement('a');
+            link.href = file.url;
+            link.target = '_blank';
+            link.rel = 'noreferrer';
+            link.textContent = file.name || 'Anhang';
+            links.appendChild(link);
+          });
+          item.appendChild(links);
+        }
+
+        box.appendChild(item);
+      });
+    }
+
+    function renderTicketRows(targetId, tickets, selectFn, selectedId) {
+      const list = $(targetId);
+      list.replaceChildren();
+
+      if (!tickets.length) {
+        list.appendChild(emptyNode('Keine Einträge gefunden.'));
+        return;
+      }
+
+      tickets.forEach(ticket => {
+        const row = rowText(
+          `#${ticket.name}`,
+          `${ticketTypeLabel(ticket.type)} - ${ticket.owner?.username || ticket.ownerId || 'Unbekannt'} - ${formatTime(ticket.createdAt, true)}`,
+          ticketStatePill(ticket.state)
+        );
+        row.style.cursor = 'pointer';
+        row.classList.toggle('active', ticket.channelId === selectedId);
+        row.addEventListener('click', () => selectFn(ticket.channelId));
+        list.appendChild(row);
+      });
+    }
+
+    async function loadTickets() {
+      const params = new URLSearchParams();
+      params.set('state', state.ticketState);
+      params.set('type', state.ticketType);
+      const data = await api(`/api/dashboard/tickets?${params.toString()}`);
+      state.tickets = data.tickets || [];
+      renderTicketRows('ticketList', state.tickets, selectTicket, state.selectedTicketId);
+    }
+
+    function setTicketDetailEnabled(enabled) {
+      ['ticketOpenBtn', 'ticketCloseBtn', 'ticketReopenBtn', 'ticketTranscriptBtn', 'ticketNoteSaveBtn', 'ticketSendMessageBtn'].forEach(id => {
+        $(id).disabled = !enabled;
+      });
+      $('ticketNote').disabled = !enabled;
+      $('ticketMessageText').disabled = !enabled;
+    }
+
+    function renderTicketDetail(data) {
+      state.selectedTicket = data?.ticket || null;
+      const ticket = state.selectedTicket;
+      $('ticketDetailTitle').textContent = ticket ? `#${ticket.name}` : 'Kein Ticket ausgewählt';
+      $('ticketDetailMeta').replaceChildren();
+      renderManagementMessages('ticketMessages', data?.messages || []);
+      setTicketDetailEnabled(Boolean(ticket));
+
+      if (!ticket) {
+        $('ticketDetailMeta').appendChild(emptyNode('Wähle links ein Ticket aus.'));
+        $('ticketNote').value = '';
+        return;
+      }
+
+      $('ticketDetailMeta').append(
+        rowText('Owner', ticket.owner?.username || ticket.ownerId || 'Unbekannt', ticket.ownerId ? `<span class="pill">${ticket.ownerId}</span>` : ''),
+        rowText('Typ', ticketTypeLabel(ticket.type), ticketStatePill(ticket.state)),
+        rowText('Order', ticket.orderId || 'none', `<span class="pill">${formatTime(ticket.createdAt, true)}</span>`)
+      );
+      $('ticketNote').value = ticket.note || '';
+      $('ticketCloseBtn').disabled = ticket.state === 'closed';
+      $('ticketReopenBtn').disabled = ticket.state !== 'closed';
+    }
+
+    async function selectTicket(channelId) {
+      state.selectedTicketId = channelId;
+      renderTicketRows('ticketList', state.tickets, selectTicket, state.selectedTicketId);
+      const data = await api(`/api/dashboard/tickets/${encodeURIComponent(channelId)}`);
+      renderTicketDetail(data);
+    }
+
+    async function sendTicketMessage() {
+      if (!state.selectedTicketId) return;
+      const content = $('ticketMessageText').value.trim();
+      if (!content) return;
+
+      const data = await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/message`, {
+        method: 'POST',
+        body: { content }
+      });
+      $('ticketMessageText').value = '';
+      renderTicketDetail(data);
+      showToast('Nachricht ins Ticket gesendet.');
+    }
+
+    async function saveTicketNote() {
+      if (!state.selectedTicketId) return;
+      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/meta`, {
+        method: 'PATCH',
+        body: { note: $('ticketNote').value }
+      });
+      await selectTicket(state.selectedTicketId);
+      await loadTickets();
+      showToast('Ticket-Notiz gespeichert.');
+    }
+
+    async function closeSelectedTicket() {
+      if (!state.selectedTicketId) return;
+      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/close`, {
+        method: 'POST',
+        body: { reason: 'Per Dashboard geschlossen' }
+      });
+      await loadTickets();
+      await selectTicket(state.selectedTicketId);
+      showToast('Ticket geschlossen.');
+    }
+
+    async function reopenSelectedTicket() {
+      if (!state.selectedTicketId) return;
+      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/reopen`, {
+        method: 'POST'
+      });
+      await loadTickets();
+      await selectTicket(state.selectedTicketId);
+      showToast('Ticket wieder geöffnet.');
+    }
+
+    async function downloadTicketTranscript() {
+      if (!state.selectedTicketId) return;
+      const data = await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedTicketId)}/transcript`);
+      const blob = new Blob([data.transcript || ''], { type: 'text/plain;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = data.fileName || 'transcript.txt';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function openSelectedTicket() {
+      if (state.selectedTicket?.url) window.open(state.selectedTicket.url, '_blank', 'noreferrer');
+    }
+
+    async function loadOrders() {
+      const params = new URLSearchParams();
+      params.set('status', state.orderStatus);
+      const data = await api(`/api/dashboard/orders?${params.toString()}`);
+      state.orders = data.orders || [];
+      renderOrderRows();
+    }
+
+    function renderOrderRows() {
+      const list = $('orderList');
+      list.replaceChildren();
+
+      if (!state.orders.length) {
+        list.appendChild(emptyNode('Keine Bestellungen gefunden.'));
+        return;
+      }
+
+      state.orders.forEach(order => {
+        const row = rowText(
+          `#${order.orderId} - ${order.owner?.username || order.ownerId || 'Unbekannt'}`,
+          `${order.name} - ${formatTime(order.createdAt, true)}`,
+          orderStatusPill(order.status)
+        );
+        row.style.cursor = 'pointer';
+        row.classList.toggle('active', order.channelId === state.selectedOrderId);
+        row.addEventListener('click', () => selectOrder(order.channelId));
+        list.appendChild(row);
+      });
+    }
+
+    function setOrderDetailEnabled(enabled) {
+      ['orderStatusSelect', 'orderNote', 'orderSaveBtn', 'orderCompleteBtn', 'orderOpenBtn', 'orderCloseBtn'].forEach(id => {
+        $(id).disabled = !enabled;
+      });
+    }
+
+    function renderOrderDetail(data) {
+      state.selectedOrder = data?.order || null;
+      const order = state.selectedOrder;
+      $('orderDetailTitle').textContent = order ? `Bestellung #${order.orderId}` : 'Keine Bestellung ausgewählt';
+      $('orderDetailMeta').replaceChildren();
+      renderManagementMessages('orderMessages', data?.messages || []);
+      setOrderDetailEnabled(Boolean(order));
+
+      if (!order) {
+        $('orderDetailMeta').appendChild(emptyNode('Wähle links eine Bestellung aus.'));
+        $('orderNote').value = '';
+        return;
+      }
+
+      $('orderDetailMeta').append(
+        rowText('Kunde', order.owner?.username || order.ownerId || 'Unbekannt', order.ownerId ? `<span class="pill">${order.ownerId}</span>` : ''),
+        rowText('Ticket', order.name, ticketStatePill(order.state)),
+        rowText('Status', order.status, orderStatusPill(order.status))
+      );
+      $('orderStatusSelect').value = order.status || 'offen';
+      $('orderNote').value = order.note || '';
+      $('orderCloseBtn').disabled = order.state === 'closed';
+      $('orderCompleteBtn').disabled = order.status === 'fertig';
+    }
+
+    async function selectOrder(channelId) {
+      state.selectedOrderId = channelId;
+      renderOrderRows();
+      const data = await api(`/api/dashboard/orders/${encodeURIComponent(channelId)}`);
+      renderOrderDetail(data);
+    }
+
+    async function saveOrderStatus() {
+      if (!state.selectedOrderId) return;
+      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}`, {
+        method: 'PATCH',
+        body: {
+          status: $('orderStatusSelect').value,
+          note: $('orderNote').value
+        }
+      });
+      renderOrderDetail(data);
+      await loadOrders();
+      showToast('Bestellung gespeichert.');
+    }
+
+    async function completeOrder() {
+      if (!state.selectedOrderId) return;
+      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/complete`, {
+        method: 'POST'
+      });
+      renderOrderDetail(data);
+      await loadOrders();
+      showToast('Bestellung fertig markiert und Bewertungsbutton gesendet.');
+    }
+
+    function openSelectedOrder() {
+      if (state.selectedOrder?.url) window.open(state.selectedOrder.url, '_blank', 'noreferrer');
+    }
+
+    async function closeSelectedOrder() {
+      if (!state.selectedOrderId) return;
+      await api(`/api/dashboard/tickets/${encodeURIComponent(state.selectedOrderId)}/close`, {
+        method: 'POST',
+        body: { reason: 'Bestellung per Dashboard geschlossen' }
+      });
+      await loadOrders();
+      await selectOrder(state.selectedOrderId);
+      showToast('Order-Ticket geschlossen.');
     }
 
     async function loadOverview() {
@@ -1823,6 +2333,8 @@
     async function loadCurrentView() {
       if (state.currentView === 'overview') return loadOverview();
       if (state.currentView === 'dms') return refreshDashboard();
+      if (state.currentView === 'tickets') return loadTickets();
+      if (state.currentView === 'orders') return loadOrders();
       if (state.currentView === 'presence') return loadPresence();
       if (state.currentView === 'invites') return loadInvites();
       if (state.currentView === 'stock') return loadStock();
@@ -1889,6 +2401,31 @@
     $('loginForm').addEventListener('submit', login);
     $('overviewRefreshBtn').addEventListener('click', () => loadOverview().catch(error => showToast(error.message, true)));
     $('refreshBtn').addEventListener('click', () => refreshDashboard().catch(error => showToast(error.message, true)));
+    $('ticketsRefreshBtn').addEventListener('click', () => loadTickets().catch(error => showToast(error.message, true)));
+    $('ticketStateFilter').addEventListener('change', () => {
+      state.ticketState = $('ticketStateFilter').value;
+      loadTickets().catch(error => showToast(error.message, true));
+    });
+    $('ticketTypeFilter').addEventListener('change', () => {
+      state.ticketType = $('ticketTypeFilter').value;
+      loadTickets().catch(error => showToast(error.message, true));
+    });
+    $('ticketOpenBtn').addEventListener('click', openSelectedTicket);
+    $('ticketCloseBtn').addEventListener('click', () => closeSelectedTicket().catch(error => showToast(error.message, true)));
+    $('ticketReopenBtn').addEventListener('click', () => reopenSelectedTicket().catch(error => showToast(error.message, true)));
+    $('ticketTranscriptBtn').addEventListener('click', () => downloadTicketTranscript().catch(error => showToast(error.message, true)));
+    $('ticketNoteSaveBtn').addEventListener('click', () => saveTicketNote().catch(error => showToast(error.message, true)));
+    $('ticketSendMessageBtn').addEventListener('click', () => sendTicketMessage().catch(error => showToast(error.message, true)));
+    $('ticketMessageText').addEventListener('keydown', event => sendOnEnter(event, sendTicketMessage));
+    $('ordersRefreshBtn').addEventListener('click', () => loadOrders().catch(error => showToast(error.message, true)));
+    $('orderStatusFilter').addEventListener('change', () => {
+      state.orderStatus = $('orderStatusFilter').value;
+      loadOrders().catch(error => showToast(error.message, true));
+    });
+    $('orderSaveBtn').addEventListener('click', () => saveOrderStatus().catch(error => showToast(error.message, true)));
+    $('orderCompleteBtn').addEventListener('click', () => completeOrder().catch(error => showToast(error.message, true)));
+    $('orderOpenBtn').addEventListener('click', openSelectedOrder);
+    $('orderCloseBtn').addEventListener('click', () => closeSelectedOrder().catch(error => showToast(error.message, true)));
     $('presenceForm').addEventListener('submit', savePresence);
     $('inviteSetForm').addEventListener('submit', saveInviteAmount);
     $('invitesRefreshBtn').addEventListener('click', () => loadInvites().catch(error => showToast(error.message, true)));

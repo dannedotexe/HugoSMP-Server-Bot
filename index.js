@@ -251,6 +251,8 @@ function loadData() {
       data.leaveConfig = data.leaveConfig || {};
       data.presence = data.presence || null;
       data.dmThreads = data.dmThreads || {};
+      data.dashboardTicketMeta = data.dashboardTicketMeta || {};
+      data.dashboardOrderMeta = data.dashboardOrderMeta || {};
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
       data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
@@ -312,6 +314,8 @@ function loadData() {
     leaveConfig: {},
     presence: null,
     dmThreads: {},
+    dashboardTicketMeta: {},
+    dashboardOrderMeta: {},
 
     stock: {},
     stockItems: JSON.parse(JSON.stringify(STOCK_ITEMS))
@@ -618,6 +622,241 @@ async function reopenTicket(channel, reopenedBy) {
 
 
 // ── Giveaway helpers ──────────────────────────────────────────────
+function isDashboardTicketChannel(channel) {
+  return Boolean(
+    channel &&
+    channel.type === ChannelType.GuildText &&
+    (
+      channel.parentId === TICKET_CATEGORY_ID ||
+      channel.parentId === CLOSED_TICKET_CATEGORY_ID ||
+      /owner:\d{17,20}/.test(channel.topic || '')
+    )
+  );
+}
+
+function getDashboardTicketChannels() {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return [];
+
+  return guild.channels.cache
+    .filter(channel => isDashboardTicketChannel(channel))
+    .map(channel => channel);
+}
+
+function getTicketOpenState(channel) {
+  return channel.parentId === CLOSED_TICKET_CATEGORY_ID || channel.name.startsWith('closed-')
+    ? 'closed'
+    : 'open';
+}
+
+async function getUserSummary(userId) {
+  if (!userId) return null;
+  const user = await client.users.fetch(userId).catch(() => null);
+
+  return {
+    userId,
+    username: getUserDisplayName(user, userId),
+    avatarUrl: getUserAvatar(user)
+  };
+}
+
+function getTicketDashboardMeta(data, channelId) {
+  data.dashboardTicketMeta = data.dashboardTicketMeta || {};
+  return data.dashboardTicketMeta[channelId] || {};
+}
+
+function getOrderDashboardMeta(data, channelId) {
+  data.dashboardOrderMeta = data.dashboardOrderMeta || {};
+  return {
+    status: 'offen',
+    note: '',
+    updatedAt: null,
+    completedAt: null,
+    reviewOrderId: null,
+    ...(data.dashboardOrderMeta[channelId] || {})
+  };
+}
+
+function ticketUrl(channel) {
+  return `https://discord.com/channels/${channel.guild.id}/${channel.id}`;
+}
+
+async function serializeDashboardTicket(channel, data = loadData()) {
+  const ownerId = getTicketOwnerId(channel);
+  const owner = await getUserSummary(ownerId);
+  const meta = getTicketDashboardMeta(data, channel.id);
+
+  return {
+    channelId: channel.id,
+    name: channel.name,
+    url: ticketUrl(channel),
+    topic: channel.topic || '',
+    ownerId,
+    owner,
+    type: getTicketType(channel),
+    orderId: getTicketOrderId(channel),
+    state: getTicketOpenState(channel),
+    parentId: channel.parentId || null,
+    createdAt: channel.createdTimestamp || null,
+    lastMessageId: channel.lastMessageId || null,
+    note: meta.note || '',
+    pinned: Boolean(meta.pinned)
+  };
+}
+
+async function getDashboardTicketList({ state = 'open', type = 'all' } = {}) {
+  const data = loadData();
+  const tickets = await Promise.all(
+    getDashboardTicketChannels().map(channel => serializeDashboardTicket(channel, data))
+  );
+
+  return tickets
+    .filter(ticket => state === 'all' || ticket.state === state)
+    .filter(ticket => type === 'all' || ticket.type === type)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+async function getTicketRecentMessages(channel, limit = 40) {
+  const messages = await channel.messages.fetch({ limit }).catch(() => null);
+  if (!messages) return [];
+
+  return [...messages.values()]
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+    .map(message => ({
+      id: message.id,
+      authorId: message.author?.id || null,
+      author: getUserDisplayName(message.author, message.author?.id || 'Unbekannt'),
+      avatarUrl: getUserAvatar(message.author),
+      bot: Boolean(message.author?.bot),
+      content: message.content || '',
+      attachments: getMessageAttachments(message),
+      embeds: (message.embeds || []).slice(0, 3).map(embed => ({
+        title: embed.title || '',
+        description: embed.description || '',
+        fields: (embed.fields || []).slice(0, 8).map(field => ({
+          name: field.name || '',
+          value: field.value || ''
+        }))
+      })),
+      timestamp: message.createdTimestamp
+    }));
+}
+
+function getDashboardChannel(channelId) {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return null;
+  const channel = guild.channels.cache.get(channelId);
+  if (!isDashboardTicketChannel(channel)) return null;
+  return channel;
+}
+
+async function getDashboardTicketDetails(channelId) {
+  const channel = getDashboardChannel(channelId);
+  if (!channel) {
+    const err = new Error('Ticket nicht gefunden.');
+    err.status = 404;
+    throw err;
+  }
+
+  const data = loadData();
+  const ticket = await serializeDashboardTicket(channel, data);
+  const messages = await getTicketRecentMessages(channel);
+  const ownerInfo = ticket.ownerId ? await getDmUserInfo(ticket.ownerId, data) : null;
+
+  return { ticket, messages, ownerInfo };
+}
+
+async function serializeDashboardOrder(channel, data = loadData()) {
+  const ticket = await serializeDashboardTicket(channel, data);
+  const meta = getOrderDashboardMeta(data, channel.id);
+
+  return {
+    ...ticket,
+    status: meta.status,
+    note: meta.note,
+    updatedAt: meta.updatedAt,
+    completedAt: meta.completedAt,
+    reviewOrderId: meta.reviewOrderId
+  };
+}
+
+async function getDashboardOrderList({ status = 'active' } = {}) {
+  const data = loadData();
+  const orders = await Promise.all(
+    getDashboardTicketChannels()
+      .filter(channel => getTicketType(channel) === 'bestellung')
+      .map(channel => serializeDashboardOrder(channel, data))
+  );
+
+  return orders
+    .filter(order => {
+      if (status === 'all') return true;
+      if (status === 'done') return order.status === 'fertig';
+      if (status === 'cancelled') return order.status === 'storniert';
+      return !['fertig', 'storniert'].includes(order.status);
+    })
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+async function getDashboardOrderDetails(channelId) {
+  const details = await getDashboardTicketDetails(channelId);
+  const channel = getDashboardChannel(channelId);
+  if (!channel || getTicketType(channel) !== 'bestellung') {
+    const err = new Error('Bestellung nicht gefunden.');
+    err.status = 404;
+    throw err;
+  }
+  const data = loadData();
+
+  return {
+    ...details,
+    order: await serializeDashboardOrder(channel, data)
+  };
+}
+
+function updateDashboardOrderMeta(channelId, patch) {
+  const data = loadData();
+  data.dashboardOrderMeta = data.dashboardOrderMeta || {};
+  data.dashboardOrderMeta[channelId] = {
+    ...getOrderDashboardMeta(data, channelId),
+    ...patch,
+    updatedAt: Date.now()
+  };
+  saveData(data);
+  return data.dashboardOrderMeta[channelId];
+}
+
+async function sendOrderReviewRequest(channel, ownerId, orderId) {
+  const reviewOrderId = orderId && orderId !== 'none'
+    ? orderId
+    : getNextOrderId();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`bewerten_${ownerId}_${reviewOrderId}`)
+      .setLabel('Jetzt bewerten')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('⭐')
+  );
+
+  await channel.send({
+    content:
+      `✅ Bestellung für <@${ownerId}> wurde als **fertig** markiert!\n` +
+      `**Order-ID:** ${reviewOrderId}\n\n` +
+      `<@${ownerId}>, bitte bewertete den Shop!\n\n` +
+      `> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
+    components: [row]
+  });
+
+  updateDashboardOrderMeta(channel.id, {
+    status: 'fertig',
+    completedAt: Date.now(),
+    reviewOrderId
+  });
+
+  return reviewOrderId;
+}
+
 function parseDuration(str) {
   const match = str.match(/^(\d+)([smhd])$/i);
   if (!match) return null;
@@ -4785,6 +5024,227 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
     success: true,
     stock: getDashboardStock(loadData())
   });
+});
+
+app.get('/api/dashboard/tickets', requireDashboardAuth, async (req, res) => {
+  try {
+    const state = String(req.query.state || 'open').trim().toLowerCase();
+    const type = String(req.query.type || 'all').trim().toLowerCase();
+
+    res.json({
+      success: true,
+      tickets: await getDashboardTicketList({ state, type })
+    });
+  } catch (e) {
+    console.error('dashboard tickets error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Tickets konnten nicht geladen werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/tickets/:channelId', requireDashboardAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      ...(await getDashboardTicketDetails(String(req.params.channelId || '').trim()))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Ticket konnte nicht geladen werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/tickets/:channelId/message', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = getDashboardChannel(String(req.params.channelId || '').trim());
+    if (!channel) throw makeDashboardError('Ticket nicht gefunden.', 404);
+
+    const content = cleanDmContent(req.body?.content);
+    if (!content) throw makeDashboardError('Nachricht darf nicht leer sein.');
+
+    await channel.send({ content });
+
+    res.json({
+      success: true,
+      ...(await getDashboardTicketDetails(channel.id))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Nachricht konnte nicht gesendet werden.'
+    });
+  }
+});
+
+app.patch('/api/dashboard/tickets/:channelId/meta', requireDashboardAuth, (req, res) => {
+  const channelId = String(req.params.channelId || '').trim();
+  const channel = getDashboardChannel(channelId);
+  if (!channel) {
+    return res.status(404).json({
+      success: false,
+      error: 'Ticket nicht gefunden.'
+    });
+  }
+
+  const data = loadData();
+  data.dashboardTicketMeta = data.dashboardTicketMeta || {};
+  data.dashboardTicketMeta[channelId] = {
+    ...getTicketDashboardMeta(data, channelId),
+    note: typeof req.body?.note === 'string'
+      ? req.body.note.trim().slice(0, 500)
+      : getTicketDashboardMeta(data, channelId).note || '',
+    pinned: typeof req.body?.pinned === 'boolean'
+      ? req.body.pinned
+      : Boolean(getTicketDashboardMeta(data, channelId).pinned),
+    updatedAt: Date.now()
+  };
+  saveData(data);
+
+  res.json({
+    success: true,
+    meta: data.dashboardTicketMeta[channelId]
+  });
+});
+
+app.post('/api/dashboard/tickets/:channelId/close', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = getDashboardChannel(String(req.params.channelId || '').trim());
+    if (!channel) throw makeDashboardError('Ticket nicht gefunden.', 404);
+
+    await closeTicket(channel, client.user, cleanDmContent(req.body?.reason) || 'Per Dashboard geschlossen');
+
+    res.json({
+      success: true,
+      ticket: await serializeDashboardTicket(channel, loadData())
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Ticket konnte nicht geschlossen werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/tickets/:channelId/reopen', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = getDashboardChannel(String(req.params.channelId || '').trim());
+    if (!channel) throw makeDashboardError('Ticket nicht gefunden.', 404);
+
+    await reopenTicket(channel, client.user);
+
+    res.json({
+      success: true,
+      ticket: await serializeDashboardTicket(channel, loadData())
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Ticket konnte nicht wieder geöffnet werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/tickets/:channelId/transcript', requireDashboardAuth, async (req, res) => {
+  const channel = getDashboardChannel(String(req.params.channelId || '').trim());
+  if (!channel) {
+    return res.status(404).json({
+      success: false,
+      error: 'Ticket nicht gefunden.'
+    });
+  }
+
+  res.json({
+    success: true,
+    fileName: `${channel.name}-transcript.txt`,
+    transcript: await buildTranscript(channel)
+  });
+});
+
+app.get('/api/dashboard/orders', requireDashboardAuth, async (req, res) => {
+  try {
+    const status = String(req.query.status || 'active').trim().toLowerCase();
+    res.json({
+      success: true,
+      orders: await getDashboardOrderList({ status })
+    });
+  } catch (e) {
+    console.error('dashboard orders error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Bestellungen konnten nicht geladen werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/orders/:channelId', requireDashboardAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      ...(await getDashboardOrderDetails(String(req.params.channelId || '').trim()))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Bestellung konnte nicht geladen werden.'
+    });
+  }
+});
+
+app.patch('/api/dashboard/orders/:channelId', requireDashboardAuth, async (req, res) => {
+  try {
+    const channelId = String(req.params.channelId || '').trim();
+    const channel = getDashboardChannel(channelId);
+    if (!channel || getTicketType(channel) !== 'bestellung') {
+      throw makeDashboardError('Bestellung nicht gefunden.', 404);
+    }
+
+    const allowedStatuses = ['offen', 'bearbeitung', 'bezahlt', 'fertig', 'storniert'];
+    const status = String(req.body?.status || '').trim().toLowerCase();
+    const patch = {};
+
+    if (allowedStatuses.includes(status)) patch.status = status;
+    if (typeof req.body?.note === 'string') patch.note = req.body.note.trim().slice(0, 800);
+
+    updateDashboardOrderMeta(channelId, patch);
+
+    res.json({
+      success: true,
+      ...(await getDashboardOrderDetails(channelId))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Bestellung konnte nicht gespeichert werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/orders/:channelId/complete', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = getDashboardChannel(String(req.params.channelId || '').trim());
+    if (!channel || getTicketType(channel) !== 'bestellung') {
+      throw makeDashboardError('Bestellung nicht gefunden.', 404);
+    }
+
+    const ownerId = getTicketOwnerId(channel);
+    if (!ownerId) throw makeDashboardError('Ticket hat keinen Owner.', 400);
+
+    await sendOrderReviewRequest(channel, ownerId, getTicketOrderId(channel));
+
+    res.json({
+      success: true,
+      ...(await getDashboardOrderDetails(channel.id))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Bestellung konnte nicht fertig markiert werden.'
+    });
+  }
 });
 
 app.get('/api/dashboard/users/:userId', requireDashboardAuth, async (req, res) => {
