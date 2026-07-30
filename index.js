@@ -151,6 +151,7 @@ const MAX_DASHBOARD_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
+const SHOP_PANEL_CHANNEL_ID = process.env.SHOP_PANEL_CHANNEL_ID || STOCK_CHANNEL_ID;
 
 const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // ← Mod-Log Channel ID eintragen
 
@@ -253,6 +254,8 @@ function loadData() {
       data.dmThreads = data.dmThreads || {};
       data.dashboardTicketMeta = data.dashboardTicketMeta || {};
       data.dashboardOrderMeta = data.dashboardOrderMeta || {};
+      data.dashboardShop = data.dashboardShop || {};
+      data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
       data.orderFormsSubmitted = data.orderFormsSubmitted || {};
 
@@ -265,13 +268,13 @@ function loadData() {
 
       // Fix any items where emoji was stored as a raw ID number
       data.stockItems.forEach(item => {
-        if (item.emoji && /^d{15,20}$/.test(item.emoji.trim())) {
+        if (item.emoji && /^\d{15,20}$/.test(item.emoji.trim())) {
           // Raw ID stored as emoji — build proper format
           item.emojiId = item.emoji.trim();
           item.emoji = `<:item:${item.emojiId}>`;
         } else if (item.emoji) {
           // Re-extract emojiId in case it got lost
-          const m = item.emoji.match(/<a?:([^:]+):(d+)>/);
+          const m = item.emoji.match(/<a?:([^:]+):(\d+)>/);
           if (m) item.emojiId = m[2];
         }
       });
@@ -316,6 +319,8 @@ function loadData() {
     dmThreads: {},
     dashboardTicketMeta: {},
     dashboardOrderMeta: {},
+    dashboardShop: {},
+    shopOffers: [],
 
     stock: {},
     stockItems: JSON.parse(JSON.stringify(STOCK_ITEMS))
@@ -670,11 +675,361 @@ function getOrderDashboardMeta(data, channelId) {
   return {
     status: 'offen',
     note: '',
+    assigneeId: null,
+    assigneeName: null,
+    invoice: null,
+    invoiceSentAt: null,
     updatedAt: null,
     completedAt: null,
     reviewOrderId: null,
     ...(data.dashboardOrderMeta[channelId] || {})
   };
+}
+
+function buildOrderTicketButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('order_assign_self')
+      .setLabel('Übernehmen')
+      .setEmoji('🧑‍💼')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('close_ticket')
+      .setLabel('Ticket schließen')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function buildOrderStartRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_items_geld')
+      .setLabel('Items & Geld')
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_schematics')
+      .setLabel('Schematics')
+      .setEmoji('📐')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_resource_pack')
+      .setLabel('Resource Pack')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Success)
+  );
+}
+
+function cleanShortText(value, limit = 120) {
+  return String(value || '').trim().slice(0, limit);
+}
+
+function cleanLongText(value, limit = 1200) {
+  return String(value || '').trim().slice(0, limit);
+}
+
+function normalizeOrderItems(items, data = loadData()) {
+  const rows = Array.isArray(items) ? items : [];
+
+  return rows
+    .map(item => {
+      const name = cleanShortText(item?.name || item?.item || 'Unbekanntes Item', 80);
+      const quantity = Math.max(1, Number.parseInt(item?.quantity || item?.qty || item?.amount || 1, 10) || 1);
+      const stockItem = findStockItemByText(name, data);
+      const price = cleanShortText(item?.price || stockItem?.price || '', 40);
+
+      return {
+        id: stockItem?.id || null,
+        name,
+        quantity,
+        price,
+        emoji: stockItem?.emoji || item?.emoji || ''
+      };
+    })
+    .filter(item => item.name);
+}
+
+function findStockItemByText(value, data = loadData()) {
+  const needle = String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!needle) return null;
+
+  return (data.stockItems || STOCK_ITEMS).find(item => {
+    const hay = `${item.id} ${item.name}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return hay === needle || hay.includes(needle) || needle.includes(hay);
+  }) || null;
+}
+
+function parsePriceNumber(value) {
+  const clean = String(value || '')
+    .replace(/[^\d,.]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const number = Number.parseFloat(clean);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatEuroValue(value) {
+  if (!Number.isFinite(value)) return '';
+  return `${value.toFixed(2).replace('.', ',')} €`;
+}
+
+function buildInvoiceFromOrderInput({
+  orderId,
+  ownerId,
+  username,
+  category,
+  items,
+  item,
+  amount,
+  total,
+  payment,
+  ingame,
+  note
+}, data = loadData()) {
+  const normalizedItems = normalizeOrderItems(
+    items || [{ name: item, quantity: amount || 1 }],
+    data
+  );
+
+  let hasPrice = false;
+  const calculatedTotal = normalizedItems.reduce((sum, row) => {
+    const price = parsePriceNumber(row.price);
+    if (price !== null) hasPrice = true;
+    return price === null ? sum : sum + (price * row.quantity);
+  }, 0);
+
+  return {
+    orderId: cleanShortText(orderId || 'none', 40),
+    ownerId: ownerId || null,
+    username: cleanShortText(username || '', 80),
+    category: cleanShortText(category || '', 80),
+    items: normalizedItems,
+    itemsText: normalizedItems.length
+      ? normalizedItems.map(row => `${row.name} x${row.quantity}${row.price ? ` - ${row.price}` : ''}`).join('\n')
+      : cleanLongText(item || ''),
+    total: cleanShortText(total || (hasPrice ? formatEuroValue(calculatedTotal) : 'Offen'), 80),
+    payment: cleanShortText(payment || '', 80),
+    ingame: cleanShortText(ingame || '', 80),
+    note: cleanLongText(note || '', 800),
+    createdAt: Date.now()
+  };
+}
+
+function buildInvoiceFromDashboardInput(body, fallback = {}) {
+  const itemsText = cleanLongText(body?.itemsText || fallback.itemsText || '', 1200);
+  return {
+    ...fallback,
+    itemsText,
+    total: cleanShortText(body?.total || fallback.total || 'Offen', 80),
+    payment: cleanShortText(body?.payment || fallback.payment || '', 80),
+    ingame: cleanShortText(body?.ingame || fallback.ingame || '', 80),
+    note: cleanLongText(body?.note || fallback.note || '', 800),
+    createdAt: fallback.createdAt || Date.now()
+  };
+}
+
+function invoiceItemsText(invoice) {
+  if (invoice?.itemsText) return invoice.itemsText;
+  if (Array.isArray(invoice?.items) && invoice.items.length) {
+    return invoice.items.map(row =>
+      `${row.emoji ? `${row.emoji} ` : ''}${row.name} x${row.quantity}${row.price ? ` - ${row.price}` : ''}`
+    ).join('\n');
+  }
+  return 'Noch keine Produkte eingetragen.';
+}
+
+function buildOrderInvoiceEmbed(invoice, { title = 'Rechnung' } = {}) {
+  const embed = new EmbedBuilder()
+    .setColor('#35d48a')
+    .setTitle(`🧾 ${title}${invoice.orderId && invoice.orderId !== 'none' ? ` #${invoice.orderId}` : ''}`)
+    .setDescription(
+      `${invoice.ownerId ? `**Kunde:** <@${invoice.ownerId}>\n` : ''}` +
+      `${invoice.category ? `**Kategorie:** ${invoice.category}\n` : ''}` +
+      `${invoice.ingame ? `**Ingame:** ${invoice.ingame}\n` : ''}` +
+      `${invoice.payment ? `**Zahlung:** ${invoice.payment}\n` : ''}` +
+      `**Gesamt:** ${invoice.total || 'Offen'}`
+    )
+    .addFields({
+      name: 'Produkte',
+      value: invoiceItemsText(invoice).slice(0, 1024),
+      inline: false
+    })
+    .setFooter({ text: 'HugoSMP Market' })
+    .setTimestamp();
+
+  if (invoice.note) {
+    embed.addFields({
+      name: 'Hinweis',
+      value: invoice.note.slice(0, 1024),
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
+async function sendOrderInvoice(channel, invoice, { automatic = false } = {}) {
+  await channel.send({
+    content: invoice.ownerId
+      ? `<@${invoice.ownerId}> ${automatic ? 'hier ist deine Bestellübersicht:' : 'hier ist deine Rechnung:'}`
+      : undefined,
+    embeds: [buildOrderInvoiceEmbed(invoice, { title: automatic ? 'Bestellübersicht' : 'Rechnung' })]
+  });
+
+  updateDashboardOrderMeta(channel.id, {
+    invoice,
+    invoiceSentAt: Date.now()
+  });
+}
+
+function extractOrderInvoiceDraft(order, messages, data = loadData()) {
+  const meta = getOrderDashboardMeta(data, order.channelId);
+  if (meta.invoice) {
+    return {
+      orderId: order.orderId,
+      ownerId: order.ownerId,
+      ...meta.invoice
+    };
+  }
+
+  const fields = [];
+  (messages || []).forEach(message => {
+    (message.embeds || []).forEach(embed => {
+      (embed.fields || []).forEach(field => {
+        fields.push({
+          name: String(field.name || '').toLowerCase(),
+          value: String(field.value || '')
+        });
+      });
+    });
+  });
+
+  const findField = names => {
+    const hit = fields.find(field => names.some(name => field.name.includes(name)));
+    return hit?.value || '';
+  };
+
+  return buildInvoiceFromOrderInput({
+    orderId: order.orderId,
+    ownerId: order.ownerId,
+    username: order.owner?.username || '',
+    category: ticketTypeLabelForInvoice(order.type),
+    item: findField(['item', 'schematic', 'resource pack', 'produkt']),
+    amount: findField(['menge']),
+    payment: findField(['zahlung']),
+    ingame: findField(['ingame']),
+    total: findField(['gesamt'])
+  }, data);
+}
+
+function ticketTypeLabelForInvoice(type) {
+  return ({
+    bestellung: 'Bestellung',
+    reward: 'Reward',
+    support: 'Support'
+  })[type] || type || '';
+}
+
+async function getDashboardStaffMembers() {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return [];
+
+  await guild.members.fetch().catch(() => null);
+
+  return guild.members.cache
+    .filter(member => !member.user.bot && isStaff(member))
+    .map(member => ({
+      userId: member.id,
+      username: getUserDisplayName(member.user, member.id),
+      avatarUrl: getUserAvatar(member.user)
+    }))
+    .sort((a, b) => a.username.localeCompare(b.username));
+}
+
+async function getDashboardTextChannels() {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return [];
+
+  return guild.channels.cache
+    .filter(channel => channel.type === ChannelType.GuildText)
+    .map(channel => ({
+      id: channel.id,
+      name: channel.name,
+      parentId: channel.parentId || null,
+      parentName: channel.parent?.name || null
+    }))
+    .sort((a, b) => `${a.parentName || ''}/${a.name}`.localeCompare(`${b.parentName || ''}/${b.name}`));
+}
+
+async function resolveDashboardTextChannel(channelId) {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) throw makeDashboardError('Discord Server wurde nicht gefunden.', 500);
+
+  const channel = guild.channels.cache.get(String(channelId || '').trim()) ||
+    await client.channels.fetch(String(channelId || '').trim()).catch(() => null);
+
+  if (!channel || channel.guild?.id !== guild.id || channel.type !== ChannelType.GuildText) {
+    throw makeDashboardError('Channel nicht gefunden.', 404);
+  }
+
+  return channel;
+}
+
+function stockStatusText(amount) {
+  if (amount === 0) return 'Ausverkauft';
+  if (amount <= 5) return `${amount} auf Lager - knapp`;
+  return `${amount} auf Lager`;
+}
+
+function getLatestShopOffer(data = loadData()) {
+  return Array.isArray(data.shopOffers) && data.shopOffers.length ? data.shopOffers[0] : null;
+}
+
+function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data = loadData()) {
+  const wanted = Array.isArray(itemIds) && itemIds.length
+    ? new Set(itemIds.map(String))
+    : null;
+
+  const items = (data.stockItems || STOCK_ITEMS)
+    .filter(item => !wanted || wanted.has(item.id))
+    .slice(0, 20);
+
+  const lines = items.map(item => {
+    const amount = Number(data.stock?.[item.id] || 0);
+    return `${item.emoji || ''} **${item.name}** - ${item.price}\n${stockStatusText(amount)}`;
+  });
+
+  const offer = includeSale ? getLatestShopOffer(data) : null;
+
+  const embed = new EmbedBuilder()
+    .setColor('#b10de7')
+    .setTitle(cleanShortText(title || 'HugoSMP Shop', 120))
+    .setDescription(
+      `${cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500)}\n\n` +
+      `${offer ? `**Aktuelles Angebot:** ${offer.title} - ${offer.discount}\n\n` : ''}` +
+      lines.join('\n\n')
+    )
+    .setFooter({ text: 'Bestellung per Button starten' })
+    .setTimestamp();
+
+  return embed;
+}
+
+function buildSaleEmbed({ title, itemName, discount, description, until }) {
+  const embed = new EmbedBuilder()
+    .setColor('#f5b84b')
+    .setTitle(`💰 ${cleanShortText(title || 'Neues Angebot', 120)}`)
+    .setDescription(
+      `${itemName ? `**Item:** ${itemName}\n` : ''}` +
+      `${discount ? `**Deal:** ${discount}\n` : ''}` +
+      `${until ? `**Gültig bis:** ${until}\n` : ''}` +
+      `\n${cleanLongText(description || 'Sichere dir das Angebot im Shop-Ticket.', 900)}`
+    )
+    .setFooter({ text: 'HugoSMP Market' })
+    .setTimestamp();
+
+  return embed;
 }
 
 function ticketUrl(channel) {
@@ -769,11 +1124,16 @@ async function getDashboardTicketDetails(channelId) {
 async function serializeDashboardOrder(channel, data = loadData()) {
   const ticket = await serializeDashboardTicket(channel, data);
   const meta = getOrderDashboardMeta(data, channel.id);
+  const assignee = meta.assigneeId ? await getUserSummary(meta.assigneeId) : null;
 
   return {
     ...ticket,
     status: meta.status,
     note: meta.note,
+    assigneeId: meta.assigneeId,
+    assigneeName: meta.assigneeName || assignee?.username || null,
+    assignee,
+    invoiceSentAt: meta.invoiceSentAt || null,
     updatedAt: meta.updatedAt,
     completedAt: meta.completedAt,
     reviewOrderId: meta.reviewOrderId
@@ -807,10 +1167,14 @@ async function getDashboardOrderDetails(channelId) {
     throw err;
   }
   const data = loadData();
+  const order = await serializeDashboardOrder(channel, data);
+  const invoice = extractOrderInvoiceDraft(order, details.messages, data);
 
   return {
     ...details,
-    order: await serializeDashboardOrder(channel, data)
+    order,
+    invoice,
+    staff: await getDashboardStaffMembers()
   };
 }
 
@@ -2933,9 +3297,9 @@ client.on('interactionCreate', async interaction => {
         let finalEmoji = emoji.trim();
         let emojiId = null;
 
-        const customMatch = finalEmoji.match(/<a?:([^:]+):(d+)>/);
-        const rawIdMatch  = finalEmoji.match(/^(d{15,20})$/);
-        const colonMatch  = finalEmoji.match(/:([^:]+):(d+)/);
+        const customMatch = finalEmoji.match(/<a?:([^:]+):(\d+)>/);
+        const rawIdMatch  = finalEmoji.match(/^(\d{15,20})$/);
+        const colonMatch  = finalEmoji.match(/:([^:]+):(\d+)/);
 
         if (customMatch) {
           emojiId = customMatch[2];
@@ -3004,8 +3368,8 @@ client.on('interactionCreate', async interaction => {
         if (preis) item.price = preis;
         if (emoji) {
           item.emoji = emoji;
-          const editMatch = emoji.match(/<a?:([^:]+):(d+)>/);
-          const editRaw = emoji.match(/^(d{15,20})$/);
+          const editMatch = emoji.match(/<a?:([^:]+):(\d+)>/);
+          const editRaw = emoji.match(/^(\d{15,20})$/);
           if (editMatch) {
             item.emojiId = editMatch[2];
           } else if (editRaw) {
@@ -3868,6 +4232,35 @@ client.on('interactionCreate', async interaction => {
       return interaction.showModal(modal);
     }
 
+    if (interaction.customId === 'order_assign_self') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({
+          content: '❌ Nur Staff kann Bestellungen übernehmen.',
+          ephemeral: true
+        });
+      }
+
+      if (getTicketType(interaction.channel) !== 'bestellung') {
+        return interaction.reply({
+          content: '❌ Das ist kein Bestell-Ticket.',
+          ephemeral: true
+        });
+      }
+
+      const data = loadData();
+      const meta = getOrderDashboardMeta(data, interaction.channel.id);
+      updateDashboardOrderMeta(interaction.channel.id, {
+        assigneeId: interaction.user.id,
+        assigneeName: getUserDisplayName(interaction.user, interaction.user.id),
+        status: meta.status === 'offen' ? 'bearbeitung' : meta.status
+      });
+
+      return interaction.reply({
+        content: `📌 <@${interaction.user.id}> bearbeitet jetzt Bestellung #${getTicketOrderId(interaction.channel)}.`,
+        allowedMentions: { users: [interaction.user.id] }
+      });
+    }
+
     if (interaction.customId === 'close_ticket') {
       const ownerId = getTicketOwnerId(interaction.channel);
 
@@ -4458,18 +4851,32 @@ client.on('interactionCreate', async interaction => {
           .addFields(...formFields)
           .setTimestamp();
 
-        // Only close button — no order form button needed
-        const ticketButtons = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
-        );
-
         await ticket.send({
           content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
           embeds: [headerEmbed, formEmbed],
-          components: [ticketButtons]
+          components: [buildOrderTicketButtons()]
         });
 
         markOrderFormSubmitted(ticket.id);
+
+        const invoice = buildInvoiceFromOrderInput({
+          orderId: ticketOrderId,
+          ownerId: interaction.user.id,
+          username: interaction.user.username,
+          category: cat.label,
+          item,
+          amount,
+          payment,
+          ingame,
+          note: 'Automatisch aus dem Bestellformular erstellt.'
+        });
+        updateDashboardOrderMeta(ticket.id, {
+          status: 'offen',
+          invoice,
+          ingame,
+          category: cat.label
+        });
+        await sendOrderInvoice(ticket, invoice, { automatic: true });
 
         return interaction.editReply({ content: `✅ Ticket erstellt: <#${ticket.id}>` });
       } catch (e) {
@@ -4519,6 +4926,25 @@ client.on('interactionCreate', async interaction => {
         embeds: [embed]
       });
 
+      const invoice = buildInvoiceFromOrderInput({
+        orderId,
+        ownerId: interaction.user.id,
+        username: interaction.user.username,
+        category: 'Bestellung',
+        item,
+        amount,
+        payment,
+        ingame,
+        note: 'Automatisch aus dem Bestellformular erstellt.'
+      });
+      updateDashboardOrderMeta(interaction.channel.id, {
+        status: 'offen',
+        invoice,
+        ingame,
+        category: 'Bestellung'
+      });
+      await sendOrderInvoice(interaction.channel, invoice, { automatic: true });
+
       return interaction.reply({
         content: '✅ Bestellformular gesendet!',
         ephemeral: true
@@ -4545,7 +4971,7 @@ client.on('interactionCreate', async interaction => {
       saveData(data);
       await updateStockPanel();
 
-      const item = STOCK_ITEMS.find(i => i.id === itemId);
+      const item = (data.stockItems || STOCK_ITEMS).find(i => i.id === itemId);
 
       if (!item) {
         return interaction.reply({
@@ -5026,6 +5452,139 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
   });
 });
 
+app.get('/api/dashboard/channels', requireDashboardAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      channels: await getDashboardTextChannels()
+    });
+  } catch (e) {
+    console.error('dashboard channels error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Channels konnten nicht geladen werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/staff', requireDashboardAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      staff: await getDashboardStaffMembers()
+    });
+  } catch (e) {
+    console.error('dashboard staff error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Staff konnte nicht geladen werden.'
+    });
+  }
+});
+
+app.get('/api/dashboard/shop', requireDashboardAuth, async (req, res) => {
+  try {
+    const data = loadData();
+
+    res.json({
+      success: true,
+      stock: getDashboardStock(data),
+      channels: await getDashboardTextChannels(),
+      latestOffer: getLatestShopOffer(data),
+      defaultChannelId: data.publicStockChannelId || SHOP_PANEL_CHANNEL_ID
+    });
+  } catch (e) {
+    console.error('dashboard shop error:', e.message);
+    res.status(500).json({
+      success: false,
+      error: 'Shop-Daten konnten nicht geladen werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/shop/panel', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = await resolveDashboardTextChannel(req.body?.channelId || SHOP_PANEL_CHANNEL_ID);
+    const data = loadData();
+    const embed = buildShopPanelEmbed({
+      title: req.body?.title,
+      description: req.body?.description,
+      itemIds: req.body?.itemIds,
+      includeSale: Boolean(req.body?.includeSale)
+    }, data);
+
+    const msg = await channel.send({
+      embeds: [embed],
+      components: [buildOrderStartRow()]
+    });
+
+    data.dashboardShop = data.dashboardShop || {};
+    data.dashboardShop.lastPanel = {
+      channelId: channel.id,
+      messageId: msg.id,
+      title: cleanShortText(req.body?.title || 'HugoSMP Shop', 120),
+      postedAt: Date.now()
+    };
+    saveData(data);
+
+    res.json({
+      success: true,
+      messageUrl: `https://discord.com/channels/${channel.guild.id}/${channel.id}/${msg.id}`
+    });
+  } catch (e) {
+    console.error('dashboard shop panel error:', e.message);
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Shop-Panel konnte nicht gepostet werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/shop/sale', requireDashboardAuth, async (req, res) => {
+  try {
+    const channel = await resolveDashboardTextChannel(req.body?.channelId || SHOP_PANEL_CHANNEL_ID);
+    const data = loadData();
+    const item = (data.stockItems || STOCK_ITEMS).find(stockItem => stockItem.id === String(req.body?.itemId || ''));
+    const offer = {
+      id: `${Date.now()}`,
+      title: cleanShortText(req.body?.title || (item ? `${item.name} Angebot` : 'Neues Angebot'), 120),
+      itemId: item?.id || null,
+      itemName: item?.name || cleanShortText(req.body?.itemName || '', 80),
+      discount: cleanShortText(req.body?.discount || 'Rabatt', 80),
+      description: cleanLongText(req.body?.description || '', 900),
+      until: cleanShortText(req.body?.until || '', 80),
+      channelId: channel.id,
+      postedAt: Date.now()
+    };
+
+    const msg = await channel.send({
+      content: req.body?.mentionDeals && PING_ROLES.deals ? `<@&${PING_ROLES.deals}>` : undefined,
+      embeds: [buildSaleEmbed(offer)],
+      components: [buildOrderStartRow()]
+    });
+
+    data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
+    data.shopOffers.unshift({
+      ...offer,
+      messageId: msg.id,
+      messageUrl: `https://discord.com/channels/${channel.guild.id}/${channel.id}/${msg.id}`
+    });
+    data.shopOffers = data.shopOffers.slice(0, 30);
+    saveData(data);
+
+    res.json({
+      success: true,
+      offer: data.shopOffers[0]
+    });
+  } catch (e) {
+    console.error('dashboard sale error:', e.message);
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Angebot konnte nicht gepostet werden.'
+    });
+  }
+});
+
 app.get('/api/dashboard/tickets', requireDashboardAuth, async (req, res) => {
   try {
     const state = String(req.query.state || 'open').trim().toLowerCase();
@@ -5219,6 +5778,86 @@ app.patch('/api/dashboard/orders/:channelId', requireDashboardAuth, async (req, 
     res.status(e.status || 500).json({
       success: false,
       error: e.status ? e.message : 'Bestellung konnte nicht gespeichert werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/orders/:channelId/assign', requireDashboardAuth, async (req, res) => {
+  try {
+    const channelId = String(req.params.channelId || '').trim();
+    const channel = getDashboardChannel(channelId);
+    if (!channel || getTicketType(channel) !== 'bestellung') {
+      throw makeDashboardError('Bestellung nicht gefunden.', 404);
+    }
+
+    const staffId = String(req.body?.staffId || '').trim();
+    const data = loadData();
+    const currentMeta = getOrderDashboardMeta(data, channelId);
+
+    if (!staffId) {
+      updateDashboardOrderMeta(channelId, {
+        assigneeId: null,
+        assigneeName: null
+      });
+
+      await channel.send('📌 Bearbeiter wurde entfernt.').catch(() => {});
+
+      return res.json({
+        success: true,
+        ...(await getDashboardOrderDetails(channelId))
+      });
+    }
+
+    const member = await channel.guild.members.fetch(staffId).catch(() => null);
+    if (!member || !isStaff(member)) {
+      throw makeDashboardError('Dieser User ist kein Staff-Mitglied.', 400);
+    }
+
+    updateDashboardOrderMeta(channelId, {
+      assigneeId: member.id,
+      assigneeName: getUserDisplayName(member.user, member.id),
+      status: currentMeta.status === 'offen' ? 'bearbeitung' : currentMeta.status
+    });
+
+    await channel.send(`📌 <@${member.id}> bearbeitet jetzt Bestellung #${getTicketOrderId(channel)}.`).catch(() => {});
+
+    res.json({
+      success: true,
+      ...(await getDashboardOrderDetails(channelId))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Bestellung konnte nicht zugewiesen werden.'
+    });
+  }
+});
+
+app.post('/api/dashboard/orders/:channelId/invoice', requireDashboardAuth, async (req, res) => {
+  try {
+    const channelId = String(req.params.channelId || '').trim();
+    const channel = getDashboardChannel(channelId);
+    if (!channel || getTicketType(channel) !== 'bestellung') {
+      throw makeDashboardError('Bestellung nicht gefunden.', 404);
+    }
+
+    const details = await getDashboardOrderDetails(channelId);
+    const invoice = buildInvoiceFromDashboardInput(req.body || {}, {
+      ...details.invoice,
+      orderId: getTicketOrderId(channel),
+      ownerId: getTicketOwnerId(channel)
+    });
+
+    await sendOrderInvoice(channel, invoice);
+
+    res.json({
+      success: true,
+      ...(await getDashboardOrderDetails(channelId))
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({
+      success: false,
+      error: e.status ? e.message : 'Rechnung konnte nicht gesendet werden.'
     });
   }
 });
@@ -5542,19 +6181,28 @@ app.post('/api/order', async (req, res) => {
       .setFooter({ text: 'Erstellt über die Website' })
       .setTimestamp();
 
-    const closeRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('close_ticket')
-        .setLabel('Ticket schließen')
-        .setEmoji('🔒')
-        .setStyle(ButtonStyle.Danger)
-    );
-
     await ticket.send({
       content: `<@${discordId}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
       embeds: [embed],
-      components: [closeRow]
+      components: [buildOrderTicketButtons()]
     });
+
+    const invoice = buildInvoiceFromOrderInput({
+      orderId: ticketOrderId,
+      ownerId: discordId,
+      username,
+      category: 'Website-Bestellung',
+      items,
+      total,
+      payment: paymentMethod,
+      note: note || 'Automatisch aus der Website-Bestellung erstellt.'
+    });
+    updateDashboardOrderMeta(ticket.id, {
+      status: 'offen',
+      invoice,
+      category: 'Website-Bestellung'
+    });
+    await sendOrderInvoice(ticket, invoice, { automatic: true });
 
     return res.json({
       success: true,

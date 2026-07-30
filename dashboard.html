@@ -730,6 +730,42 @@
       gap: 8px;
     }
 
+    .check-list {
+      display: grid;
+      gap: 8px;
+      max-height: 340px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .check-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0d151f;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .check-row input,
+    .inline-check input {
+      width: auto;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .inline-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     .management-layout {
       display: grid;
       grid-template-columns: 380px minmax(0, 1fr);
@@ -895,6 +931,7 @@
         <button data-view="presence" type="button">Bot-Status</button>
         <button data-view="invites" type="button">Invites</button>
         <button data-view="stock" type="button">Stock</button>
+        <button data-view="shop" type="button">Shop</button>
         <button data-view="users" type="button">User</button>
       </nav>
       <button id="logoutBtn" class="ghost" type="button">Logout</button>
@@ -1068,16 +1105,44 @@
                   <option value="storniert">Storniert</option>
                 </select>
               </label>
+              <label>Bearbeiter
+                <select id="orderAssigneeSelect" disabled>
+                  <option value="">Nicht zugewiesen</option>
+                </select>
+              </label>
               <label class="wide">Order-Notiz
                 <textarea id="orderNote" placeholder="Interne Notiz zur Bestellung" disabled></textarea>
               </label>
             </div>
             <div class="detail-actions">
               <button id="orderSaveBtn" class="small" type="button" disabled>Status speichern</button>
+              <button id="orderAssignBtn" class="small" type="button" disabled>Zuweisen</button>
               <button id="orderCompleteBtn" class="small primary" type="button" disabled>Fertig + Bewertung</button>
               <button id="orderOpenBtn" class="small" type="button" disabled>Discord öffnen</button>
               <button id="orderCloseBtn" class="small danger" type="button" disabled>Ticket schließen</button>
             </div>
+            <div style="height: 14px"></div>
+            <h2>Rechnung</h2>
+            <div class="form-grid">
+              <label class="wide">Produkte
+                <textarea id="invoiceItems" placeholder="Elytra x1 - 110 €" disabled></textarea>
+              </label>
+              <label>Gesamt
+                <input id="invoiceTotal" placeholder="110 €" disabled>
+              </label>
+              <label>Zahlung
+                <input id="invoicePayment" placeholder="PayPal" disabled>
+              </label>
+              <label>Ingame
+                <input id="invoiceIngame" placeholder="Minecraft Name" disabled>
+              </label>
+              <label>Hinweis
+                <input id="invoiceNote" placeholder="z.B. Lieferung nach Zahlung" disabled>
+              </label>
+            </div>
+            <div style="height: 8px"></div>
+            <button id="orderInvoiceBtn" class="small primary" type="button" disabled>Rechnung senden</button>
+            <div style="height: 14px"></div>
             <h2>Letzte Nachrichten</h2>
             <div id="orderMessages" class="message-log"></div>
           </div>
@@ -1163,6 +1228,78 @@
         </section>
       </main>
 
+      <main id="shopView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Shop</h1>
+            <p>Shop-Panel und Angebote direkt in Discord posten.</p>
+          </div>
+          <button id="shopRefreshBtn" class="small" type="button">Refresh</button>
+        </div>
+        <div class="panel-grid">
+          <section class="panel">
+            <h2>Shop-Panel Generator</h2>
+            <form id="shopPanelForm" class="form-grid">
+              <label>Channel
+                <select id="shopPanelChannel"></select>
+              </label>
+              <label>Titel
+                <input id="shopPanelTitle" value="HugoSMP Shop">
+              </label>
+              <label class="wide">Text
+                <textarea id="shopPanelDescription">Wähle unten eine Kategorie und erstelle deine Bestellung.</textarea>
+              </label>
+              <div class="wide">
+                <label class="inline-check">
+                  <input id="shopPanelIncludeSale" type="checkbox" checked>
+                  Aktuelles Angebot mit anzeigen
+                </label>
+              </div>
+              <div class="wide">
+                <h2>Items</h2>
+                <div id="shopItemList" class="check-list"></div>
+              </div>
+              <div class="wide">
+                <button class="primary" type="submit">Shop-Panel posten</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
+            <h2>Angebot/Sale posten</h2>
+            <form id="saleForm" class="form-grid">
+              <label>Channel
+                <select id="saleChannel"></select>
+              </label>
+              <label>Item
+                <select id="saleItem"></select>
+              </label>
+              <label>Titel
+                <input id="saleTitle" placeholder="Elytra Sale">
+              </label>
+              <label>Deal
+                <input id="saleDiscount" placeholder="-20% heute">
+              </label>
+              <label class="wide">Gültig bis
+                <input id="saleUntil" placeholder="heute 23:59">
+              </label>
+              <label class="wide">Text
+                <textarea id="saleDescription" placeholder="Kurzer Angebotstext für Discord"></textarea>
+              </label>
+              <div class="wide">
+                <label class="inline-check">
+                  <input id="saleMentionDeals" type="checkbox">
+                  Deals-Rolle pingen
+                </label>
+              </div>
+              <div class="wide">
+                <button class="primary" type="submit">Angebot posten</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+
       <main id="usersView" class="workspace dashboard-view hidden">
         <div class="page-head">
           <div>
@@ -1212,7 +1349,11 @@
       orders: [],
       selectedOrderId: null,
       selectedOrder: null,
-      orderStatus: 'active'
+      selectedInvoice: null,
+      orderStatus: 'active',
+      staff: [],
+      shopStock: [],
+      shopChannels: []
     };
 
     const $ = id => document.getElementById(id);
@@ -1445,6 +1586,67 @@
       return `<span class="pill ${klass}">${label}</span>`;
     }
 
+    function assigneePill(order) {
+      return order?.assigneeId
+        ? `<span class="pill good">${escapeHtml(order.assigneeName || order.assignee?.username || order.assigneeId)}</span>`
+        : '<span class="pill warn">frei</span>';
+    }
+
+    function fillChannelSelect(id, channels, preferredId) {
+      const select = $(id);
+      const current = select.value || preferredId || '';
+      select.replaceChildren();
+
+      channels.forEach(channel => {
+        const option = document.createElement('option');
+        option.value = channel.id;
+        option.textContent = `${channel.parentName ? `${channel.parentName} / ` : ''}#${channel.name}`;
+        select.appendChild(option);
+      });
+
+      if (current && [...select.options].some(option => option.value === current)) {
+        select.value = current;
+      }
+    }
+
+    function fillStaffSelect(staff, selectedId) {
+      const select = $('orderAssigneeSelect');
+      select.replaceChildren();
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'Nicht zugewiesen';
+      select.appendChild(empty);
+
+      staff.forEach(member => {
+        const option = document.createElement('option');
+        option.value = member.userId;
+        option.textContent = member.username;
+        select.appendChild(option);
+      });
+
+      select.value = selectedId || '';
+    }
+
+    function renderShopItems(items) {
+      const list = $('shopItemList');
+      list.replaceChildren();
+
+      if (!items.length) {
+        list.appendChild(emptyNode('Keine Stock-Items gefunden.'));
+        return;
+      }
+
+      items.forEach(item => {
+        const label = document.createElement('label');
+        label.className = 'check-row';
+        label.innerHTML = `
+          <input type="checkbox" value="${escapeHtml(item.id)}" checked>
+          <span>${stockNameHtml(item)} <span class="data-sub">${escapeHtml(item.price)} - ${item.amount} auf Lager</span></span>
+        `;
+        list.appendChild(label);
+      });
+    }
+
     function renderManagementMessages(targetId, messages) {
       const box = $(targetId);
       box.replaceChildren();
@@ -1654,8 +1856,8 @@
       state.orders.forEach(order => {
         const row = rowText(
           `#${order.orderId} - ${order.owner?.username || order.ownerId || 'Unbekannt'}`,
-          `${order.name} - ${formatTime(order.createdAt, true)}`,
-          orderStatusPill(order.status)
+          `${order.name} - ${order.assigneeName || 'frei'} - ${formatTime(order.createdAt, true)}`,
+          `${assigneePill(order)} ${orderStatusPill(order.status)}`
         );
         row.style.cursor = 'pointer';
         row.classList.toggle('active', order.channelId === state.selectedOrderId);
@@ -1665,13 +1867,30 @@
     }
 
     function setOrderDetailEnabled(enabled) {
-      ['orderStatusSelect', 'orderNote', 'orderSaveBtn', 'orderCompleteBtn', 'orderOpenBtn', 'orderCloseBtn'].forEach(id => {
+      [
+        'orderStatusSelect',
+        'orderAssigneeSelect',
+        'orderNote',
+        'orderSaveBtn',
+        'orderAssignBtn',
+        'orderCompleteBtn',
+        'orderOpenBtn',
+        'orderCloseBtn',
+        'orderInvoiceBtn',
+        'invoiceItems',
+        'invoiceTotal',
+        'invoicePayment',
+        'invoiceIngame',
+        'invoiceNote'
+      ].forEach(id => {
         $(id).disabled = !enabled;
       });
     }
 
     function renderOrderDetail(data) {
       state.selectedOrder = data?.order || null;
+      state.selectedInvoice = data?.invoice || null;
+      state.staff = data?.staff || state.staff || [];
       const order = state.selectedOrder;
       $('orderDetailTitle').textContent = order ? `Bestellung #${order.orderId}` : 'Keine Bestellung ausgewählt';
       $('orderDetailMeta').replaceChildren();
@@ -1681,16 +1900,30 @@
       if (!order) {
         $('orderDetailMeta').appendChild(emptyNode('Wähle links eine Bestellung aus.'));
         $('orderNote').value = '';
+        fillStaffSelect([], '');
+        $('invoiceItems').value = '';
+        $('invoiceTotal').value = '';
+        $('invoicePayment').value = '';
+        $('invoiceIngame').value = '';
+        $('invoiceNote').value = '';
         return;
       }
 
       $('orderDetailMeta').append(
         rowText('Kunde', order.owner?.username || order.ownerId || 'Unbekannt', order.ownerId ? `<span class="pill">${order.ownerId}</span>` : ''),
         rowText('Ticket', order.name, ticketStatePill(order.state)),
-        rowText('Status', order.status, orderStatusPill(order.status))
+        rowText('Status', order.status, orderStatusPill(order.status)),
+        rowText('Bearbeiter', order.assigneeName || 'Nicht zugewiesen', assigneePill(order)),
+        rowText('Rechnung', order.invoiceSentAt ? `gesendet ${formatTime(order.invoiceSentAt, true)}` : 'noch nicht gesendet', '<span class="pill">Invoice</span>')
       );
       $('orderStatusSelect').value = order.status || 'offen';
+      fillStaffSelect(state.staff, order.assigneeId || '');
       $('orderNote').value = order.note || '';
+      $('invoiceItems').value = state.selectedInvoice?.itemsText || '';
+      $('invoiceTotal').value = state.selectedInvoice?.total || '';
+      $('invoicePayment').value = state.selectedInvoice?.payment || '';
+      $('invoiceIngame').value = state.selectedInvoice?.ingame || '';
+      $('invoiceNote').value = state.selectedInvoice?.note || '';
       $('orderCloseBtn').disabled = order.state === 'closed';
       $('orderCompleteBtn').disabled = order.status === 'fertig';
     }
@@ -1726,6 +1959,34 @@
       showToast('Bestellung fertig markiert und Bewertungsbutton gesendet.');
     }
 
+    async function assignOrder() {
+      if (!state.selectedOrderId) return;
+      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/assign`, {
+        method: 'POST',
+        body: { staffId: $('orderAssigneeSelect').value }
+      });
+      renderOrderDetail(data);
+      await loadOrders();
+      showToast($('orderAssigneeSelect').value ? 'Bestellung zugewiesen.' : 'Bearbeiter entfernt.');
+    }
+
+    async function sendOrderInvoiceFromDashboard() {
+      if (!state.selectedOrderId) return;
+      const data = await api(`/api/dashboard/orders/${encodeURIComponent(state.selectedOrderId)}/invoice`, {
+        method: 'POST',
+        body: {
+          itemsText: $('invoiceItems').value,
+          total: $('invoiceTotal').value,
+          payment: $('invoicePayment').value,
+          ingame: $('invoiceIngame').value,
+          note: $('invoiceNote').value
+        }
+      });
+      renderOrderDetail(data);
+      await loadOrders();
+      showToast('Rechnung ins Ticket gesendet.');
+    }
+
     function openSelectedOrder() {
       if (state.selectedOrder?.url) window.open(state.selectedOrder.url, '_blank', 'noreferrer');
     }
@@ -1739,6 +2000,73 @@
       await loadOrders();
       await selectOrder(state.selectedOrderId);
       showToast('Order-Ticket geschlossen.');
+    }
+
+    async function loadShop() {
+      const data = await api('/api/dashboard/shop');
+      state.shopStock = data.stock || [];
+      state.shopChannels = data.channels || [];
+
+      fillChannelSelect('shopPanelChannel', state.shopChannels, data.defaultChannelId);
+      fillChannelSelect('saleChannel', state.shopChannels, data.defaultChannelId);
+
+      const saleItem = $('saleItem');
+      const selectedSaleItem = saleItem.value;
+      saleItem.replaceChildren();
+      state.shopStock.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `${item.name} - ${item.price}`;
+        saleItem.appendChild(option);
+      });
+      if (selectedSaleItem && [...saleItem.options].some(option => option.value === selectedSaleItem)) {
+        saleItem.value = selectedSaleItem;
+      }
+
+      if (!$('saleTitle').value && data.latestOffer?.title) $('saleTitle').value = data.latestOffer.title;
+      renderShopItems(state.shopStock);
+    }
+
+    async function postShopPanel(event) {
+      event.preventDefault();
+      const itemIds = [...$('shopItemList').querySelectorAll('input[type="checkbox"]:checked')]
+        .map(input => input.value);
+
+      const data = await api('/api/dashboard/shop/panel', {
+        method: 'POST',
+        body: {
+          channelId: $('shopPanelChannel').value,
+          title: $('shopPanelTitle').value,
+          description: $('shopPanelDescription').value,
+          itemIds,
+          includeSale: $('shopPanelIncludeSale').checked
+        }
+      });
+
+      showToast('Shop-Panel gepostet.');
+      if (data.messageUrl) window.open(data.messageUrl, '_blank', 'noreferrer');
+    }
+
+    async function postSale(event) {
+      event.preventDefault();
+      const selected = state.shopStock.find(item => item.id === $('saleItem').value);
+      const data = await api('/api/dashboard/shop/sale', {
+        method: 'POST',
+        body: {
+          channelId: $('saleChannel').value,
+          itemId: $('saleItem').value,
+          itemName: selected?.name || '',
+          title: $('saleTitle').value,
+          discount: $('saleDiscount').value,
+          until: $('saleUntil').value,
+          description: $('saleDescription').value,
+          mentionDeals: $('saleMentionDeals').checked
+        }
+      });
+
+      showToast('Angebot gepostet.');
+      if (data.offer?.messageUrl) window.open(data.offer.messageUrl, '_blank', 'noreferrer');
+      await loadShop();
     }
 
     async function loadOverview() {
@@ -2338,6 +2666,7 @@
       if (state.currentView === 'presence') return loadPresence();
       if (state.currentView === 'invites') return loadInvites();
       if (state.currentView === 'stock') return loadStock();
+      if (state.currentView === 'shop') return loadShop();
       return Promise.resolve();
     }
 
@@ -2423,6 +2752,8 @@
       loadOrders().catch(error => showToast(error.message, true));
     });
     $('orderSaveBtn').addEventListener('click', () => saveOrderStatus().catch(error => showToast(error.message, true)));
+    $('orderAssignBtn').addEventListener('click', () => assignOrder().catch(error => showToast(error.message, true)));
+    $('orderInvoiceBtn').addEventListener('click', () => sendOrderInvoiceFromDashboard().catch(error => showToast(error.message, true)));
     $('orderCompleteBtn').addEventListener('click', () => completeOrder().catch(error => showToast(error.message, true)));
     $('orderOpenBtn').addEventListener('click', openSelectedOrder);
     $('orderCloseBtn').addEventListener('click', () => closeSelectedOrder().catch(error => showToast(error.message, true)));
@@ -2430,6 +2761,9 @@
     $('inviteSetForm').addEventListener('submit', saveInviteAmount);
     $('invitesRefreshBtn').addEventListener('click', () => loadInvites().catch(error => showToast(error.message, true)));
     $('stockRefreshBtn').addEventListener('click', () => loadStock().catch(error => showToast(error.message, true)));
+    $('shopRefreshBtn').addEventListener('click', () => loadShop().catch(error => showToast(error.message, true)));
+    $('shopPanelForm').addEventListener('submit', event => postShopPanel(event).catch(error => showToast(error.message, true)));
+    $('saleForm').addEventListener('submit', event => postSale(event).catch(error => showToast(error.message, true)));
     $('userLookupForm').addEventListener('submit', lookupUser);
     $('replyBtn').addEventListener('click', () => sendReply().catch(error => showToast(error.message, true)));
     $('newSendBtn').addEventListener('click', () => sendNewDm().catch(error => showToast(error.message, true)));
