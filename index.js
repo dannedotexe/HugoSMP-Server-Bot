@@ -2043,7 +2043,7 @@ async function updateStockPanel() {
 }
 
 // ── Commands ──────────────────────────────────────────────────────
-async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null) {
+async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null, options = {}) {
   const previousAmount = Number(oldAmount || 0);
   const currentAmount = Number(newAmount || 0);
   const addedAmount = currentAmount - previousAmount;
@@ -2051,12 +2051,13 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null)
   if (!item || currentAmount <= 0 || addedAmount <= 0) return;
 
   const data = loadData();
-  const channelId = data.restockChannelId || RESTOCK_CHANNEL_ID || data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
+  const channelId = options.channelId || data.restockChannelId || RESTOCK_CHANNEL_ID || data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
   const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
 
   if (!channel?.send) return;
 
   const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
+  const shouldMention = options.mention !== false;
   const embed = new EmbedBuilder()
     .setColor('#35d48a')
     .setTitle('Item aufgefüllt')
@@ -2067,13 +2068,18 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null)
     )
     .setTimestamp();
 
-  await channel.send({
-    content: mention,
+  const message = await channel.send({
+    content: shouldMention && mention ? mention : options.content,
     embeds: [embed],
     allowedMentions: {
-      roles: PING_ROLES.restocks ? [PING_ROLES.restocks] : []
+      roles: shouldMention && PING_ROLES.restocks ? [PING_ROLES.restocks] : []
     }
   }).catch(e => console.error('restock notify error:', e.message));
+
+  return {
+    channelId,
+    messageId: message?.id || null
+  };
 }
 
 async function registerCommands(guildId) {
@@ -2291,6 +2297,13 @@ async function registerCommands(guildId) {
       )
       .addSubcommand(sub =>
         sub.setName('listitems').setDescription('Alle Stock-Items anzeigen')
+      )
+      .addSubcommand(sub =>
+        sub.setName('previewrestock')
+          .setDescription('Restock-Nachricht ohne Rollen-Ping testen')
+          .addStringOption(o => o.setName('id').setDescription('Item-ID aus /stock listitems'))
+          .addIntegerOption(o => o.setName('alt').setDescription('Alter Bestand').setMinValue(0))
+          .addIntegerOption(o => o.setName('neu').setDescription('Neuer Bestand').setMinValue(1))
       )
       .toJSON(),
 
@@ -3404,6 +3417,53 @@ client.on('interactionCreate', async interaction => {
             .setColor('#b10de7')
             .setTitle('📦 Stock-Items')
             .setDescription(list)],
+          ephemeral: true
+        });
+      }
+
+      if (sub === 'previewrestock') {
+        const itemId = interaction.options.getString('id');
+        const item = itemId
+          ? data.stockItems.find(i => i.id === itemId)
+          : data.stockItems[0];
+
+        if (!item) {
+          return interaction.reply({
+            content: itemId
+              ? `❌ Item \`${itemId}\` nicht gefunden. Nutze \`/stock listitems\` für die IDs.`
+              : '❌ Es gibt noch keine Stock-Items für eine Vorschau.',
+            ephemeral: true
+          });
+        }
+
+        const oldAmount = interaction.options.getInteger('alt') ?? Number(data.stock?.[item.id] || 0);
+        const newAmount = interaction.options.getInteger('neu') ?? Math.max(oldAmount + 5, 1);
+
+        if (newAmount <= oldAmount) {
+          return interaction.reply({
+            content: '❌ Der neue Bestand muss größer als der alte Bestand sein, sonst wäre es kein Restock.',
+            ephemeral: true
+          });
+        }
+
+        const preview = await notifyRestock(item, oldAmount, newAmount, interaction.channelId, {
+          mention: false,
+          content: 'Vorschau - kein Rollen-Ping'
+        });
+
+        if (!preview?.channelId) {
+          return interaction.reply({
+            content: '❌ Vorschau konnte nicht gesendet werden. Prüfe, ob der Bot in den Restock-Channel schreiben darf.',
+            ephemeral: true
+          });
+        }
+
+        const messageLink = preview.messageId
+          ? `\nNachricht: https://discord.com/channels/${interaction.guildId}/${preview.channelId}/${preview.messageId}`
+          : '';
+
+        return interaction.reply({
+          content: `✅ Vorschau ohne Rollen-Ping in <#${preview.channelId}> gesendet.${messageLink}`,
           ephemeral: true
         });
       }
