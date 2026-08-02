@@ -1470,8 +1470,25 @@
       color: #e6dfea;
     }
 
+    .stock-create-form {
+      margin-bottom: 14px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255, 80, 178, .08), rgba(53, 212, 138, .05));
+    }
+
+    .stock-create-actions,
+    .stock-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
     .stock-row {
-      grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.4fr) 110px 104px;
+      grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.4fr) 110px 176px;
     }
 
     .stock-edit input:first-child {
@@ -1992,6 +2009,27 @@
           <button id="stockRefreshBtn" class="small" type="button">Refresh</button>
         </div>
         <section class="panel">
+          <form id="stockCreateForm" class="stock-create-form form-grid">
+            <label>Emoji
+              <input id="stockNewEmoji" placeholder="<:Money:123...> oder Emoji-ID">
+            </label>
+            <label>Name
+              <input id="stockNewName" placeholder="Neues Item" required>
+            </label>
+            <label>Preis
+              <input id="stockNewPrice" placeholder="1,50 €" required>
+            </label>
+            <label>Menge
+              <input id="stockNewAmount" type="number" min="0" step="1" value="0">
+            </label>
+            <label class="wide">ID
+              <input id="stockNewId" placeholder="wird automatisch aus dem Namen erstellt">
+            </label>
+            <div class="wide stock-create-actions">
+              <button class="primary" type="submit">Item erstellen</button>
+              <button id="stockCreateResetBtn" class="ghost" type="button">Zurücksetzen</button>
+            </div>
+          </form>
           <div id="stockList" class="row-list"></div>
         </section>
       </main>
@@ -2238,6 +2276,28 @@
 
     function stockNameHtml(item) {
       return `${discordEmojiHtml(item.emoji)}${escapeHtml(item.name)}`;
+    }
+
+    function stockIdFromName(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_')
+        .slice(0, 30);
+    }
+
+    function syncStockIdSuggestion() {
+      const idInput = $('stockNewId');
+      if (idInput.dataset.touched === 'true') return;
+      idInput.value = stockIdFromName($('stockNewName').value);
+    }
+
+    function resetStockCreateForm() {
+      $('stockCreateForm').reset();
+      $('stockNewAmount').value = '0';
+      $('stockNewId').dataset.touched = 'false';
     }
 
     function escapeHtml(value) {
@@ -3027,8 +3087,52 @@
         save.textContent = 'Speichern';
         save.addEventListener('click', () => saveStockItem(item.id));
 
-        row.append(title, edits, amount, save);
+        const remove = document.createElement('button');
+        remove.className = 'danger small';
+        remove.type = 'button';
+        remove.textContent = 'Löschen';
+        remove.addEventListener('click', () => deleteStockItem(item.id, item.name));
+
+        const actions = document.createElement('div');
+        actions.className = 'stock-actions';
+        actions.append(save, remove);
+
+        row.append(title, edits, amount, actions);
         list.appendChild(row);
+      });
+    }
+
+    async function createStockItem(event) {
+      event.preventDefault();
+      const name = $('stockNewName').value.trim();
+      const price = $('stockNewPrice').value.trim();
+      const id = stockIdFromName($('stockNewId').value || name);
+      const amount = Number($('stockNewAmount').value || 0);
+
+      if (!name || !price || !id) {
+        showToast('Name, Preis und gültige ID eintragen.', true);
+        return;
+      }
+
+      return withPending('stock:create', async () => {
+        try {
+          const data = await api('/api/dashboard/stock', {
+            method: 'POST',
+            body: {
+              id,
+              emoji: $('stockNewEmoji').value,
+              name,
+              price,
+              amount
+            }
+          });
+          state.stock = data.stock || [];
+          resetStockCreateForm();
+          renderStock();
+          showToast('Item erstellt und Discord-Panel aktualisiert.');
+        } catch (error) {
+          showToast(error.message, true);
+        }
       });
     }
 
@@ -3047,6 +3151,23 @@
           state.stock = data.stock || [];
           renderStock();
           showToast('Stock gespeichert und Discord-Panel aktualisiert.');
+        } catch (error) {
+          showToast(error.message, true);
+        }
+      });
+    }
+
+    async function deleteStockItem(itemId, itemName) {
+      if (!confirm(`${itemName || itemId} wirklich aus dem Stock entfernen?`)) return;
+
+      return withPending(`stock:delete:${itemId}`, async () => {
+        try {
+          const data = await api(`/api/dashboard/stock/${encodeURIComponent(itemId)}`, {
+            method: 'DELETE'
+          });
+          state.stock = data.stock || [];
+          renderStock();
+          showToast('Item entfernt und Discord-Panel aktualisiert.');
         } catch (error) {
           showToast(error.message, true);
         }
@@ -3593,6 +3714,13 @@
     $('presenceForm').addEventListener('submit', savePresence);
     $('inviteSetForm').addEventListener('submit', saveInviteAmount);
     $('invitesRefreshBtn').addEventListener('click', () => loadInvites().catch(error => showToast(error.message, true)));
+    $('stockCreateForm').addEventListener('submit', event => createStockItem(event).catch(error => showToast(error.message, true)));
+    $('stockCreateResetBtn').addEventListener('click', resetStockCreateForm);
+    $('stockNewName').addEventListener('input', syncStockIdSuggestion);
+    $('stockNewId').addEventListener('input', () => {
+      $('stockNewId').dataset.touched = 'true';
+      $('stockNewId').value = stockIdFromName($('stockNewId').value);
+    });
     $('stockRefreshBtn').addEventListener('click', () => loadStock().catch(error => showToast(error.message, true)));
     $('shopRefreshBtn').addEventListener('click', () => loadShop().catch(error => showToast(error.message, true)));
     $('shopPanelForm').addEventListener('submit', event => postShopPanel(event).catch(error => showToast(error.message, true)));

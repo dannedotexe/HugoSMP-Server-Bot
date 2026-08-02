@@ -753,6 +753,44 @@ function cleanLongText(value, limit = 1200) {
   return String(value || '').trim().slice(0, limit);
 }
 
+function normalizeStockItemId(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_')
+    .slice(0, 30);
+}
+
+function normalizeStockEmoji(value) {
+  let emoji = cleanShortText(value, 80);
+  let emojiId = null;
+
+  const customMatch = emoji.match(/<a?:([^:]+):(\d{15,20})>/);
+  const rawIdMatch = emoji.match(/^(\d{15,20})$/);
+  const colonMatch = emoji.match(/:?([^:\s<>]+):(\d{15,20})/);
+
+  if (customMatch) {
+    emojiId = customMatch[2];
+    emoji = customMatch[0];
+  } else if (rawIdMatch) {
+    emojiId = rawIdMatch[1];
+    emoji = `<:item:${emojiId}>`;
+  } else if (colonMatch) {
+    emojiId = colonMatch[2];
+    emoji = `<:${colonMatch[1]}:${emojiId}>`;
+  }
+
+  return { emoji, emojiId };
+}
+
+function getMutableStockItems(data) {
+  if (!Array.isArray(data.stockItems)) data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
+  if (!data.stock) data.stock = {};
+  return data.stockItems;
+}
+
 function normalizeOrderItems(items, data = loadData()) {
   const rows = Array.isArray(items) ? items : [];
 
@@ -5460,11 +5498,60 @@ app.get('/api/dashboard/stock', requireDashboardAuth, (req, res) => {
   });
 });
 
+app.post('/api/dashboard/stock', requireDashboardAuth, async (req, res) => {
+  const name = cleanShortText(req.body?.name, 80);
+  const price = cleanShortText(req.body?.price, 40);
+  const amount = Number(req.body?.amount ?? 0);
+  const id = normalizeStockItemId(req.body?.id || name);
+  const data = loadData();
+  const stockItems = getMutableStockItems(data);
+
+  if (!name || !price || !id) {
+    return res.status(400).json({
+      success: false,
+      error: 'Name, Preis und eine gültige ID sind erforderlich.'
+    });
+  }
+
+  if (!Number.isInteger(amount) || amount < 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Menge muss eine ganze Zahl ab 0 sein.'
+    });
+  }
+
+  if (stockItems.some(item => item.id === id)) {
+    return res.status(409).json({
+      success: false,
+      error: `Ein Stock-Item mit der ID ${id} existiert bereits.`
+    });
+  }
+
+  const normalizedEmoji = normalizeStockEmoji(req.body?.emoji);
+  stockItems.push({
+    id,
+    name,
+    emoji: normalizedEmoji.emoji,
+    emojiId: normalizedEmoji.emojiId,
+    price
+  });
+  data.stock[id] = amount;
+
+  saveData(data);
+  await updateStockPanel();
+
+  res.status(201).json({
+    success: true,
+    stock: getDashboardStock(loadData())
+  });
+});
+
 app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res) => {
   const itemId = String(req.params.itemId || '').trim();
   const amount = Number(req.body?.amount);
   const data = loadData();
-  const item = (data.stockItems || STOCK_ITEMS).find(stockItem => stockItem.id === itemId);
+  const stockItems = getMutableStockItems(data);
+  const item = stockItems.find(stockItem => stockItem.id === itemId);
 
   if (!item) {
     return res.status(404).json({
@@ -5485,10 +5572,35 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
   if (typeof req.body?.name === 'string' && req.body.name.trim()) item.name = req.body.name.trim().slice(0, 80);
   if (typeof req.body?.price === 'string' && req.body.price.trim()) item.price = req.body.price.trim().slice(0, 40);
   if (typeof req.body?.emoji === 'string') {
-    item.emoji = req.body.emoji.trim().slice(0, 80);
-    const customMatch = item.emoji.match(/<a?:([^:]+):(\d+)>/);
-    item.emojiId = customMatch ? customMatch[2] : null;
+    const normalizedEmoji = normalizeStockEmoji(req.body.emoji);
+    item.emoji = normalizedEmoji.emoji;
+    item.emojiId = normalizedEmoji.emojiId;
   }
+
+  saveData(data);
+  await updateStockPanel();
+
+  res.json({
+    success: true,
+    stock: getDashboardStock(loadData())
+  });
+});
+
+app.delete('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res) => {
+  const itemId = String(req.params.itemId || '').trim();
+  const data = loadData();
+  const stockItems = getMutableStockItems(data);
+  const index = stockItems.findIndex(stockItem => stockItem.id === itemId);
+
+  if (index === -1) {
+    return res.status(404).json({
+      success: false,
+      error: 'Stock-Item nicht gefunden.'
+    });
+  }
+
+  stockItems.splice(index, 1);
+  delete data.stock[itemId];
 
   saveData(data);
   await updateStockPanel();
