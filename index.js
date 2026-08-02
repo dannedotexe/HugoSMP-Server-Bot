@@ -175,6 +175,7 @@ const MAX_DASHBOARD_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
 
 const STOCK_CHANNEL_ID = '1502271613968846878';
+const RESTOCK_CHANNEL_ID = process.env.RESTOCK_CHANNEL_ID || '1533616215963209828';
 const SHOP_PANEL_CHANNEL_ID = process.env.SHOP_PANEL_CHANNEL_ID || STOCK_CHANNEL_ID;
 
 const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // ← Mod-Log Channel ID eintragen
@@ -261,6 +262,7 @@ function loadData() {
       data.stockMessageId = data.stockMessageId || null;
       data.stockButtonsMessageId = data.stockButtonsMessageId || null;
       data.stockChannelId = data.stockChannelId || STOCK_CHANNEL_ID;
+      data.restockChannelId = data.restockChannelId || RESTOCK_CHANNEL_ID;
 
       data.publicStockMessageId = data.publicStockMessageId || null;
       data.publicStockChannelId = data.publicStockChannelId || null;
@@ -324,6 +326,7 @@ function loadData() {
     stockMessageId: null,
     stockButtonsMessageId: null,
     stockChannelId: STOCK_CHANNEL_ID,
+    restockChannelId: RESTOCK_CHANNEL_ID,
 
     publicStockMessageId: null,
     publicStockChannelId: null,
@@ -2048,7 +2051,7 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null)
   if (!item || currentAmount <= 0 || addedAmount <= 0) return;
 
   const data = loadData();
-  const channelId = data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
+  const channelId = data.restockChannelId || RESTOCK_CHANNEL_ID || data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
   const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
 
   if (!channel?.send) return;
