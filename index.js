@@ -5298,7 +5298,13 @@ async function getDashboardInviteRows(data = loadData(), limit = 25, fetchMissin
 
   return Promise.all(rows.map(async ([userId, amount], index) => {
     const cachedUser = getCachedDashboardUser(userId);
-    const user = cachedUser || (fetchMissingUsers ? await client.users.fetch(userId).catch(() => null) : null);
+    let user = cachedUser;
+
+    if (!user && fetchMissingUsers) {
+      user = await client.users.fetch(userId).catch(() => null);
+    } else if (!user) {
+      client.users.fetch(userId).catch(() => {});
+    }
 
     return {
       rank: index + 1,
