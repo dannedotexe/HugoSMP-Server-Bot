@@ -678,9 +678,15 @@ function getTicketOpenState(channel) {
     : 'open';
 }
 
-async function getUserSummary(userId) {
+async function getUserSummary(userId, fetchMissingUser = true) {
   if (!userId) return null;
-  const user = await client.users.fetch(userId).catch(() => null);
+  let user = getCachedDashboardUser(userId);
+
+  if (!user && fetchMissingUser) {
+    user = await client.users.fetch(userId).catch(() => null);
+  } else if (!user) {
+    client.users.fetch(userId).catch(() => {});
+  }
 
   return {
     userId,
@@ -1120,9 +1126,9 @@ function ticketUrl(channel) {
   return `https://discord.com/channels/${channel.guild.id}/${channel.id}`;
 }
 
-async function serializeDashboardTicket(channel, data = loadData()) {
+async function serializeDashboardTicket(channel, data = loadData(), options = {}) {
   const ownerId = getTicketOwnerId(channel);
-  const owner = await getUserSummary(ownerId);
+  const owner = await getUserSummary(ownerId, options.fetchUsers !== false);
   const meta = getTicketDashboardMeta(data, channel.id);
 
   return {
@@ -1145,13 +1151,14 @@ async function serializeDashboardTicket(channel, data = loadData()) {
 
 async function getDashboardTicketList({ state = 'open', type = 'all' } = {}) {
   const data = loadData();
+  const channels = getDashboardTicketChannels()
+    .filter(channel => state === 'all' || getTicketOpenState(channel) === state)
+    .filter(channel => type === 'all' || getTicketType(channel) === type);
   const tickets = await Promise.all(
-    getDashboardTicketChannels().map(channel => serializeDashboardTicket(channel, data))
+    channels.map(channel => serializeDashboardTicket(channel, data, { fetchUsers: false }))
   );
 
   return tickets
-    .filter(ticket => state === 'all' || ticket.state === state)
-    .filter(ticket => type === 'all' || ticket.type === type)
     .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
@@ -1205,10 +1212,10 @@ async function getDashboardTicketDetails(channelId) {
   return { ticket, messages, ownerInfo };
 }
 
-async function serializeDashboardOrder(channel, data = loadData()) {
-  const ticket = await serializeDashboardTicket(channel, data);
+async function serializeDashboardOrder(channel, data = loadData(), options = {}) {
+  const ticket = await serializeDashboardTicket(channel, data, options);
   const meta = getOrderDashboardMeta(data, channel.id);
-  const assignee = meta.assigneeId ? await getUserSummary(meta.assigneeId) : null;
+  const assignee = meta.assigneeId ? await getUserSummary(meta.assigneeId, options.fetchUsers !== false) : null;
 
   return {
     ...ticket,
@@ -1229,7 +1236,7 @@ async function getDashboardOrderList({ status = 'active' } = {}) {
   const orders = await Promise.all(
     getDashboardTicketChannels()
       .filter(channel => getTicketType(channel) === 'bestellung')
-      .map(channel => serializeDashboardOrder(channel, data))
+      .map(channel => serializeDashboardOrder(channel, data, { fetchUsers: false }))
   );
 
   return orders
