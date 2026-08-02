@@ -2082,6 +2082,56 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null,
   };
 }
 
+async function sendRestockPreview(interaction) {
+  const data = loadData();
+  if (!data.stockItems) data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
+
+  const itemId = interaction.options.getString('id');
+  const item = itemId
+    ? data.stockItems.find(i => i.id === itemId)
+    : data.stockItems[0];
+
+  if (!item) {
+    return interaction.reply({
+      content: itemId
+        ? `❌ Item \`${itemId}\` nicht gefunden. Nutze \`/stock listitems\` für die IDs.`
+        : '❌ Es gibt noch keine Stock-Items für eine Vorschau.',
+      ephemeral: true
+    });
+  }
+
+  const oldAmount = interaction.options.getInteger('alt') ?? Number(data.stock?.[item.id] || 0);
+  const newAmount = interaction.options.getInteger('neu') ?? Math.max(oldAmount + 5, 1);
+
+  if (newAmount <= oldAmount) {
+    return interaction.reply({
+      content: '❌ Der neue Bestand muss größer als der alte Bestand sein, sonst wäre es kein Restock.',
+      ephemeral: true
+    });
+  }
+
+  const preview = await notifyRestock(item, oldAmount, newAmount, interaction.channelId, {
+    mention: false,
+    content: 'Vorschau - kein Rollen-Ping'
+  });
+
+  if (!preview?.channelId) {
+    return interaction.reply({
+      content: '❌ Vorschau konnte nicht gesendet werden. Prüfe, ob der Bot in den Restock-Channel schreiben darf.',
+      ephemeral: true
+    });
+  }
+
+  const messageLink = preview.messageId
+    ? `\nNachricht: https://discord.com/channels/${interaction.guildId}/${preview.channelId}/${preview.messageId}`
+    : '';
+
+  return interaction.reply({
+    content: `✅ Vorschau ohne Rollen-Ping in <#${preview.channelId}> gesendet.${messageLink}`,
+    ephemeral: true
+  });
+}
+
 async function registerCommands(guildId) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
 
@@ -2298,8 +2348,14 @@ async function registerCommands(guildId) {
       .addSubcommand(sub =>
         sub.setName('listitems').setDescription('Alle Stock-Items anzeigen')
       )
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('preview')
+      .setDescription('Vorschauen ohne Ping testen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addSubcommand(sub =>
-        sub.setName('previewrestock')
+        sub.setName('restock')
           .setDescription('Restock-Nachricht ohne Rollen-Ping testen')
           .addStringOption(o => o.setName('id').setDescription('Item-ID aus /stock listitems'))
           .addIntegerOption(o => o.setName('alt').setDescription('Alter Bestand').setMinValue(0))
@@ -3398,6 +3454,14 @@ client.on('interactionCreate', async interaction => {
 
 
 
+    // ── /preview ───────────────────────────────────────────────────────
+    if (interaction.commandName === 'preview') {
+      const sub = interaction.options.getSubcommand();
+      if (sub === 'restock') return sendRestockPreview(interaction);
+    }
+
+
+
     // ── /stock ─────────────────────────────────────────────────────────
     if (interaction.commandName === 'stock') {
       const sub = interaction.options.getSubcommand();
@@ -3417,53 +3481,6 @@ client.on('interactionCreate', async interaction => {
             .setColor('#b10de7')
             .setTitle('📦 Stock-Items')
             .setDescription(list)],
-          ephemeral: true
-        });
-      }
-
-      if (sub === 'previewrestock') {
-        const itemId = interaction.options.getString('id');
-        const item = itemId
-          ? data.stockItems.find(i => i.id === itemId)
-          : data.stockItems[0];
-
-        if (!item) {
-          return interaction.reply({
-            content: itemId
-              ? `❌ Item \`${itemId}\` nicht gefunden. Nutze \`/stock listitems\` für die IDs.`
-              : '❌ Es gibt noch keine Stock-Items für eine Vorschau.',
-            ephemeral: true
-          });
-        }
-
-        const oldAmount = interaction.options.getInteger('alt') ?? Number(data.stock?.[item.id] || 0);
-        const newAmount = interaction.options.getInteger('neu') ?? Math.max(oldAmount + 5, 1);
-
-        if (newAmount <= oldAmount) {
-          return interaction.reply({
-            content: '❌ Der neue Bestand muss größer als der alte Bestand sein, sonst wäre es kein Restock.',
-            ephemeral: true
-          });
-        }
-
-        const preview = await notifyRestock(item, oldAmount, newAmount, interaction.channelId, {
-          mention: false,
-          content: 'Vorschau - kein Rollen-Ping'
-        });
-
-        if (!preview?.channelId) {
-          return interaction.reply({
-            content: '❌ Vorschau konnte nicht gesendet werden. Prüfe, ob der Bot in den Restock-Channel schreiben darf.',
-            ephemeral: true
-          });
-        }
-
-        const messageLink = preview.messageId
-          ? `\nNachricht: https://discord.com/channels/${interaction.guildId}/${preview.channelId}/${preview.messageId}`
-          : '';
-
-        return interaction.reply({
-          content: `✅ Vorschau ohne Rollen-Ping in <#${preview.channelId}> gesendet.${messageLink}`,
           ephemeral: true
         });
       }
