@@ -2033,6 +2033,35 @@ async function updateStockPanel() {
 }
 
 // ── Commands ──────────────────────────────────────────────────────
+async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null) {
+  if (!item || Number(oldAmount || 0) > 0 || Number(newAmount || 0) <= 0) return;
+
+  const data = loadData();
+  const channelId = data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
+  const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+
+  if (!channel?.send) return;
+
+  const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
+  const embed = new EmbedBuilder()
+    .setColor('#35d48a')
+    .setTitle('Item wieder auf Lager')
+    .setDescription(`${item.emoji || ''} **${item.name}** ist wieder verfügbar.`)
+    .addFields(
+      { name: 'Preis', value: item.price || 'Nicht gesetzt', inline: true },
+      { name: 'Lager', value: `${newAmount}`, inline: true }
+    )
+    .setTimestamp();
+
+  await channel.send({
+    content: mention,
+    embeds: [embed],
+    allowedMentions: {
+      roles: PING_ROLES.restocks ? [PING_ROLES.restocks] : []
+    }
+  }).catch(e => console.error('restock notify error:', e.message));
+}
+
 async function registerCommands(guildId) {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
 
@@ -3401,6 +3430,7 @@ client.on('interactionCreate', async interaction => {
         data.stock[id] = menge;
         saveData(data);
         await updateStockPanel();
+        await notifyRestock(newItem, 0, menge, interaction.channelId);
 
         return interaction.reply({
           embeds: [new EmbedBuilder()
@@ -4649,6 +4679,8 @@ client.on('interactionCreate', async interaction => {
         return interaction.editReply(`✅ Bestand aktualisiert: ${current} → **${data.stock[itemId]}**`);
       }
 
+      await notifyRestock(item, current, data.stock[itemId], interaction.channelId);
+
       return interaction.editReply(
         `✅ **${item.name}**: ${current} → **${data.stock[itemId]}**`
       );
@@ -5064,6 +5096,8 @@ client.on('interactionCreate', async interaction => {
           ephemeral: true
         });
       }
+
+      await notifyRestock(item, old, amount, interaction.channelId);
 
       return interaction.reply({
         content: `✅ **${item.name}**: ${old} → **${amount}**`,
@@ -5539,6 +5573,7 @@ app.post('/api/dashboard/stock', requireDashboardAuth, async (req, res) => {
 
   saveData(data);
   await updateStockPanel();
+  await notifyRestock(stockItems[stockItems.length - 1], 0, amount);
 
   res.status(201).json({
     success: true,
@@ -5567,6 +5602,7 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
     });
   }
 
+  const oldAmount = Number(data.stock?.[itemId] || 0);
   data.stock[itemId] = amount;
 
   if (typeof req.body?.name === 'string' && req.body.name.trim()) item.name = req.body.name.trim().slice(0, 80);
@@ -5579,6 +5615,7 @@ app.patch('/api/dashboard/stock/:itemId', requireDashboardAuth, async (req, res)
 
   saveData(data);
   await updateStockPanel();
+  await notifyRestock(item, oldAmount, amount);
 
   res.json({
     success: true,
