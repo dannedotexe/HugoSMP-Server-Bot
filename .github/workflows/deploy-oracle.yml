@@ -1,0 +1,35 @@
+name: Deploy to Oracle
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+
+            cd /home/ubuntu/HugoSMP-Server-Bot
+            git fetch origin main
+            git reset --hard origin/main
+
+            npm ci --omit=dev
+
+            if pm2 describe hugosmp-bot >/dev/null 2>&1; then
+              pm2 restart hugosmp-bot --update-env
+            else
+              pm2 start index.js --name hugosmp-bot
+            fi
+
+            pm2 save
