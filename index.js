@@ -2034,7 +2034,11 @@ async function updateStockPanel() {
 
 // ── Commands ──────────────────────────────────────────────────────
 async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null) {
-  if (!item || Number(oldAmount || 0) > 0 || Number(newAmount || 0) <= 0) return;
+  const previousAmount = Number(oldAmount || 0);
+  const currentAmount = Number(newAmount || 0);
+  const addedAmount = currentAmount - previousAmount;
+
+  if (!item || currentAmount <= 0 || addedAmount <= 0) return;
 
   const data = loadData();
   const channelId = data.publicStockChannelId || data.stockChannelId || sourceChannelId || STOCK_CHANNEL_ID;
@@ -2045,11 +2049,11 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null)
   const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
   const embed = new EmbedBuilder()
     .setColor('#35d48a')
-    .setTitle('Item wieder auf Lager')
-    .setDescription(`${item.emoji || ''} **${item.name}** ist wieder verfügbar.`)
+    .setTitle('Item aufgefüllt')
+    .setDescription(`${item.emoji || ''} **${item.name}** wurde aufgefüllt.`)
     .addFields(
       { name: 'Preis', value: item.price || 'Nicht gesetzt', inline: true },
-      { name: 'Lager', value: `${newAmount}`, inline: true }
+      { name: 'Lager', value: `${previousAmount} → ${currentAmount} (+${addedAmount})`, inline: true }
     )
     .setTimestamp();
 
