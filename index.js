@@ -11,6 +11,30 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
+loadLocalEnv();
+
+function loadLocalEnv(file = path.join(__dirname, '.env')) {
+  if (!fs.existsSync(file)) return;
+
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+
+    if (!key || process.env[key] !== undefined) continue;
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    process.env[key] = value;
+  }
+}
+
 const PRESENCE_CONFIG_FILE = process.env.PRESENCE_CONFIG_FILE || path.join(__dirname, 'bot-presence.json');
 
 const DEFAULT_PRESENCE_CONFIG = {
