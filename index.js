@@ -5285,14 +5285,20 @@ function getDashboardStock(data = loadData()) {
   });
 }
 
-async function getDashboardInviteRows(data = loadData(), limit = 25) {
+function getCachedDashboardUser(userId) {
+  const guild = client.guilds.cache.get(GUILD_ID);
+  return guild?.members.cache.get(userId)?.user || client.users.cache.get(userId) || null;
+}
+
+async function getDashboardInviteRows(data = loadData(), limit = 25, fetchMissingUsers = true) {
   const rows = Object.entries(data.invites || {})
     .filter(([userId, amount]) => userId !== client.user?.id && Number(amount) > 0)
     .sort(([, a], [, b]) => Number(b) - Number(a))
     .slice(0, limit);
 
   return Promise.all(rows.map(async ([userId, amount], index) => {
-    const user = await client.users.fetch(userId).catch(() => null);
+    const cachedUser = getCachedDashboardUser(userId);
+    const user = cachedUser || (fetchMissingUsers ? await client.users.fetch(userId).catch(() => null) : null);
 
     return {
       rank: index + 1,
@@ -5320,7 +5326,7 @@ async function getDashboardOverview() {
   const data = loadData();
   const guild = client.guilds.cache.get(GUILD_ID) || null;
   const stock = getDashboardStock(data);
-  const topInvites = await getDashboardInviteRows(data, 5);
+  const topInvites = await getDashboardInviteRows(data, 5, false);
 
   return {
     bot: {
