@@ -594,6 +594,15 @@ function buildBoosterStatusEmbed(member = null) {
     .setTimestamp();
 }
 
+function buildBoosterClaimNoticeEmbed(title, description, color = '#f5b84b') {
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription(description)
+    .setFooter({ text: 'HugoSMP Booster Claim' })
+    .setTimestamp();
+}
+
 function boosterNoticeLine(memberOrFlag) {
   const enabled = typeof memberOrFlag === 'boolean' ? memberOrFlag : isBoosterMember(memberOrFlag);
   return enabled ? '\n\n🚀 **Booster-Priority:** Diese Anfrage bitte bevorzugt bearbeiten.' : '';
@@ -4379,7 +4388,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'booster_claim') {
       if (!isBoosterMember(interaction.member)) {
         return interaction.reply({
-          content: '❌ Du boostest den Server aktuell nicht. Der Booster-Bonus ist nur für aktive Server Booster.',
+          embeds: [
+            buildBoosterClaimNoticeEmbed(
+              '❌ Kein Booster aktiv',
+              'Du boostest den Server aktuell nicht. Der Booster-Bonus ist nur für aktive Server Booster.'
+            )
+          ],
           ephemeral: true
         });
       }
@@ -4388,7 +4402,12 @@ client.on('interactionCreate', async interaction => {
       const existingClaim = getBoosterClaim(interaction.user.id, monthKey);
       if (existingClaim?.channelId) {
         return interaction.reply({
-          content: `❌ Du hast deinen Booster-Bonus für **${monthKey}** schon geclaimt: <#${existingClaim.channelId}>`,
+          embeds: [
+            buildBoosterClaimNoticeEmbed(
+              'ℹ️ Bereits geclaimt',
+              `Du hast deinen Booster-Bonus für **${monthKey}** schon geclaimt: <#${existingClaim.channelId}>`
+            )
+          ],
           ephemeral: true
         });
       }
@@ -4404,7 +4423,12 @@ client.on('interactionCreate', async interaction => {
 
       if (existingTicket) {
         return interaction.reply({
-          content: `❌ Du hast bereits ein offenes Booster-Ticket: <#${existingTicket.id}>`,
+          embeds: [
+            buildBoosterClaimNoticeEmbed(
+              'ℹ️ Booster-Ticket offen',
+              `Du hast bereits ein offenes Booster-Ticket: <#${existingTicket.id}>`
+            )
+          ],
           ephemeral: true
         });
       }
@@ -4461,12 +4485,24 @@ client.on('interactionCreate', async interaction => {
         markBoosterClaim(interaction.user.id, ticket.id, monthKey);
 
         return interaction.editReply({
-          content: `✅ Booster-Bonus **${BOOSTER_BONUS_REWARD}** geclaimt: <#${ticket.id}>`
+          embeds: [
+            buildBoosterClaimNoticeEmbed(
+              '✅ Booster-Bonus geclaimt',
+              `Dein Claim-Ticket wurde erstellt: <#${ticket.id}>\n\n**Belohnung:** ${BOOSTER_BONUS_REWARD}`,
+              '#33c481'
+            )
+          ]
         });
       } catch (e) {
         console.error('booster_claim error:', e);
         return interaction.editReply({
-          content: '❌ Fehler beim Erstellen des Booster-Tickets. Prüfe die Bot-Rechte.'
+          embeds: [
+            buildBoosterClaimNoticeEmbed(
+              '❌ Fehler beim Booster-Claim',
+              'Fehler beim Erstellen des Booster-Tickets. Prüfe die Bot-Rechte.',
+              '#ef4444'
+            )
+          ]
         });
       }
     }
