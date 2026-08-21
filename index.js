@@ -164,10 +164,11 @@ const BOOSTER_BENEFITS = [
   'Priority bei Support- und Bestell-Tickets',
   'Booster-Badge im Dashboard, damit Staff dich direkt erkennt',
   'Booster-Tickets stehen im Dashboard vor normalen Tickets',
-  'Monatlicher Booster-Bonus per eigenem Claim-Ticket',
+  'Monatlicher Booster-Bonus: 2,5M auf HugoSMP per eigenem Claim-Ticket',
   'Schnellerer Überblick für Staff durch klare Booster-Markierung'
 ];
-const BOOSTER_BONUS_NAME = 'Monatlicher Booster-Bonus';
+const BOOSTER_BONUS_REWARD = '2,5M auf HugoSMP';
+const BOOSTER_BONUS_NAME = `Monatlicher Booster-Bonus - ${BOOSTER_BONUS_REWARD}`;
 
 const RULES_CHANNEL_ID = '1499135456133255239';
 const VERIFY_ROLE_ID = '1499149656951885956';
@@ -4433,8 +4434,9 @@ client.on('interactionCreate', async interaction => {
           .setDescription(
             `🚀 **BOOSTER BONUS CLAIM**\n\n` +
             `**User:** <@${interaction.user.id}>\n` +
+            `**Belohnung:** ${BOOSTER_BONUS_REWARD}\n` +
             `**Monat:** ${monthKey}\n\n` +
-            'Staff kann hier den monatlichen Booster-Bonus vergeben und das Ticket danach schließen.'
+            'Staff kann hier die 2,5M vergeben und das Ticket danach schließen.'
           )
           .setTimestamp();
 
@@ -4459,7 +4461,7 @@ client.on('interactionCreate', async interaction => {
         markBoosterClaim(interaction.user.id, ticket.id, monthKey);
 
         return interaction.editReply({
-          content: `✅ Booster-Bonus geclaimt: <#${ticket.id}>`
+          content: `✅ Booster-Bonus **${BOOSTER_BONUS_REWARD}** geclaimt: <#${ticket.id}>`
         });
       } catch (e) {
         console.error('booster_claim error:', e);
