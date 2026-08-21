@@ -164,7 +164,7 @@ const BOOSTER_BENEFITS = [
   'Priority bei Support- und Bestell-Tickets',
   'Booster-Badge im Dashboard, damit Staff dich direkt erkennt',
   'Booster-Tickets stehen im Dashboard vor normalen Tickets',
-  'Monatlicher Booster-Bonus: 2,5M auf HugoSMP per eigenem Claim-Ticket',
+  'Monatlicher Booster-Bonus: 2,5M auf HugoSMP',
   'Schnellerer Überblick für Staff durch klare Booster-Markierung'
 ];
 const BOOSTER_BONUS_REWARD = '2,5M auf HugoSMP';
