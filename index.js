@@ -164,8 +164,10 @@ const BOOSTER_BENEFITS = [
   'Priority bei Support- und Bestell-Tickets',
   'Booster-Badge im Dashboard, damit Staff dich direkt erkennt',
   'Booster-Tickets stehen im Dashboard vor normalen Tickets',
+  'Monatlicher Booster-Bonus per eigenem Claim-Ticket',
   'Schnellerer Überblick für Staff durch klare Booster-Markierung'
 ];
+const BOOSTER_BONUS_NAME = 'Monatlicher Booster-Bonus';
 
 const RULES_CHANNEL_ID = '1499135456133255239';
 const VERIFY_ROLE_ID = '1499149656951885956';
@@ -287,6 +289,7 @@ function loadData() {
       data.dmThreads = data.dmThreads || {};
       data.dashboardTicketMeta = data.dashboardTicketMeta || {};
       data.dashboardOrderMeta = data.dashboardOrderMeta || {};
+      data.boosterClaims = data.boosterClaims || {};
       data.dashboardShop = data.dashboardShop || {};
       data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
@@ -353,6 +356,7 @@ function loadData() {
     dmThreads: {},
     dashboardTicketMeta: {},
     dashboardOrderMeta: {},
+    boosterClaims: {},
     dashboardShop: {},
     shopOffers: [],
 
@@ -468,6 +472,31 @@ function hasOrderFormSubmitted(channelId) {
 function markOrderFormSubmitted(channelId) {
   const data = loadData();
   data.orderFormsSubmitted[channelId] = true;
+  saveData(data);
+}
+
+function getBoosterClaimMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getBoosterClaimKey(userId, monthKey = getBoosterClaimMonthKey()) {
+  return `${userId}:${monthKey}`;
+}
+
+function getBoosterClaim(userId, monthKey = getBoosterClaimMonthKey()) {
+  const data = loadData();
+  return data.boosterClaims?.[getBoosterClaimKey(userId, monthKey)] || null;
+}
+
+function markBoosterClaim(userId, channelId, monthKey = getBoosterClaimMonthKey()) {
+  const data = loadData();
+  data.boosterClaims = data.boosterClaims || {};
+  data.boosterClaims[getBoosterClaimKey(userId, monthKey)] = {
+    userId,
+    channelId,
+    month: monthKey,
+    claimedAt: Date.now()
+  };
   saveData(data);
 }
 
@@ -3206,6 +3235,11 @@ client.on('interactionCreate', async interaction => {
           .setCustomId('booster_info')
           .setLabel('Status prüfen')
           .setEmoji('🚀')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('booster_claim')
+          .setLabel('Bonus claimen')
+          .setEmoji('🎁')
           .setStyle(ButtonStyle.Primary)
       );
 
@@ -4339,6 +4373,100 @@ client.on('interactionCreate', async interaction => {
         embeds: [buildBoosterStatusEmbed(interaction.member)],
         ephemeral: true
       });
+    }
+
+    if (interaction.customId === 'booster_claim') {
+      if (!isBoosterMember(interaction.member)) {
+        return interaction.reply({
+          content: '❌ Du boostest den Server aktuell nicht. Der Booster-Bonus ist nur für aktive Server Booster.',
+          ephemeral: true
+        });
+      }
+
+      const monthKey = getBoosterClaimMonthKey();
+      const existingClaim = getBoosterClaim(interaction.user.id, monthKey);
+      if (existingClaim?.channelId) {
+        return interaction.reply({
+          content: `❌ Du hast deinen Booster-Bonus für **${monthKey}** schon geclaimt: <#${existingClaim.channelId}>`,
+          ephemeral: true
+        });
+      }
+
+      const existingTicket = interaction.guild.channels.cache.find(channel => {
+        const owner = getTicketOwnerId(channel);
+        return owner === interaction.user.id &&
+          getTicketType(channel) === 'booster' &&
+          channel.type === ChannelType.GuildText &&
+          channel.parentId === TICKET_CATEGORY_ID &&
+          !channel.name.startsWith('closed-');
+      });
+
+      if (existingTicket) {
+        return interaction.reply({
+          content: `❌ Du hast bereits ein offenes Booster-Ticket: <#${existingTicket.id}>`,
+          ephemeral: true
+        });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const cleanName = cleanUsername(interaction.user.username);
+      const ticketName = `booster-${monthKey.replace('-', '')}-${cleanName}`.slice(0, 100);
+
+      try {
+        const ticket = await interaction.guild.channels.create({
+          name: ticketName,
+          type: ChannelType.GuildText,
+          parent: TICKET_CATEGORY_ID,
+          topic: `owner:${interaction.user.id};type:booster;order:none;booster:1;claim:${monthKey}`,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: ['ViewChannel'] },
+            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+            ...STAFF_ROLE_IDS.map(roleId => ({ id: roleId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] })),
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
+          ]
+        });
+
+        const embed = new EmbedBuilder()
+          .setColor('#f47fff')
+          .setTitle(`🎁 ${BOOSTER_BONUS_NAME}`)
+          .setDescription(
+            `🚀 **BOOSTER BONUS CLAIM**\n\n` +
+            `**User:** <@${interaction.user.id}>\n` +
+            `**Monat:** ${monthKey}\n\n` +
+            'Staff kann hier den monatlichen Booster-Bonus vergeben und das Ticket danach schließen.'
+          )
+          .setTimestamp();
+
+        const buttons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('close_ticket')
+            .setLabel('Ticket schließen')
+            .setEmoji('🔒')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await ticket.send({
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
+          embeds: [embed],
+          components: [buttons],
+          allowedMentions: {
+            users: [interaction.user.id],
+            roles: STAFF_ROLE_IDS
+          }
+        });
+
+        markBoosterClaim(interaction.user.id, ticket.id, monthKey);
+
+        return interaction.editReply({
+          content: `✅ Booster-Bonus geclaimt: <#${ticket.id}>`
+        });
+      } catch (e) {
+        console.error('booster_claim error:', e);
+        return interaction.editReply({
+          content: '❌ Fehler beim Erstellen des Booster-Tickets. Prüfe die Bot-Rechte.'
+        });
+      }
     }
 
     if (interaction.customId === 'verify_member') {

@@ -1814,7 +1814,7 @@
         <div class="page-head">
           <div>
             <h1>Tickets</h1>
-            <p>Support-, Reward- und Bestell-Tickets lesen, beantworten, schließen oder wieder öffnen.</p>
+            <p>Support-, Reward-, Booster- und Bestell-Tickets lesen, beantworten, schließen oder wieder öffnen.</p>
           </div>
           <div class="toolbar">
             <select id="ticketStateFilter">
@@ -1827,6 +1827,7 @@
               <option value="support">Support</option>
               <option value="bestellung">Bestellung</option>
               <option value="reward">Reward</option>
+              <option value="booster">Booster</option>
             </select>
             <button id="ticketsRefreshBtn" class="small" type="button">Refresh</button>
           </div>
@@ -2420,7 +2421,8 @@
       return ({
         support: 'Support',
         bestellung: 'Bestellung',
-        reward: 'Reward'
+        reward: 'Reward',
+        booster: 'Booster'
       })[type] || type || 'Ticket';
     }
 
