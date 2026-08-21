@@ -311,6 +311,7 @@
     .pill.good { color: #abf4ca; border-color: #2d6d4c; }
     .pill.warn { color: #ffd68a; border-color: #775423; }
     .pill.bad { color: #ffc1ca; border-color: #72313c; }
+    .pill.booster { color: #ffd4ff; border-color: #9d4edd; background: rgba(157, 78, 221, .13); }
 
     .dm-layout {
       height: calc(100vh - 62px);
@@ -1318,6 +1319,12 @@
       color: #ffd0d6;
       border-color: #823142;
       background: rgba(236, 64, 93, .08);
+    }
+
+    .pill.booster {
+      color: #ffd4ff;
+      border-color: #9d4edd;
+      background: rgba(157, 78, 221, .13);
     }
 
     .badge {
@@ -2423,6 +2430,10 @@
         : '<span class="pill good">offen</span>';
     }
 
+    function boosterPill(enabled) {
+      return enabled ? '<span class="pill booster">Booster</span>' : '';
+    }
+
     function orderStatusPill(status) {
       const map = {
         offen: ['Offen', 'warn'],
@@ -2567,7 +2578,7 @@
         const row = rowText(
           `#${ticket.name}`,
           `${ticketTypeLabel(ticket.type)} - ${ticket.owner?.username || ticket.ownerId || 'Unbekannt'} - ${formatTime(ticket.createdAt, true)}`,
-          ticketStatePill(ticket.state)
+          `${boosterPill(ticket.booster)} ${ticketStatePill(ticket.state)}`
         );
         row.style.cursor = 'pointer';
         row.classList.toggle('active', ticket.channelId === selectedId);
@@ -2610,6 +2621,7 @@
       $('ticketDetailMeta').append(
         rowText('Owner', ticket.owner?.username || ticket.ownerId || 'Unbekannt', ticket.ownerId ? `<span class="pill">${ticket.ownerId}</span>` : ''),
         rowText('Typ', ticketTypeLabel(ticket.type), ticketStatePill(ticket.state)),
+        rowText('Booster', ticket.booster ? 'Ja - Priority' : 'Nein', boosterPill(ticket.booster)),
         rowText('Order', ticket.orderId || 'none', `<span class="pill">${formatTime(ticket.createdAt, true)}</span>`)
       );
       $('ticketNote').value = ticket.note || '';
@@ -2714,7 +2726,7 @@
         const row = rowText(
           `#${order.orderId} - ${order.owner?.username || order.ownerId || 'Unbekannt'}`,
           `${order.name} - ${order.assigneeName || 'frei'} - ${formatTime(order.createdAt, true)}`,
-          `${assigneePill(order)} ${orderStatusPill(order.status)}`
+          `${boosterPill(order.booster)} ${assigneePill(order)} ${orderStatusPill(order.status)}`
         );
         row.style.cursor = 'pointer';
         row.classList.toggle('active', order.channelId === state.selectedOrderId);
@@ -2769,6 +2781,7 @@
       $('orderDetailMeta').append(
         rowText('Kunde', order.owner?.username || order.ownerId || 'Unbekannt', order.ownerId ? `<span class="pill">${order.ownerId}</span>` : ''),
         rowText('Ticket', order.name, ticketStatePill(order.state)),
+        rowText('Booster', order.booster ? 'Ja - Priority' : 'Nein', boosterPill(order.booster)),
         rowText('Status', order.status, orderStatusPill(order.status)),
         rowText('Bearbeiter', order.assigneeName || 'Nicht zugewiesen', assigneePill(order)),
         rowText('Rechnung', order.invoiceSentAt ? `gesendet ${formatTime(order.invoiceSentAt, true)}` : 'noch nicht gesendet', '<span class="pill">Invoice</span>')
@@ -3339,6 +3352,7 @@
       overview.append(sectionTitle('Übersicht'));
       overview.append(infoRow('User', info.tag || info.userId));
       overview.append(infoRow('Server', info.inGuild ? 'auf dem Server' : 'nicht auf dem Server'));
+      overview.append(infoRow('Booster', info.booster ? `aktiv${info.boostingSince ? ` seit ${formatTime(info.boostingSince, true)}` : ''}` : 'nein'));
       overview.append(infoRow('Join-Datum', info.joinedAt ? formatTime(info.joinedAt, true) : '-'));
       overview.append(infoRow('Account', info.createdAt ? formatTime(info.createdAt, true) : '-'));
       overview.append(infoRow('Invites', String(info.invites || 0)));
