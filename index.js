@@ -158,7 +158,7 @@ const REVIEWS_CHANNEL_ID = '1499131549826813962';
 const KUNDEN_ROLE_ID = '1499472189420732421';
 
 const REQUIRED_INVITES = 8;
-const REWARD = '$1m on HugoSMP';
+const REWARD = '$5m on HugoSMP';
 const BOOSTER_LABEL = 'Server Booster';
 const BOOSTER_BENEFITS = [
   'Priority bei Support- und Bestell-Tickets',
