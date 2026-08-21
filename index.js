@@ -545,6 +545,25 @@ function buildBoosterInfoEmbed(member = null) {
     .setTimestamp();
 }
 
+function buildBoosterStatusEmbed(member = null) {
+  const boosting = isBoosterMember(member);
+  const boostingSince = getBoostingSinceTimestamp(member);
+  const sinceText = boostingSince
+    ? `\n\n**Boostet seit:** ${new Date(boostingSince).toLocaleString('de-DE')}`
+    : '';
+
+  return new EmbedBuilder()
+    .setColor(boosting ? '#33c481' : '#f5b84b')
+    .setTitle(boosting ? '✅ Booster aktiv' : 'ℹ️ Kein Booster aktiv')
+    .setDescription(
+      boosting
+        ? `Deine Booster-Priority ist aktiv. Deine Support- und Bestell-Tickets werden für Staff sichtbar bevorzugt markiert.${sinceText}`
+        : 'Du boostest den Server aktuell nicht. Wenn du boostest, werden deine Support- und Bestell-Tickets automatisch als Booster-Priority markiert.'
+    )
+    .setFooter({ text: 'HugoSMP Booster Check' })
+    .setTimestamp();
+}
+
 function boosterNoticeLine(memberOrFlag) {
   const enabled = typeof memberOrFlag === 'boolean' ? memberOrFlag : isBoosterMember(memberOrFlag);
   return enabled ? '\n\n🚀 **Booster-Priority:** Diese Anfrage bitte bevorzugt bearbeiten.' : '';
@@ -3185,7 +3204,7 @@ client.on('interactionCreate', async interaction => {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('booster_info')
-          .setLabel('Vorteile anzeigen')
+          .setLabel('Status prüfen')
           .setEmoji('🚀')
           .setStyle(ButtonStyle.Primary)
       );
@@ -4317,7 +4336,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'booster_info') {
       return interaction.reply({
-        embeds: [buildBoosterInfoEmbed(interaction.member)],
+        embeds: [buildBoosterStatusEmbed(interaction.member)],
         ephemeral: true
       });
     }
