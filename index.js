@@ -151,7 +151,7 @@ const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
-const DASHBOARD_URL = process.env.DASHBOARD_URL || '';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://130.61.188.221:3000/dashboard';
 const GUILD_ID = '1499129162378514524';
 
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
