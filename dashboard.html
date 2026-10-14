@@ -1697,7 +1697,7 @@
         <img class="mark" src="/assets/dashboard-icon.jpg" alt="">
         <div>
           <h1>Bot Dashboard</h1>
-          <p id="loginHint">Login mit dem Railway-Dashboard-Passwort.</p>
+          <p id="loginHint">Login mit dem Dashboard-Passwort.</p>
         </div>
       </div>
       <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Passwort">
@@ -3676,7 +3676,7 @@
         $('botName').textContent = status.bot;
 
         if (!status.configured) {
-          $('loginHint').textContent = 'DASHBOARD_PASSWORD ist in Railway noch nicht gesetzt.';
+          $('loginHint').textContent = 'DASHBOARD_PASSWORD ist auf dem Server noch nicht gesetzt.';
           $('loginView').classList.remove('hidden');
           return;
         }

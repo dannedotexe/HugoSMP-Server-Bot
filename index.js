@@ -151,7 +151,7 @@ const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://hugosmp-server-bot-production.up.railway.app/dashboard';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || '';
 const GUILD_ID = '1499129162378514524';
 
 const REVIEWS_CHANNEL_ID = '1499131549826813962';
@@ -1855,17 +1855,19 @@ async function notifyStaffAboutDm(saved) {
       });
     }
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setStyle(ButtonStyle.Link)
-        .setURL(DASHBOARD_URL)
-        .setLabel('Dashboard öffnen')
-    );
+    const components = DASHBOARD_URL
+      ? [new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setURL(DASHBOARD_URL)
+            .setLabel('Dashboard öffnen')
+        )]
+      : [];
 
     await channel.send({
       content: DM_STAFF_MENTION || undefined,
       embeds: [embed],
-      components: [row]
+      components
     }).catch(() => {});
   } catch (e) {
     console.error('dm staff notify error:', e.message);
@@ -3146,10 +3148,17 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: 'Dafür brauchst du Administrator-Rechte.', ephemeral: true });
       }
 
+      if (!DASHBOARD_URL) {
+        return interaction.reply({
+          content: 'Die Dashboard-Adresse ist nicht gesetzt. Trage `DASHBOARD_URL` in der `.env` auf dem Server ein.',
+          ephemeral: true
+        });
+      }
+
       return interaction.reply({
         content:
           `Dashboard: ${DASHBOARD_URL}\n\n` +
-          'Login ist dein `DASHBOARD_PASSWORD` aus Railway.',
+          'Login ist dein `DASHBOARD_PASSWORD` aus der `.env` auf dem Server.',
         ephemeral: true
       });
     }
@@ -5623,7 +5632,7 @@ function requireDashboardAuth(req, res, next) {
   if (!DASHBOARD_PASSWORD) {
     return res.status(503).json({
       success: false,
-      error: 'Dashboard ist nicht konfiguriert. Setze DASHBOARD_PASSWORD in Railway.'
+      error: 'Dashboard ist nicht konfiguriert. Setze DASHBOARD_PASSWORD in der .env auf dem Server.'
     });
   }
 
@@ -5812,7 +5821,7 @@ app.post('/api/dashboard/login', (req, res) => {
   if (!DASHBOARD_PASSWORD) {
     return res.status(503).json({
       success: false,
-      error: 'Setze DASHBOARD_PASSWORD in Railway.'
+      error: 'Setze DASHBOARD_PASSWORD in der .env auf dem Server.'
     });
   }
 
@@ -6825,6 +6834,27 @@ app.post('/api/order', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🌐 Website API läuft auf Port ${PORT}`);
+  if (!DASHBOARD_URL) {
+    console.warn('⚠️ DASHBOARD_URL ist nicht gesetzt – Dashboard-Links in Discord sind deaktiviert.');
+  }
 });
 
-client.login(TOKEN);
+// Ein Fehler beim Discord-Login darf die Website nicht mitreißen.
+process.on('unhandledRejection', err => {
+  console.error('unhandled rejection:', err?.message || err);
+});
+
+client.on('error', err => {
+  console.error('discord client error:', err?.message || err);
+});
+
+async function loginDiscord() {
+  try {
+    await client.login(TOKEN);
+  } catch (e) {
+    console.error(`discord login error: ${e.message} – neuer Versuch in 60s`);
+    setTimeout(loginDiscord, 60 * 1000);
+  }
+}
+
+loginDiscord();
