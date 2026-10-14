@@ -6687,10 +6687,30 @@ app.get('/api/stock', (req, res) => {
       until: latestOffer.until
     } : null;
 
+    const guild = client.guilds.cache.get(GUILD_ID);
+    const vanity = guild?.vanityURLCode ? `https://discord.gg/${guild.vanityURLCode}` : null;
+    const activeGiveaway = Object.entries(data.giveaways || {})
+      .filter(([, gw]) => !gw.ended && gw.endTime > Date.now())
+      .sort(([, a], [, b]) => a.endTime - b.endTime)[0];
+    const giveaway = activeGiveaway ? {
+      prize: activeGiveaway[1].prize,
+      endTime: activeGiveaway[1].endTime,
+      participants: (activeGiveaway[1].participants || []).length,
+      url: `https://discord.com/channels/${activeGiveaway[1].guildId || GUILD_ID}/${activeGiveaway[1].channelId}/${activeGiveaway[0]}`
+    } : null;
+
     return res.json({
       success: true,
       stock,
-      offer
+      offer,
+      community: {
+        discordInvite: process.env.DISCORD_INVITE_URL || vanity,
+        inviteReward: REWARD,
+        requiredInvites: REQUIRED_INVITES,
+        boosterReward: BOOSTER_BONUS_REWARD,
+        members: guild?.memberCount || null,
+        giveaway
+      }
     });
   } catch (e) {
     console.error('api stock error:', e.message);
