@@ -5795,6 +5795,11 @@ async function sendDashboardDm(userId, content, attachments = []) {
   return saved;
 }
 
+app.get(['/', '/shop'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'shop.html'));
+});
+
 app.get('/dashboard', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'dashboard.html'));
@@ -6672,9 +6677,20 @@ app.get('/api/stock', (req, res) => {
       amount: data.stock[item.id] ?? 0
     }));
 
+    const latestOffer = getLatestShopOffer(data);
+    const offer = latestOffer ? {
+      title: latestOffer.title,
+      itemId: latestOffer.itemId,
+      itemName: latestOffer.itemName,
+      discount: latestOffer.discount,
+      description: latestOffer.description,
+      until: latestOffer.until
+    } : null;
+
     return res.json({
       success: true,
-      stock
+      stock,
+      offer
     });
   } catch (e) {
     console.error('api stock error:', e.message);
