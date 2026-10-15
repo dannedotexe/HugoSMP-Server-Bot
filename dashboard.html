@@ -311,7 +311,6 @@
     .pill.good { color: #abf4ca; border-color: #2d6d4c; }
     .pill.warn { color: #ffd68a; border-color: #775423; }
     .pill.bad { color: #ffc1ca; border-color: #72313c; }
-    .pill.booster { color: #ffd4ff; border-color: #9d4edd; background: rgba(157, 78, 221, .13); }
 
     .dm-layout {
       height: calc(100vh - 62px);
@@ -1321,12 +1320,6 @@
       background: rgba(236, 64, 93, .08);
     }
 
-    .pill.booster {
-      color: #ffd4ff;
-      border-color: #9d4edd;
-      background: rgba(157, 78, 221, .13);
-    }
-
     .badge {
       background: var(--accent-red);
       color: #fff7fb;
@@ -1697,7 +1690,7 @@
         <img class="mark" src="/assets/dashboard-icon.jpg" alt="">
         <div>
           <h1>Bot Dashboard</h1>
-          <p id="loginHint">Login mit dem Railway-Dashboard-Passwort.</p>
+          <p id="loginHint">Login mit dem Dashboard-Passwort.</p>
         </div>
       </div>
       <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Passwort">
@@ -1814,7 +1807,7 @@
         <div class="page-head">
           <div>
             <h1>Tickets</h1>
-            <p>Support-, Reward-, Booster- und Bestell-Tickets lesen, beantworten, schließen oder wieder öffnen.</p>
+            <p>Support-, Reward- und Bestell-Tickets lesen, beantworten, schließen oder wieder öffnen.</p>
           </div>
           <div class="toolbar">
             <select id="ticketStateFilter">
@@ -1827,7 +1820,6 @@
               <option value="support">Support</option>
               <option value="bestellung">Bestellung</option>
               <option value="reward">Reward</option>
-              <option value="booster">Booster</option>
             </select>
             <button id="ticketsRefreshBtn" class="small" type="button">Refresh</button>
           </div>
@@ -2421,8 +2413,7 @@
       return ({
         support: 'Support',
         bestellung: 'Bestellung',
-        reward: 'Reward',
-        booster: 'Booster'
+        reward: 'Reward'
       })[type] || type || 'Ticket';
     }
 
@@ -2430,10 +2421,6 @@
       return state === 'closed'
         ? '<span class="pill bad">geschlossen</span>'
         : '<span class="pill good">offen</span>';
-    }
-
-    function boosterPill(enabled) {
-      return enabled ? '<span class="pill booster">Booster</span>' : '';
     }
 
     function orderStatusPill(status) {
@@ -2580,7 +2567,7 @@
         const row = rowText(
           `#${ticket.name}`,
           `${ticketTypeLabel(ticket.type)} - ${ticket.owner?.username || ticket.ownerId || 'Unbekannt'} - ${formatTime(ticket.createdAt, true)}`,
-          `${boosterPill(ticket.booster)} ${ticketStatePill(ticket.state)}`
+          ticketStatePill(ticket.state)
         );
         row.style.cursor = 'pointer';
         row.classList.toggle('active', ticket.channelId === selectedId);
@@ -2623,7 +2610,6 @@
       $('ticketDetailMeta').append(
         rowText('Owner', ticket.owner?.username || ticket.ownerId || 'Unbekannt', ticket.ownerId ? `<span class="pill">${ticket.ownerId}</span>` : ''),
         rowText('Typ', ticketTypeLabel(ticket.type), ticketStatePill(ticket.state)),
-        rowText('Booster', ticket.booster ? 'Ja - Priority' : 'Nein', boosterPill(ticket.booster)),
         rowText('Order', ticket.orderId || 'none', `<span class="pill">${formatTime(ticket.createdAt, true)}</span>`)
       );
       $('ticketNote').value = ticket.note || '';
@@ -2728,7 +2714,7 @@
         const row = rowText(
           `#${order.orderId} - ${order.owner?.username || order.ownerId || 'Unbekannt'}`,
           `${order.name} - ${order.assigneeName || 'frei'} - ${formatTime(order.createdAt, true)}`,
-          `${boosterPill(order.booster)} ${assigneePill(order)} ${orderStatusPill(order.status)}`
+          `${assigneePill(order)} ${orderStatusPill(order.status)}`
         );
         row.style.cursor = 'pointer';
         row.classList.toggle('active', order.channelId === state.selectedOrderId);
@@ -2783,7 +2769,6 @@
       $('orderDetailMeta').append(
         rowText('Kunde', order.owner?.username || order.ownerId || 'Unbekannt', order.ownerId ? `<span class="pill">${order.ownerId}</span>` : ''),
         rowText('Ticket', order.name, ticketStatePill(order.state)),
-        rowText('Booster', order.booster ? 'Ja - Priority' : 'Nein', boosterPill(order.booster)),
         rowText('Status', order.status, orderStatusPill(order.status)),
         rowText('Bearbeiter', order.assigneeName || 'Nicht zugewiesen', assigneePill(order)),
         rowText('Rechnung', order.invoiceSentAt ? `gesendet ${formatTime(order.invoiceSentAt, true)}` : 'noch nicht gesendet', '<span class="pill">Invoice</span>')
@@ -3354,7 +3339,6 @@
       overview.append(sectionTitle('Übersicht'));
       overview.append(infoRow('User', info.tag || info.userId));
       overview.append(infoRow('Server', info.inGuild ? 'auf dem Server' : 'nicht auf dem Server'));
-      overview.append(infoRow('Booster', info.booster ? `aktiv${info.boostingSince ? ` seit ${formatTime(info.boostingSince, true)}` : ''}` : 'nein'));
       overview.append(infoRow('Join-Datum', info.joinedAt ? formatTime(info.joinedAt, true) : '-'));
       overview.append(infoRow('Account', info.createdAt ? formatTime(info.createdAt, true) : '-'));
       overview.append(infoRow('Invites', String(info.invites || 0)));
@@ -3676,7 +3660,7 @@
         $('botName').textContent = status.bot;
 
         if (!status.configured) {
-          $('loginHint').textContent = 'DASHBOARD_PASSWORD ist in Railway noch nicht gesetzt.';
+          $('loginHint').textContent = 'DASHBOARD_PASSWORD ist auf dem Server noch nicht gesetzt.';
           $('loginView').classList.remove('hidden');
           return;
         }
