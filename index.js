@@ -159,16 +159,6 @@ const KUNDEN_ROLE_ID = '1499472189420732421';
 
 const REQUIRED_INVITES = 8;
 const REWARD = '$5m on HugoSMP';
-const BOOSTER_LABEL = 'Server Booster';
-const BOOSTER_BENEFITS = [
-  'Priority bei Support- und Bestell-Tickets',
-  'Booster-Badge im Dashboard, damit Staff dich direkt erkennt',
-  'Booster-Tickets stehen im Dashboard vor normalen Tickets',
-  'Monatlicher Booster-Bonus: 2,5M auf HugoSMP',
-  'Schnellerer Überblick für Staff durch klare Booster-Markierung'
-];
-const BOOSTER_BONUS_REWARD = '2,5M auf HugoSMP';
-const BOOSTER_BONUS_NAME = `Monatlicher Booster-Bonus - ${BOOSTER_BONUS_REWARD}`;
 
 const RULES_CHANNEL_ID = '1499135456133255239';
 const VERIFY_ROLE_ID = '1499149656951885956';
@@ -290,7 +280,6 @@ function loadData() {
       data.dmThreads = data.dmThreads || {};
       data.dashboardTicketMeta = data.dashboardTicketMeta || {};
       data.dashboardOrderMeta = data.dashboardOrderMeta || {};
-      data.boosterClaims = data.boosterClaims || {};
       data.dashboardShop = data.dashboardShop || {};
       data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
       data.reviewTicketDecisions = data.reviewTicketDecisions || [];
@@ -357,7 +346,6 @@ function loadData() {
     dmThreads: {},
     dashboardTicketMeta: {},
     dashboardOrderMeta: {},
-    boosterClaims: {},
     dashboardShop: {},
     shopOffers: [],
 
@@ -476,31 +464,6 @@ function markOrderFormSubmitted(channelId) {
   saveData(data);
 }
 
-function getBoosterClaimMonthKey(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getBoosterClaimKey(userId, monthKey = getBoosterClaimMonthKey()) {
-  return `${userId}:${monthKey}`;
-}
-
-function getBoosterClaim(userId, monthKey = getBoosterClaimMonthKey()) {
-  const data = loadData();
-  return data.boosterClaims?.[getBoosterClaimKey(userId, monthKey)] || null;
-}
-
-function markBoosterClaim(userId, channelId, monthKey = getBoosterClaimMonthKey()) {
-  const data = loadData();
-  data.boosterClaims = data.boosterClaims || {};
-  data.boosterClaims[getBoosterClaimKey(userId, monthKey)] = {
-    userId,
-    channelId,
-    month: monthKey,
-    claimedAt: Date.now()
-  };
-  saveData(data);
-}
-
 // ── Helpers ───────────────────────────────────────────────────────
 const closingTickets = new Set();
 
@@ -532,80 +495,6 @@ function getTicketOrderId(channel) {
   const topic = channel.topic || '';
   const match = topic.match(/order:([^;]+)/);
   return match ? match[1] : 'none';
-}
-
-function isBoosterMember(member) {
-  return Boolean(member?.premiumSince || member?.premiumSinceTimestamp || member?.premium_since);
-}
-
-function getBoostingSinceTimestamp(member) {
-  if (!member) return null;
-  if (member.premiumSinceTimestamp) return member.premiumSinceTimestamp;
-  if (member.premiumSince instanceof Date) return member.premiumSince.getTime();
-  if (member.premium_since) {
-    const parsed = Date.parse(member.premium_since);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function isBoosterTicket(channel) {
-  return /(?:^|;)booster:1(?:;|$)/.test(channel.topic || '');
-}
-
-function boosterTopicFlag(member) {
-  return isBoosterMember(member) ? ';booster:1' : '';
-}
-
-function boosterPrefix(memberOrFlag) {
-  const enabled = typeof memberOrFlag === 'boolean' ? memberOrFlag : isBoosterMember(memberOrFlag);
-  return enabled ? '🚀 **BOOSTER PRIORITY**\n' : '';
-}
-
-function buildBoosterInfoEmbed(member = null) {
-  const boosting = isBoosterMember(member);
-  return new EmbedBuilder()
-    .setColor(boosting ? '#f47fff' : '#b10de7')
-    .setTitle(`🚀 ${BOOSTER_LABEL} Vorteile`)
-    .setDescription(
-      `${boosting ? 'Danke fürs Boosten! Du hast diese Vorteile aktiv:' : 'Server Booster bekommen bei uns diese Vorteile:'}\n\n` +
-      BOOSTER_BENEFITS.map(benefit => `• ${benefit}`).join('\n')
-    )
-    .setFooter({ text: boosting ? 'Status: Booster aktiv' : 'Booste den Server, um die Vorteile zu aktivieren.' })
-    .setTimestamp();
-}
-
-function buildBoosterStatusEmbed(member = null) {
-  const boosting = isBoosterMember(member);
-  const boostingSince = getBoostingSinceTimestamp(member);
-  const sinceText = boostingSince
-    ? `\n\n**Boostet seit:** ${new Date(boostingSince).toLocaleString('de-DE')}`
-    : '';
-
-  return new EmbedBuilder()
-    .setColor(boosting ? '#33c481' : '#f5b84b')
-    .setTitle(boosting ? '✅ Booster aktiv' : 'ℹ️ Kein Booster aktiv')
-    .setDescription(
-      boosting
-        ? `Deine Booster-Priority ist aktiv. Deine Support- und Bestell-Tickets werden für Staff sichtbar bevorzugt markiert.${sinceText}`
-        : 'Du boostest den Server aktuell nicht. Wenn du boostest, werden deine Support- und Bestell-Tickets automatisch als Booster-Priority markiert.'
-    )
-    .setFooter({ text: 'HugoSMP Booster Check' })
-    .setTimestamp();
-}
-
-function buildBoosterClaimNoticeEmbed(title, description, color = '#f5b84b') {
-  return new EmbedBuilder()
-    .setColor(color)
-    .setTitle(title)
-    .setDescription(description)
-    .setFooter({ text: 'HugoSMP Booster Claim' })
-    .setTimestamp();
-}
-
-function boosterNoticeLine(memberOrFlag) {
-  const enabled = typeof memberOrFlag === 'boolean' ? memberOrFlag : isBoosterMember(memberOrFlag);
-  return enabled ? '\n\n🚀 **Booster-Priority:** Diese Anfrage bitte bevorzugt bearbeiten.' : '';
 }
 
 async function buildTranscript(channel) {
@@ -1244,7 +1133,6 @@ async function serializeDashboardTicket(channel, data = loadData(), options = {}
   const ownerId = getTicketOwnerId(channel);
   const owner = await getUserSummary(ownerId, options.fetchUsers !== false);
   const meta = getTicketDashboardMeta(data, channel.id);
-  const booster = isBoosterTicket(channel);
 
   return {
     channelId: channel.id,
@@ -1260,8 +1148,7 @@ async function serializeDashboardTicket(channel, data = loadData(), options = {}
     createdAt: channel.createdTimestamp || null,
     lastMessageId: channel.lastMessageId || null,
     note: meta.note || '',
-    pinned: Boolean(meta.pinned),
-    booster
+    pinned: Boolean(meta.pinned)
   };
 }
 
@@ -1275,7 +1162,7 @@ async function getDashboardTicketList({ state = 'open', type = 'all' } = {}) {
   );
 
   return tickets
-    .sort((a, b) => Number(b.booster) - Number(a.booster) || Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
 async function getTicketRecentMessages(channel, limit = 40) {
@@ -1362,7 +1249,7 @@ async function getDashboardOrderList({ status = 'active' } = {}) {
       if (status === 'cancelled') return order.status === 'storniert';
       return !['fertig', 'storniert'].includes(order.status);
     })
-    .sort((a, b) => Number(b.booster) - Number(a.booster) || Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
 async function getDashboardOrderDetails(channelId) {
@@ -1812,8 +1699,6 @@ async function getDmUserInfo(userId, data = loadData()) {
     tag: getUserDisplayName(user, userId),
     avatarUrl: getUserAvatar(user),
     inGuild: Boolean(member),
-    booster: isBoosterMember(member),
-    boostingSince: getBoostingSinceTimestamp(member),
     joinedAt: member?.joinedTimestamp || null,
     createdAt: user?.createdTimestamp || null,
     roles,
@@ -2293,17 +2178,6 @@ async function registerCommands(guildId) {
       .setName('setuproles')
       .setDescription('Send the ping roles panel.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .toJSON(),
-
-    new SlashCommandBuilder()
-      .setName('setupboosters')
-      .setDescription('Sendet das Booster-Vorteile Panel.')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .toJSON(),
-
-    new SlashCommandBuilder()
-      .setName('boosters')
-      .setDescription('Zeigt dir die Server-Booster Vorteile.')
       .toJSON(),
 
     new SlashCommandBuilder()
@@ -3239,38 +3113,6 @@ client.on('interactionCreate', async interaction => {
           ephemeral: true
         });
       }
-    }
-
-    if (interaction.commandName === 'boosters') {
-      return interaction.reply({
-        embeds: [buildBoosterInfoEmbed(interaction.member)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.commandName === 'setupboosters') {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('booster_info')
-          .setLabel('Status prüfen')
-          .setEmoji('🚀')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId('booster_claim')
-          .setLabel('Bonus claimen')
-          .setEmoji('🎁')
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      await interaction.channel.send({
-        embeds: [buildBoosterInfoEmbed()],
-        components: [row]
-      });
-
-      return interaction.reply({
-        content: '✅ Booster-Panel gesendet!',
-        ephemeral: true
-      });
     }
 
     if (interaction.commandName === 'setuproles') {
@@ -4387,135 +4229,6 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.customId === 'booster_info') {
-      return interaction.reply({
-        embeds: [buildBoosterStatusEmbed(interaction.member)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId === 'booster_claim') {
-      if (!isBoosterMember(interaction.member)) {
-        return interaction.reply({
-          embeds: [
-            buildBoosterClaimNoticeEmbed(
-              '❌ Kein Booster aktiv',
-              'Du boostest den Server aktuell nicht. Der Booster-Bonus ist nur für aktive Server Booster.'
-            )
-          ],
-          ephemeral: true
-        });
-      }
-
-      const monthKey = getBoosterClaimMonthKey();
-      const existingClaim = getBoosterClaim(interaction.user.id, monthKey);
-      if (existingClaim?.channelId) {
-        return interaction.reply({
-          embeds: [
-            buildBoosterClaimNoticeEmbed(
-              'ℹ️ Bereits geclaimt',
-              `Du hast deinen Booster-Bonus für **${monthKey}** schon geclaimt: <#${existingClaim.channelId}>`
-            )
-          ],
-          ephemeral: true
-        });
-      }
-
-      const existingTicket = interaction.guild.channels.cache.find(channel => {
-        const owner = getTicketOwnerId(channel);
-        return owner === interaction.user.id &&
-          getTicketType(channel) === 'booster' &&
-          channel.type === ChannelType.GuildText &&
-          channel.parentId === TICKET_CATEGORY_ID &&
-          !channel.name.startsWith('closed-');
-      });
-
-      if (existingTicket) {
-        return interaction.reply({
-          embeds: [
-            buildBoosterClaimNoticeEmbed(
-              'ℹ️ Booster-Ticket offen',
-              `Du hast bereits ein offenes Booster-Ticket: <#${existingTicket.id}>`
-            )
-          ],
-          ephemeral: true
-        });
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-
-      const cleanName = cleanUsername(interaction.user.username);
-      const ticketName = `booster-${monthKey.replace('-', '')}-${cleanName}`.slice(0, 100);
-
-      try {
-        const ticket = await interaction.guild.channels.create({
-          name: ticketName,
-          type: ChannelType.GuildText,
-          parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:booster;order:none;booster:1;claim:${monthKey}`,
-          permissionOverwrites: [
-            { id: interaction.guild.id, deny: ['ViewChannel'] },
-            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-            ...STAFF_ROLE_IDS.map(roleId => ({ id: roleId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] })),
-            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] }
-          ]
-        });
-
-        const embed = new EmbedBuilder()
-          .setColor('#f47fff')
-          .setTitle(`🎁 ${BOOSTER_BONUS_NAME}`)
-          .setDescription(
-            `🚀 **BOOSTER BONUS CLAIM**\n\n` +
-            `**User:** <@${interaction.user.id}>\n` +
-            `**Belohnung:** ${BOOSTER_BONUS_REWARD}\n` +
-            `**Monat:** ${monthKey}\n\n` +
-            'Staff kann hier die 2,5M vergeben und das Ticket danach schließen.'
-          )
-          .setTimestamp();
-
-        const buttons = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('close_ticket')
-            .setLabel('Ticket schließen')
-            .setEmoji('🔒')
-            .setStyle(ButtonStyle.Danger)
-        );
-
-        await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
-          embeds: [embed],
-          components: [buttons],
-          allowedMentions: {
-            users: [interaction.user.id],
-            roles: STAFF_ROLE_IDS
-          }
-        });
-
-        markBoosterClaim(interaction.user.id, ticket.id, monthKey);
-
-        return interaction.editReply({
-          embeds: [
-            buildBoosterClaimNoticeEmbed(
-              '✅ Booster-Bonus geclaimt',
-              `Dein Claim-Ticket wurde erstellt: <#${ticket.id}>\n\n**Belohnung:** ${BOOSTER_BONUS_REWARD}`,
-              '#33c481'
-            )
-          ]
-        });
-      } catch (e) {
-        console.error('booster_claim error:', e);
-        return interaction.editReply({
-          embeds: [
-            buildBoosterClaimNoticeEmbed(
-              '❌ Fehler beim Booster-Claim',
-              'Fehler beim Erstellen des Booster-Tickets. Prüfe die Bot-Rechte.',
-              '#ef4444'
-            )
-          ]
-        });
-      }
-    }
-
     if (interaction.customId === 'verify_member') {
       try {
         if (interaction.member.roles.cache.has(VERIFY_ROLE_ID)) {
@@ -4545,7 +4258,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'create_support_ticket') {
       const cleanName = cleanUsername(interaction.user.username);
       const ticketName = `support-${cleanName}`.slice(0, 100);
-      const isBooster = isBoosterMember(interaction.member);
 
       const existing = interaction.guild.channels.cache.find(c =>
         c.name === ticketName &&
@@ -4566,7 +4278,7 @@ client.on('interactionCreate', async interaction => {
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:support;order:none${boosterTopicFlag(interaction.member)}`,
+          topic: `owner:${interaction.user.id};type:support;order:none`,
           permissionOverwrites: [
             { id: interaction.guild.id, deny: ['ViewChannel'] },
             { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
@@ -4576,11 +4288,9 @@ client.on('interactionCreate', async interaction => {
         });
 
         const ticketEmbed = new EmbedBuilder()
-          .setColor(isBooster ? '#f47fff' : '#b10de7')
-          .setTitle(`${isBooster ? '🚀 ' : ''}🎫 Support`)
-          .setDescription(
-            `${boosterPrefix(isBooster)}Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.`
-          )
+          .setColor('#b10de7')
+          .setTitle('🎫 Support')
+          .setDescription('Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.')
           .setTimestamp();
 
         const ticketButtons = new ActionRowBuilder().addComponents(
@@ -4588,7 +4298,7 @@ client.on('interactionCreate', async interaction => {
         );
 
         await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>${boosterNoticeLine(isBooster)}`,
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
           embeds: [ticketEmbed],
           components: [ticketButtons]
         });
@@ -5304,14 +5014,13 @@ client.on('interactionCreate', async interaction => {
       const cleanName = cleanUsername(interaction.user.username);
       const ticketOrderId = getNextTicketOrderId();
       const ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
-      const isBooster = isBoosterMember(interaction.member);
 
       try {
         const ticket = await interaction.guild.channels.create({
           name: ticketName,
           type: ChannelType.GuildText,
           parent: TICKET_CATEGORY_ID,
-          topic: `owner:${interaction.user.id};type:bestellung;order:${ticketOrderId}${boosterTopicFlag(interaction.member)}`,
+          topic: `owner:${interaction.user.id};type:bestellung;order:${ticketOrderId}`,
           permissionOverwrites: [
             { id: interaction.guild.id, deny: ['ViewChannel'] },
             { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
@@ -5322,10 +5031,9 @@ client.on('interactionCreate', async interaction => {
 
         // Header embed
         const headerEmbed = new EmbedBuilder()
-          .setColor(isBooster ? '#f47fff' : '#b10de7')
-          .setTitle(`${isBooster ? '🚀 ' : ''}🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
+          .setColor('#b10de7')
+          .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
           .setDescription(
-            boosterPrefix(isBooster) +
             `**Kategorie:** ${cat.emoji} ${cat.label}\n` +
             `**Käufer:** <@${interaction.user.id}>\n\n` +
             'Das Bestellformular wurde bereits ausgefüllt. Du kannst noch weitere Infos in den Chat schreiben.'
@@ -5361,7 +5069,7 @@ client.on('interactionCreate', async interaction => {
           .setTimestamp();
 
         await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>${boosterNoticeLine(isBooster)}`,
+          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
           embeds: [headerEmbed, formEmbed],
           components: [buildOrderTicketButtons()]
         });
@@ -6738,8 +6446,6 @@ app.post('/api/order', async (req, res) => {
     const cleanName = cleanUsername(username);
     const ticketOrderId = getNextTicketOrderId();
     const ticketName = `order-${ticketOrderId}-${cleanName}`.slice(0, 100);
-    const member = await guild.members.fetch(discordId).catch(() => null);
-    const isBooster = isBoosterMember(member);
 
     const existing = guild.channels.cache.find(c =>
       c.name === ticketName || c.name === `closed-${ticketName}`
@@ -6757,7 +6463,7 @@ app.post('/api/order', async (req, res) => {
       name: ticketName,
       type: ChannelType.GuildText,
       parent: TICKET_CATEGORY_ID,
-      topic: `owner:${discordId};type:bestellung;order:${ticketOrderId}${boosterTopicFlag(member)}`,
+      topic: `owner:${discordId};type:bestellung;order:${ticketOrderId}`,
       permissionOverwrites: [
         { id: guild.id, deny: ['ViewChannel'] },
         { id: discordId, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
@@ -6780,10 +6486,9 @@ app.post('/api/order', async (req, res) => {
     }).join('\n');
 
     const embed = new EmbedBuilder()
-      .setColor(isBooster ? '#f47fff' : '#b10de7')
-      .setTitle(`${isBooster ? '🚀 ' : ''}🛒 Website-Bestellung #${ticketOrderId}`)
+      .setColor('#b10de7')
+      .setTitle(`🛒 Website-Bestellung #${ticketOrderId}`)
       .setDescription(
-        boosterPrefix(isBooster) +
         `**Käufer:** <@${discordId}>\n` +
         `**Name:** ${String(username).slice(0, 80)}\n` +
         `**Zahlungsmethode:** ${paymentMethod ? String(paymentMethod).slice(0, 80) : 'Nicht angegeben'}\n` +
@@ -6795,7 +6500,7 @@ app.post('/api/order', async (req, res) => {
       .setTimestamp();
 
     await ticket.send({
-      content: `<@${discordId}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>${boosterNoticeLine(isBooster)}`,
+      content: `<@${discordId}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
       embeds: [embed],
       components: [buildOrderTicketButtons()]
     });
