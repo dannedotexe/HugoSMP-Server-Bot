@@ -3148,8 +3148,9 @@ client.on('interactionCreate', async interaction => {
 
       return interaction.reply({
         content:
-          `Dashboard: ${DASHBOARD_URL}\n\n` +
-          'Login ist dein `DASHBOARD_PASSWORD` aus Railway.',
+          `Dashboard: ${DASHBOARD_URL}\n` +
+          `Shop: ${DASHBOARD_URL.replace(/\/dashboard\/?$/, '/shop')}\n\n` +
+          'Login ist dein `DASHBOARD_PASSWORD` aus den Server-Variablen.',
         ephemeral: true
       });
     }
