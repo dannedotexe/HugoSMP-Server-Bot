@@ -2209,6 +2209,12 @@ async function registerCommands(guildId) {
       .setDescription('Schickt dir den Bot-Dashboard-Link.')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('version')
+      .setDescription('Zeigt, welche Bot-Version gerade läuft.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
     
     new SlashCommandBuilder()
       .setName('getorder')
@@ -3024,6 +3030,13 @@ client.on('interactionCreate', async interaction => {
   });
 }
     
+    if (interaction.commandName === 'version') {
+      return interaction.reply({
+        content: `🤖 Bot-Version: \`${BOT_VERSION}\``,
+        ephemeral: true
+      });
+    }
+
     if (interaction.commandName === 'dashboard') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({ content: 'Dafür brauchst du Administrator-Rechte.', ephemeral: true });
