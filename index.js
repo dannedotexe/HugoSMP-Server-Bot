@@ -13,10 +13,33 @@ const cors = require('cors');
 const { execSync } = require('child_process');
 
 // Aktueller Git-Commit, damit man sieht, ob das Auto-Update gegriffen hat.
+function readGitCommitFromFiles() {
+  // Fallback ohne git-Binary: Commit direkt aus .git lesen
+  const gitDir = path.join(__dirname, '.git');
+  const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+  if (!head.startsWith('ref: ')) return head;
+
+  const ref = head.slice(5);
+  const refFile = path.join(gitDir, ref);
+  if (fs.existsSync(refFile)) return fs.readFileSync(refFile, 'utf8').trim();
+
+  const packed = fs.readFileSync(path.join(gitDir, 'packed-refs'), 'utf8');
+  const line = packed.split('\n').find(l => l.endsWith(` ${ref}`));
+  return line ? line.split(' ')[0] : '';
+}
+
 let BOT_VERSION = 'unbekannt';
 try {
-  BOT_VERSION = execSync('git log -1 --format="%h (%cd)" --date=format:"%d.%m.%Y %H:%M"', { cwd: __dirname }).toString().trim();
-} catch {}
+  BOT_VERSION = execSync('git log -1 --format="%h (%cd)" --date=format:"%d.%m.%Y %H:%M"', { cwd: __dirname, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+} catch (e) {
+  console.warn('git version lookup failed:', e.message.split('\n')[0]);
+  try {
+    const commit = readGitCommitFromFiles();
+    if (commit) BOT_VERSION = commit.slice(0, 7);
+  } catch (err) {
+    console.warn('git version fallback failed:', err.message);
+  }
+}
 
 loadLocalEnv();
 
