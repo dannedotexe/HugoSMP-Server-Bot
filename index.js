@@ -10,6 +10,13 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const { execSync } = require('child_process');
+
+// Aktueller Git-Commit, damit man sieht, ob das Auto-Update gegriffen hat.
+let BOT_VERSION = 'unbekannt';
+try {
+  BOT_VERSION = execSync('git log -1 --format="%h (%cd)" --date=format:"%d.%m.%Y %H:%M"', { cwd: __dirname }).toString().trim();
+} catch {}
 
 loadLocalEnv();
 
@@ -5521,7 +5528,8 @@ app.get('/api/dashboard/status', (req, res) => {
   res.json({
     success: true,
     configured: Boolean(DASHBOARD_PASSWORD),
-    bot: client.user ? client.user.tag : 'starting'
+    bot: client.user ? client.user.tag : 'starting',
+    version: BOT_VERSION
   });
 });
 
@@ -6538,7 +6546,7 @@ app.post('/api/order', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 Website API läuft auf Port ${PORT}`);
+  console.log(`🌐 Website API läuft auf Port ${PORT} – Version ${BOT_VERSION}`);
   if (!DASHBOARD_URL) {
     console.warn('⚠️ DASHBOARD_URL ist nicht gesetzt – Dashboard-Links in Discord sind deaktiviert.');
   }
