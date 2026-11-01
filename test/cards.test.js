@@ -99,3 +99,10 @@ test('Eigene Emojis: Tausch in Embeds, Karten, Buttons – Code bleibt unveränd
   emojis._ids.clear();
   assert.equal(new BrandEmbed().setDescription('✅').toJSON().description, '✅', 'ohne Upload bleibt alles normal');
 });
+
+test('Kanal-Suche findet auch Zierschrift (bestell-inғo)', () => {
+  const { Collection, ChannelType } = require('discord.js');
+  const { findChannel } = require('../src/services/infoPanels');
+  const guild = { channels: { cache: new Collection([['5', { id: '5', type: ChannelType.GuildText, name: '🛒 | bestell-inғo' }]]) } };
+  assert.equal(findChannel(guild, 'bestellinfo')?.id, '5');
+});
