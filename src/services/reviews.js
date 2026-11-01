@@ -7,6 +7,7 @@ const { BrandEmbed } = require('../theme');
 const { loadData, saveData } = require('../store');
 const { getReviewSummary } = require('./stats');
 const { card } = require('../cards');
+const { e } = require('../emojis');
 
 function starBar(count, max, width = 12) {
   if (!max) return '░'.repeat(width);
@@ -73,7 +74,7 @@ function buildReviewSummaryCard(summary = getReviewSummary(), guildIcon = null) 
   const fullStars = summary.average ? Math.round(summary.average) : 0;
   return card({
     tone: 'warning',
-    eyebrow: '⭐ Kundenbewertungen',
+    eyebrow: `${e('star', '⭐')} Kundenbewertungen`,
     title: summary.count
       ? `${formatAverage(summary.average)} von 5  ${'⭐'.repeat(fullStars)}`
       : 'Noch keine Bewertungen',

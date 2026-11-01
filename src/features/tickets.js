@@ -46,11 +46,12 @@ module.exports = function createTickets(ctx) {
   } = ctx;
   const { buildReviewSummaryEmbed, buildReviewSummaryCard, buildReviewCard, refreshReviewSummary } = require('../services/reviews');
   const { card } = require('../cards');
+  const { e } = require('../emojis');
 
   function orderDoneCard(userId, orderId, row) {
     return card({
       tone: 'success',
-      eyebrow: '✅ Bestellung fertig',
+      eyebrow: `${e('check', '✅')} Bestellung fertig`,
       title: `Bestellung ${orderId} ist erledigt`,
       body:
         `<@${userId}>, danke für deinen Einkauf! Wie zufrieden bist du?\n` +
@@ -280,7 +281,7 @@ module.exports = function createTickets(ctx) {
 
         await ticket.send(card({
           tone: 'primary',
-          eyebrow: '🎫 Support',
+          eyebrow: `${e('support', '🎫')} Support`,
           title: 'Wie können wir helfen?',
           body:
             `Hi <@${interaction.user.id}>, danke für deine Anfrage.\n` +

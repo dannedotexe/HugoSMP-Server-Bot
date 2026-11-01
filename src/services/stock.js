@@ -10,6 +10,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { makeDashboardError } = require('./dms');
 const { client } = require('../client');
 const { card, emojiImageUrl } = require('../cards');
+const { e, buttonEmoji } = require('../emojis');
 
 function normalizeStockEmoji(value) {
   let emoji = cleanShortText(value, 80);
@@ -113,12 +114,12 @@ function buildShopPanelCard({ title, description, itemIds, includeSale }, orderR
 
   return card({
     tone: 'primary',
-    eyebrow: '🛒 Shop',
+    eyebrow: `${e('cart', '🛒')} Shop`,
     title: cleanShortText(title || 'Shop', 120),
     body: cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500),
     thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
     blocks: [
-      offer ? `🔥 **Angebot:** ${offer.title} – ${offer.discount}` : null,
+      offer ? `${e('sparkle', '🔥')} **Angebot:** ${offer.title} – ${offer.discount}` : null,
       joinEmbedLines(lines) || 'Gerade keine Artikel.'
     ],
     footer: 'Bestellung über die Buttons starten',
@@ -136,7 +137,7 @@ function buildSaleCard({ title, itemName, discount, description, until, itemId }
 
   return card({
     tone: 'warning',
-    eyebrow: '🔥 Angebot',
+    eyebrow: `${e('sparkle', '🔥')} Angebot`,
     title: cleanShortText(title || 'Neues Angebot', 120),
     body: cleanLongText(description || 'Sichere dir das Angebot im Shop-Ticket.', 900),
     thumbnail: emojiImageUrl(item),
@@ -299,17 +300,17 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null,
     new ButtonBuilder()
       .setCustomId('ticket_cat_items_geld')
       .setLabel('Jetzt bestellen')
-      .setEmoji('🛒')
+      .setEmoji(buttonEmoji('cart', '🛒'))
       .setStyle(ButtonStyle.Success)
   );
 
   const payload = card({
     tone: 'success',
-    eyebrow: '📦 Restock',
+    eyebrow: `${e('box', '📦')} Restock`,
     title: `${item.emoji && !emojiImageUrl(item) ? `${item.emoji} ` : ''}${item.name} ist wieder da!`,
     body:
-      `**Preis:** ${item.price || '—'}\n` +
-      `**Verfügbar:** ${currentAmount} Stück  ·  **neu:** +${addedAmount}`,
+      `${e('euro', '•')} **Preis:** ${item.price || '—'}\n` +
+      `${e('box', '•')} **Verfügbar:** ${currentAmount} Stück  ·  **neu:** +${addedAmount}`,
     thumbnail: emojiImageUrl(item),
     footer: 'Schnell sein lohnt sich',
     rows: [orderRow],
