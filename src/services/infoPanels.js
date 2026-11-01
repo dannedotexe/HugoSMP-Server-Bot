@@ -18,6 +18,12 @@ const SHORT_KEYS = { bestellinfo: 'bestell', preiseundstock: 'preise', inviterew
 
 function findChannel(guild, keyword) {
   const key = channelKey(keyword);
+  // Bestell-Kanal (früher #tickets) über die gespeicherte ID
+  if (key === 'tickets') {
+    const id = require('../store').loadData().orderChannelId;
+    const known = id && guild?.channels?.cache?.get(id);
+    if (known) return known;
+  }
   const text = guild?.channels?.cache?.filter(c => c.type === ChannelType.GuildText);
   if (!text) return null;
   return text.find(c => channelKey(c.name).includes(key)) ||
@@ -142,7 +148,39 @@ function buildOrderInfoPanel(guild) {
   return { embed, row };
 }
 
+// Einmalig: #tickets → 🛒┃bestellen (Kunden verstehen sofort, dass man dort kauft)
+const ORDER_CHANNEL_NAME = '🛒┃bestellen';
+
+async function renameOrderChannel(guild) {
+  const { loadData, saveData } = require('../store');
+  const { TICKET_CATEGORY_ID, CLOSED_TICKET_CATEGORY_ID } = require('../config');
+  const data = loadData();
+  if (data.orderChannelRenamed) return false;
+
+  const channel = guild.channels.cache.find(c =>
+    c.type === ChannelType.GuildText &&
+    c.parentId !== TICKET_CATEGORY_ID &&
+    c.parentId !== CLOSED_TICKET_CATEGORY_ID &&
+    channelKey(c.name) === 'tickets'
+  );
+  if (!channel) return false;
+
+  try {
+    await channel.setName(ORDER_CHANNEL_NAME, 'Kunden sollen sehen, dass man hier bestellt');
+    data.orderChannelId = channel.id;
+    data.orderChannelRenamed = Date.now();
+    saveData(data);
+    console.log(`🛒 Kanal #${channel.name} heißt jetzt ${ORDER_CHANNEL_NAME}`);
+    return true;
+  } catch (e) {
+    console.error('order channel rename error:', e.message);
+    return false;
+  }
+}
+
 module.exports = {
+  renameOrderChannel,
+  ORDER_CHANNEL_NAME,
   ORDER_INFO_TITLE,
   OLD_ORDER_INFO_TITLES,
   section,

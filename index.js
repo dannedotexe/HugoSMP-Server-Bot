@@ -336,7 +336,12 @@ client.once('ready', async () => {
   startTicketReminders();
   await updateStockPanel();
   await updateLeaderboard();
-  await refreshPostedPanels().catch(e => console.error('panel refresh error:', e.message));
+  // Einmalig #tickets → 🛒┃bestellen; danach Panels mit neuen Links erneuern
+  let renamedOrderChannel = false;
+  for (const guild of client.guilds.cache.values()) {
+    renamedOrderChannel = (await require('./src/services/infoPanels').renameOrderChannel(guild)) || renamedOrderChannel;
+  }
+  await refreshPostedPanels({ force: renamedOrderChannel }).catch(e => console.error('panel refresh error:', e.message));
 
   // Tempban expiry checker
   setInterval(async () => {
