@@ -44,7 +44,23 @@ module.exports = function createTickets(ctx) {
     updateDashboardOrderMeta,
     addReview,
   } = ctx;
-  const { buildReviewSummaryEmbed, refreshReviewSummary } = require('../services/reviews');
+  const { buildReviewSummaryEmbed, buildReviewSummaryCard, buildReviewCard, refreshReviewSummary } = require('../services/reviews');
+  const { card } = require('../cards');
+
+  function orderDoneCard(userId, orderId, row) {
+    return card({
+      tone: 'success',
+      eyebrow: '✅ Bestellung fertig',
+      title: `Bestellung ${orderId} ist erledigt`,
+      body:
+        `<@${userId}>, danke für deinen Einkauf! Wie zufrieden bist du?\n` +
+        '-# Nach der Bewertung bekommst du automatisch die **Kunden-Rolle**.',
+      rows: [row],
+      footer: `Bestellung ${orderId}`,
+      mention: `<@${userId}>`,
+      allowedMentions: { users: [userId] }
+    });
+  }
 
   async function command(interaction) {
     if (interaction.commandName === 'bewertungen') {
@@ -221,14 +237,7 @@ module.exports = function createTickets(ctx) {
           .setEmoji('⭐')
       );
 
-      return interaction.reply({
-        content:
-          `✅ Bestellung für ${user} wurde als **fertig** markiert!\n` +
-          `**Order-ID:** ${orderId}\n\n` +
-          `${user}, bitte bewerte den Shop!\n\n` +
-          `> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
-        components: [row]
-      });
+      return interaction.reply(orderDoneCard(user.id, orderId, row));
     }
   }
 
@@ -265,23 +274,22 @@ module.exports = function createTickets(ctx) {
           ]
         });
 
-        const ticketEmbed = new BrandEmbed()
-          .setTitle('Support')
-          .setDescription(
-            `Hi <@${interaction.user.id}>, danke für deine Anfrage.\n` +
-            'Beschreib dein Anliegen so genau wie möglich – das Team meldet sich hier.'
-          )
-          .setTimestamp();
-
         const ticketButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
         );
 
-        await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
-          embeds: [ticketEmbed],
-          components: [ticketButtons]
-        });
+        await ticket.send(card({
+          tone: 'primary',
+          eyebrow: '🎫 Support',
+          title: 'Wie können wir helfen?',
+          body:
+            `Hi <@${interaction.user.id}>, danke für deine Anfrage.\n` +
+            'Beschreib dein Anliegen so genau wie möglich – das Team meldet sich hier.',
+          thumbnail: interaction.user.displayAvatarURL({ size: 128 }),
+          rows: [ticketButtons],
+          mention: `<@${interaction.user.id}> ${STAFF_ROLE_IDS.slice(0, 2).map(id => `<@&${id}>`).join(' ')}`,
+          allowedMentions: { users: [interaction.user.id], roles: STAFF_ROLE_IDS.slice(0, 2) }
+        }));
 
         return interaction.reply({ content: `✅ Support-Ticket erstellt: <#${ticket.id}>`, ephemeral: true });
       } catch (e) {
@@ -793,48 +801,31 @@ module.exports = function createTickets(ctx) {
           ]
         });
 
-        // Header embed
-        const headerEmbed = new BrandEmbed()
-          .setAuthor({ name: `Bestellung #${ticketOrderId}` })
-          .setTitle(`${cat.emoji} ${cat.label}`)
-          .setDescription(
-            `Danke, <@${interaction.user.id}>! Deine Angaben sind unten zusammengefasst.\n` +
-            '-# Weitere Infos kannst du einfach hier in den Chat schreiben.'
-          )
-          .setTimestamp();
-
-        // Form data embed — fields differ per category
-        const formFields = [];
+        // Ticket-Kopf als Karte: Zusammenfassung + Buttons fürs Team
+        const facts = [];
         if (catKey === 'ticket_cat_items_geld') {
-          formFields.push(
-            { name: 'Item', value: item, inline: true },
-            { name: 'Menge', value: amount, inline: true },
-            { name: 'Ingame-Name', value: ingame, inline: true },
-            { name: 'Zahlungsmethode', value: payment, inline: true }
-          );
+          facts.push(['Item', item], ['Menge', amount]);
         } else if (catKey === 'ticket_cat_schematics') {
-          formFields.push(
-            { name: 'Schematic', value: item, inline: true },
-            { name: 'Ingame-Name', value: ingame, inline: true },
-            { name: 'Zahlungsmethode', value: payment, inline: true }
-          );
+          facts.push(['Schematic', item]);
         } else {
-          formFields.push(
-            { name: 'Resource Pack', value: item, inline: true },
-            { name: 'Ingame-Name', value: ingame, inline: true },
-            { name: 'Zahlungsmethode', value: payment, inline: true }
-          );
+          facts.push(['Resource Pack', item]);
         }
-        const formEmbed = new BrandEmbed()
-          .setTitle('Bestellformular')
-          .addFields(...formFields)
-          .setTimestamp();
+        facts.push(['Ingame-Name', ingame], ['Zahlung', payment]);
 
-        await ticket.send({
-          content: `<@${interaction.user.id}> <@&${STAFF_ROLE_IDS[0]}> <@&${STAFF_ROLE_IDS[1]}>`,
-          embeds: [headerEmbed, formEmbed],
-          components: [buildOrderTicketButtons()]
-        });
+        await ticket.send(card({
+          tone: 'primary',
+          eyebrow: `Bestellung #${ticketOrderId}`,
+          title: `${cat.emoji} ${cat.label}`,
+          body:
+            `Danke, <@${interaction.user.id}>! Das Team meldet sich gleich bei dir.\n` +
+            '-# Weitere Infos kannst du einfach hier in den Chat schreiben.',
+          thumbnail: interaction.user.displayAvatarURL({ size: 128 }),
+          blocks: [facts.map(([name, value]) => `**${name}:** ${String(value || '—').slice(0, 300)}`).join('\n')],
+          footer: `Bestellung #${ticketOrderId}`,
+          rows: [buildOrderTicketButtons()],
+          mention: `<@${interaction.user.id}> ${STAFF_ROLE_IDS.slice(0, 2).map(id => `<@&${id}>`).join(' ')}`,
+          allowedMentions: { users: [interaction.user.id], roles: STAFF_ROLE_IDS.slice(0, 2) }
+        }));
 
         markOrderFormSubmitted(ticket.id);
 
@@ -962,26 +953,15 @@ module.exports = function createTickets(ctx) {
         });
       }
 
-      const starsEmoji = '⭐'.repeat(stars);
       const reviewer = interaction.user;
 
-      const embed = new BrandEmbed()
-        .setAuthor({
-          name: reviewer.username,
-          iconURL: reviewer.displayAvatarURL()
-        })
-        .setTitle(`${starsEmoji}  ${stars}/5`)
-        .setDescription(text)
-        .addFields(
-          { name: 'Kunde', value: `<@${reviewer.id}>`, inline: true },
-          { name: 'Gekauft', value: String(purchasedItem || '—').slice(0, 1024), inline: true }
-        )
-        .setFooter({ text: `Bewertung · Bestellung ${orderId}` })
-        .setTimestamp();
-
-      await reviewChannel.send({
-        embeds: [embed]
-      });
+      await reviewChannel.send(buildReviewCard({
+        user: reviewer,
+        stars,
+        text,
+        item: purchasedItem,
+        orderId
+      }));
 
       addReview({
         orderId,

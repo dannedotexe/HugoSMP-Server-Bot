@@ -11,6 +11,7 @@ const { client } = require('../client');
 const { getUserAvatar, getUserDisplayName, getUserSummary } = require('./users');
 const { getDmUserInfo, getMessageAttachments, makeDashboardError } = require('./dms');
 const { trackOrderMeta } = require('./stats');
+const { card, cardText, isCardMessage } = require('../cards');
 
 const closingTickets = new Set();
 
@@ -64,7 +65,7 @@ async function buildTranscript(channel) {
     return sorted.map(msg => {
       const time = new Date(msg.createdTimestamp).toLocaleString('de-DE');
       const author = `${msg.author.tag} (${msg.author.id})`;
-      const content = msg.content || '[Embed/Anhang/Keine Textnachricht]';
+      const content = msg.content || (isCardMessage(msg) ? cardText(msg) : '') || '[Embed/Anhang/Keine Textnachricht]';
       const attachments = msg.attachments.size > 0
         ? `\nAnhänge: ${msg.attachments.map(a => a.url).join(', ')}`
         : '';
@@ -561,7 +562,7 @@ async function getTicketRecentMessages(channel, limit = 40) {
       author: getUserDisplayName(message.author, message.author?.id || 'Unbekannt'),
       avatarUrl: getUserAvatar(message.author),
       bot: Boolean(message.author?.bot),
-      content: message.content || '',
+      content: message.content || (isCardMessage(message) ? cardText(message) : ''),
       attachments: getMessageAttachments(message),
       embeds: (message.embeds || []).slice(0, 3).map(embed => ({
         title: embed.title || '',
@@ -682,15 +683,18 @@ async function sendOrderReviewRequest(channel, ownerId, orderId) {
       .setEmoji('⭐')
   );
 
-  await channel.send({
-    content:
-      `✅ Bestellung für <@${ownerId}> wurde als **fertig** markiert!\n` +
-      `**Order-ID:** ${reviewOrderId}\n\n` +
-      `<@${ownerId}>, bitte bewerte den Shop!\n\n` +
-      `> Nach der Bewertung erhältst du automatisch die **Kunden-Rolle**.`,
-    components: [row],
+  await channel.send(card({
+    tone: 'success',
+    eyebrow: '✅ Bestellung fertig',
+    title: `Bestellung ${reviewOrderId} ist erledigt`,
+    body:
+      `<@${ownerId}>, danke für deinen Einkauf! Wie zufrieden bist du?\n` +
+      '-# Nach der Bewertung bekommst du automatisch die **Kunden-Rolle**.',
+    rows: [row],
+    footer: `Bestellung ${reviewOrderId}`,
+    mention: `<@${ownerId}>`,
     allowedMentions: { users: [ownerId] }
-  });
+  }));
 
   updateDashboardOrderMeta(channel.id, {
     status: 'fertig',

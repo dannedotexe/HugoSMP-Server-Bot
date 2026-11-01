@@ -6,6 +6,7 @@
 const { BrandEmbed } = require('../theme');
 const { loadData, saveData } = require('../store');
 const { getReviewSummary } = require('./stats');
+const { card } = require('../cards');
 
 function starBar(count, max, width = 12) {
   if (!max) return '░'.repeat(width);
@@ -56,7 +57,7 @@ async function refreshReviewSummary(channel) {
   if (oldId) {
     await channel.messages.delete(oldId).catch(() => {});
   }
-  const message = await channel.send({ embeds: [buildReviewSummaryEmbed()] }).catch(e => {
+  const message = await channel.send(buildReviewSummaryCard(undefined, channel.guild?.iconURL({ size: 256 }) || null)).catch(e => {
     console.error('review summary error:', e.message);
     return null;
   });
@@ -64,7 +65,43 @@ async function refreshReviewSummary(channel) {
   saveData(data);
 }
 
+function buildReviewSummaryCard(summary = getReviewSummary(), guildIcon = null) {
+  const max = Math.max(...Object.values(summary.counts));
+  const lines = [5, 4, 3, 2, 1].map(n =>
+    `\`${n}★\` \`${starBar(summary.counts[n] || 0, max)}\` ${summary.counts[n] || 0}`
+  );
+  const fullStars = summary.average ? Math.round(summary.average) : 0;
+  return card({
+    tone: 'warning',
+    eyebrow: '⭐ Kundenbewertungen',
+    title: summary.count
+      ? `${formatAverage(summary.average)} von 5  ${'⭐'.repeat(fullStars)}`
+      : 'Noch keine Bewertungen',
+    body: summary.count
+      ? `Aus **${summary.count}** ${summary.count === 1 ? 'Bewertung' : 'Bewertungen'} echter Kunden.`
+      : 'Sei der Erste, der nach einer Bestellung bewertet!',
+    thumbnail: guildIcon,
+    blocks: [lines.join('\n')],
+    footer: 'Bewertungen'
+  });
+}
+
+// Eine einzelne Bewertung als Karte (im Bewertungs-Kanal)
+function buildReviewCard({ user, stars, text, item, orderId }) {
+  return card({
+    tone: stars >= 4 ? 'success' : stars === 3 ? 'warning' : 'danger',
+    eyebrow: `Bewertung von ${user.username}`,
+    title: `${'⭐'.repeat(stars)}  ${stars}/5`,
+    body: `>>> ${String(text).slice(0, 1500)}`,
+    thumbnail: user.displayAvatarURL({ size: 128 }),
+    blocks: [`**Kunde:** <@${user.id}>  ·  **Gekauft:** ${String(item || '—').slice(0, 100)}`],
+    footer: `Bestellung ${orderId}`
+  });
+}
+
 module.exports = {
+  buildReviewSummaryCard,
+  buildReviewCard,
   buildReviewSummaryEmbed,
   refreshReviewSummary
 };

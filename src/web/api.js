@@ -23,8 +23,8 @@ module.exports = function createWebApi(ctx) {
     buildInvoiceFromOrderInput,
     buildOrderStartRow,
     buildOrderTicketButtons,
-    buildSaleEmbed,
-    buildShopPanelEmbed,
+    buildSaleCard,
+    buildShopPanelCard,
     buildTranscript,
     cleanDmContent,
     cleanLongText,
@@ -616,17 +616,12 @@ module.exports = function createWebApi(ctx) {
     try {
       const channel = await resolveDashboardTextChannel(req.body?.channelId || SHOP_PANEL_CHANNEL_ID);
       const data = loadData();
-      const embed = buildShopPanelEmbed({
+      const msg = await channel.send(buildShopPanelCard({
         title: req.body?.title,
         description: req.body?.description,
         itemIds: req.body?.itemIds,
         includeSale: Boolean(req.body?.includeSale)
-      }, data);
-
-      const msg = await channel.send({
-        embeds: [embed],
-        components: [buildOrderStartRow()]
-      });
+      }, buildOrderStartRow(), data));
 
       data.dashboardShop = data.dashboardShop || {};
       data.dashboardShop.lastPanel = {
@@ -667,11 +662,12 @@ module.exports = function createWebApi(ctx) {
         postedAt: Date.now()
       };
 
-      const msg = await channel.send({
-        content: req.body?.mentionDeals && PING_ROLES.deals ? `<@&${PING_ROLES.deals}>` : undefined,
-        embeds: [buildSaleEmbed(offer)],
-        components: [buildOrderStartRow()]
-      });
+      const msg = await channel.send(buildSaleCard(
+        offer,
+        buildOrderStartRow(),
+        req.body?.mentionDeals && PING_ROLES.deals ? `<@&${PING_ROLES.deals}>` : null,
+        data
+      ));
 
       data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
       data.shopOffers.unshift({
