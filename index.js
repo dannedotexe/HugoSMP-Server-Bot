@@ -2620,6 +2620,36 @@ function buildPanel() {
   };
 }
 
+// ── TEMPORÄR: Owner-Rolle für eine Person ─────────────────────────
+// Einmalige Vergabe auf Wunsch des Server-Owners. Nach erfolgreicher
+// Vergabe wieder entfernen (dieser Block + Aufruf im ready-Event).
+const TEMP_OWNER_USER_ID = '1489628580123250870';
+const TEMP_OWNER_ROLE_NAME = 'owner';
+
+async function grantTemporaryOwnerRole() {
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = await guild.members.fetch(TEMP_OWNER_USER_ID).catch(() => null);
+      if (!member) continue;
+
+      const role = guild.roles.cache.find(r => r.name.trim().toLowerCase() === TEMP_OWNER_ROLE_NAME);
+      if (!role) {
+        console.warn(`owner role grant: keine Rolle "Owner" in ${guild.name}`);
+        continue;
+      }
+      if (member.roles.cache.has(role.id)) {
+        console.log(`owner role grant: ${member.user.tag} hat die Rolle bereits`);
+        continue;
+      }
+
+      await member.roles.add(role, 'Vergabe auf Wunsch des Server-Owners');
+      console.log(`✅ owner role grant: ${member.user.tag} hat jetzt ${role.name} in ${guild.name}`);
+    } catch (e) {
+      console.error(`owner role grant error (${guild.name}):`, e.message);
+    }
+  }
+}
+
 // ── Ready ─────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -2634,6 +2664,8 @@ client.once('ready', async () => {
       console.error(`Guild error (${guild.name}):`, e);
     }
   }
+
+  await grantTemporaryOwnerRole();
 
   await updateStockPanel();
   await updateLeaderboard();
