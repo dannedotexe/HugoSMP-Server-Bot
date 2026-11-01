@@ -24,39 +24,46 @@ function channelLink(guild, keyword, fallbackName = keyword) {
   return channel ? `<#${channel.id}>` : `**#${fallbackName}**`;
 }
 
-function buildRulesVerifyPanel(guild, moneyRate) {
+function buildRulesVerifyPanel(guild) {
   const tickets = channelLink(guild, 'tickets');
   const info = channelLink(guild, 'bestellinfo', 'bestell-info');
   const proofs = channelLink(guild, 'bewertungen');
   const invites = channelLink(guild, 'inviterewards', 'invite-rewards');
 
-  const description = [
-    'Willkommen bei **HugoSMP Market**! Bitte lies die Regeln kurz durch.',
-    'Mit dem Klick auf **Verifizieren** erkennst du sie an und schaltest alle Kanäle frei.',
-    '',
-    '### 🎫 Bestellablauf & Tickets',
-    `• **Ticket-Pflicht:** Alle Käufe laufen über ${tickets}. Wer Teammitglieder privat (DM) anschreibt, wird ignoriert.`,
-    `• **Bestell-Infos:** Lies vor dem Kauf ${info}, um den Ablauf zu verstehen.`,
-    '• **Geduld:** Tickets werden schnellstmöglich bearbeitet. Unnötiges Pingen verzögert alles.',
-    '',
-    '### 💳 Handel & Sicherheit',
-    `• **Scamming:** Betrugsversuche führen zum permanenten Bann und einem öffentlichen Eintrag in ${proofs}.`,
-    '• **Vorkasse:** Erst wird vollständig bezahlt, dann werden die Items (z. B. *Gilded Blackstone* oder Ingame-Geld) übergeben.',
-    '• **Keine Verzögerungen:** Stehen die Zahlungsinfos im Ticket, wird sofort bezahlt.',
-    '• **Hinhalten:** Unnötiges Verzögern oder „Trolling“ beim Bezahlen wird mit Timeout oder Handelsausschluss bestraft.',
-    '',
-    '### 🛡️ Verhalten & Haftung',
-    '• **Eigenwerbung:** Werbung für andere Shops oder Server (auch per DM) ist verboten.',
-    `• **Invite-Rewards:** Wer Invites in ${invites} ausnutzt (Bots/Fakes), verliert alle Belohnungen.`,
-    '• **Haftung:** Handel auf eigene Gefahr. Wir haften nicht für Banns/Mutes auf dem Hugo SMP durch Verstöße gegen EULA oder Serverregeln.',
-    '',
-    '-# Faire Handlungen sorgen für ein besseres Spielerlebnis für alle!'
-  ].join('\n');
-
   const embed = new BrandEmbed()
     .setTitle('📜 Regeln & Verifizierung')
-    .setDescription(description)
-    .addFields({ name: 'Kurs', value: moneyRate, inline: true })
+    .setDescription(
+      'Willkommen bei **HugoSMP Market**!\n' +
+      'Lies dir die Regeln kurz durch. Mit **Verifizieren** akzeptierst du sie und schaltest alle Kanäle frei.'
+    )
+    .addFields(
+      {
+        name: '🎫 Bestellung & Tickets',
+        value: [
+          `• Alle Käufe laufen über ${tickets} – private DMs ans Team werden ignoriert.`,
+          `• Lies vor dem Kauf ${info}.`,
+          '• Bitte nicht drängeln oder pingen, wir antworten so schnell wie möglich.'
+        ].join('\n')
+      },
+      {
+        name: '💳 Handel & Sicherheit',
+        value: [
+          `• Scam-Versuche = permanenter Bann und Eintrag in ${proofs}.`,
+          '• Erst vollständig bezahlen, dann gibt es die Items.',
+          '• Stehen die Zahlungsinfos im Ticket, bitte sofort bezahlen.',
+          '• Hinhalten oder Trollen beim Bezahlen = Timeout oder Handelsausschluss.'
+        ].join('\n')
+      },
+      {
+        name: '🛡️ Verhalten & Haftung',
+        value: [
+          '• Keine Werbung für andere Shops oder Server (auch nicht per DM).',
+          `• Invite-Betrug (Bots/Fakes) in ${invites} = alle Belohnungen weg.`,
+          '• Handel auf eigene Gefahr. Für Banns/Mutes auf dem Hugo SMP haften wir nicht.'
+        ].join('\n')
+      }
+    )
+    .setFooter({ text: 'Faire Handlungen sorgen für ein besseres Spielerlebnis' })
     .setThumbnail(guild?.iconURL?.({ size: 256 }) || null);
 
   const row = new ActionRowBuilder().addComponents(

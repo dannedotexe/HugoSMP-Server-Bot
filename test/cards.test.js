@@ -48,12 +48,13 @@ test('Regeln+Verifizierung und Bestell-Info: gültige Embeds mit echten Kanal-Li
     ['13', { id: '13', type: ChannelType.GuildText, name: '📈┃preise-und-stock' }]
   ]);
   const guild = { id: '1', channels: { cache: channels }, iconURL: () => null };
-  const rules = buildRulesVerifyPanel(guild, '1M = 0,50 €');
-  const r = rules.embed.toJSON();
-  assert.ok(r.description.length < 4096);
-  assert.match(r.description, /<#11>/);
-  assert.match(r.description, /<#12>/);
-  assert.match(r.description, /\*\*#bewertungen\*\*/, 'fehlender Kanal als Text');
+  const rules = buildRulesVerifyPanel(guild);
+  const r = JSON.stringify(rules.embed.toJSON());
+  assert.match(r, /<#11>/);
+  assert.match(r, /<#12>/);
+  assert.match(r, /\*\*#bewertungen\*\*/, 'fehlender Kanal als Text');
+  assert.doesNotMatch(r, /Kurs/);
+  rules.embed.toJSON().fields.forEach(f => assert.ok(f.value.length <= 1024));
   assert.equal(rules.row.toJSON().components[0].custom_id, 'verify_member');
   const info = buildOrderInfoPanel(guild);
   assert.match(JSON.stringify(info.embed.toJSON()), /<#13>/);
