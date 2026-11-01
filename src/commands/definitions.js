@@ -148,6 +148,11 @@ function buildCommandDefinitions() {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('bestellung')
+      .setDescription('Zeigt den Status deiner Bestellungen')
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('bewertungen')
       .setDescription('Zeigt die Kundenbewertungen des Shops')
       .toJSON(),

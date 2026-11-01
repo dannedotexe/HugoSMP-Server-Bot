@@ -197,6 +197,33 @@ const {
   ticketTypeLabelForInvoice,
 } = require('./src/services/tickets');
 const { recordEvent, addReview, getReviewSummary, getStats } = require('./src/services/stats');
+const ticketWait = require('./src/services/ticketWait');
+
+// Erinnert das Team im Ticket-Log, wenn ein Kunde zu lange auf Antwort wartet
+function startTicketReminders() {
+  const check = async () => {
+    for (const { channelId, waitingSince } of ticketWait.dueReminders()) {
+      const channel = client.channels.cache.get(channelId);
+      if (!channel || channel.parentId !== TICKET_CATEGORY_ID) {
+        ticketWait.clearWait(channelId);
+        continue;
+      }
+      ticketWait.markReminded(channelId);
+      const log = client.channels.cache.get(TICKET_LOG_CHANNEL_ID);
+      if (!log) continue;
+      const { card } = require('./src/cards');
+      await log.send(card({
+        tone: 'warning',
+        eyebrow: '⏳ Ticket wartet',
+        title: `#${channel.name} wartet seit ${ticketWait.formatWait(Date.now() - waitingSince)}`,
+        body: `Der Kunde hat noch keine Antwort bekommen: <#${channel.id}>`,
+        mention: STAFF_ROLE_IDS.map(id => `<@&${id}>`).join(' '),
+        allowedMentions: { roles: STAFF_ROLE_IDS }
+      })).catch(e => console.error('ticket reminder error:', e.message));
+    }
+  };
+  setInterval(() => check().catch(() => {}), 5 * 60 * 1000);
+}
 // ── Giveaway helpers ──────────────────────────────────────────────
 
 const {
@@ -305,6 +332,8 @@ client.once('ready', async () => {
   }
 
   await require('./src/emojis').syncEmojis(client);
+  require('./src/services/backup').startBackups();
+  startTicketReminders();
   await updateStockPanel();
   await updateLeaderboard();
   await refreshPostedPanels().catch(e => console.error('panel refresh error:', e.message));
@@ -368,6 +397,14 @@ client.on('inviteDelete', inv => {
 client.on('messageCreate', async message => {
   try {
     if (message.author?.bot) return;
+
+    // Ticket-Wartezeit: wer hat zuletzt geschrieben – Kunde oder Team?
+    if (message.guild && isDashboardTicketChannel(message.channel) && message.channel.parentId === TICKET_CATEGORY_ID) {
+      const fromStaff = message.member ? isStaff(message.member) : false;
+      ticketWait.onTicketMessage(message.channel.id, { fromStaff });
+      return;
+    }
+
     if (message.channel?.type !== ChannelType.DM) return;
 
     const saved = addDmThreadMessage({

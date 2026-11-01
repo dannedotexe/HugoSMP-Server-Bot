@@ -429,10 +429,13 @@ function renderTicketRows(targetId, tickets, selectFn, selectedId) {
   }
 
   tickets.forEach(ticket => {
+    const waitMinutes = ticket.waitingSince ? Math.round((Date.now() - ticket.waitingSince) / 60000) : null;
+    const waitPill = waitMinutes === null || ticket.state !== 'open' ? ''
+      : `<span class="pill ${waitMinutes >= 30 ? 'bad' : 'warn'}">wartet ${waitMinutes < 60 ? `${waitMinutes} min` : `${Math.floor(waitMinutes / 60)} h`}</span> `;
     const row = rowText(
       `#${ticket.name}`,
       `${ticketTypeLabel(ticket.type)} - ${ticket.owner?.username || ticket.ownerId || 'Unbekannt'} - ${formatTime(ticket.createdAt, true)}`,
-      ticketStatePill(ticket.state)
+      waitPill + ticketStatePill(ticket.state)
     );
     row.style.cursor = 'pointer';
     row.classList.toggle('active', ticket.channelId === selectedId);
@@ -815,7 +818,8 @@ async function loadOverview() {
     renderMetric('Server', overview.guild.memberCount ?? '-', `${overview.guild.name} - ${overview.guild.activeTickets} offene Tickets`),
     renderMetric('DMs', overview.dms.unread, `${overview.dms.open} offen, ${overview.dms.archived} archiviert`),
     renderMetric('Stock', `${overview.stock.low + overview.stock.out}`, `${overview.stock.low} niedrig, ${overview.stock.out} ausverkauft`),
-    renderMetric('Bot', formatDuration(overview.bot.uptimeSeconds), `${overview.bot.presence.status} - ${overview.bot.presence.activityName || 'keine Aktivität'}`)
+    renderMetric('Bot', formatDuration(overview.bot.uptimeSeconds), `${overview.bot.presence.status} - ${overview.bot.presence.activityName || 'keine Aktivität'}`),
+    renderMetric('Backup', overview.backup?.lastAt ? formatTime(overview.backup.lastAt, true) : '-', `${overview.backup?.count || 0} Sicherungen (14 Tage)`)
   );
 
   const invites = $('overviewInvites');
@@ -1528,6 +1532,7 @@ async function loadStats() {
     renderMetric('Umsatz', euro(t.revenue), `Insgesamt ${euro(st.allTime.revenue)}`),
     renderMetric('Bestellungen', t.completed, `${t.orders} neu - Ø ${euro(t.averageOrder)}`),
     renderMetric('Lieferzeit', delivery, 'Ø von Bestellung bis fertig'),
+    renderMetric('Antwortzeit', t.avgResponseMinutes === null ? '-' : `${t.avgResponseMinutes} min`, 'Ø bis das Team im Ticket antwortet'),
     renderMetric('Mitglieder', st.memberCount ?? '-', `+${t.joins} neu, -${t.leaves} weg`),
     renderMetric('Bewertung', r.average === null ? '-' : `${String(r.average).replace('.', ',')} ★`, `${r.count} Bewertungen`)
   );

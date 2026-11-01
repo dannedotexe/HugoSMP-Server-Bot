@@ -64,6 +64,14 @@ module.exports = function createTickets(ctx) {
   }
 
   async function command(interaction) {
+    if (interaction.commandName === 'bestellung') {
+      const { getUserOrders, buildMyOrdersCard } = require('../services/orderStatus');
+      return interaction.reply({
+        ...buildMyOrdersCard(interaction.user, getUserOrders(interaction.user.id)),
+        flags: require('discord.js').MessageFlags.IsComponentsV2 | require('discord.js').MessageFlags.Ephemeral
+      });
+    }
+
     if (interaction.commandName === 'bewertungen') {
       return interaction.reply({ embeds: [buildReviewSummaryEmbed(undefined, { latest: 3 })] });
     }
@@ -1030,7 +1038,7 @@ module.exports = function createTickets(ctx) {
 
   return {
     name: 'tickets',
-    commands: ["getorder","adduser","close","fertig","bewertungen"],
+    commands: ["getorder","adduser","close","fertig","bewertungen","bestellung"],
     buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/],
     modals: [/^pre_order_modal_/, /^order_form_modal$/, /^review_modal_/],
     command,
