@@ -14,7 +14,7 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
   const port = 39000 + Math.floor(Math.random() * 500);
   const child = spawn(process.execPath, ['index.js'], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, DISCORD_TOKEN: 'ungueltig', DASHBOARD_PASSWORD: 'testpasswort', PORT: String(port), HOST: '127.0.0.1', DATA_FILE: path.join(dir, 'data.json') },
+    env: { ...process.env, DISCORD_TOKEN: 'ungueltig', DASHBOARD_PASSWORD: 'testpasswort', PORT: String(port), HOST: '127.0.0.1', DATA_FILE: path.join(dir, 'data.json'), HSB_SELFTEST: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   t.after(() => child.kill());
@@ -33,5 +33,6 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
   assert.match(token, /^\d{13}\./);
   assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
   assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: 'Bearer testpasswort' } })).status, 401);
+  assert.match(out, /SELFTEST features=8 missing=-/, out);
   assert.doesNotMatch(out, /TypeError|ReferenceError|SyntaxError/, out);
 });
