@@ -45,21 +45,36 @@ function buildVerifyPanel(guild) {
   return buildRulesVerifyPanel(guild);
 }
 
+// Hauptsache Bestellen: großer grüner Button; Support klein daneben
 function buildTicketPanel() {
-  const button = (id, label, icon, fallback, style = ButtonStyle.Secondary) =>
-    new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(buttonEmoji(icon, fallback)).setStyle(style);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_items_geld')
+      .setLabel('Jetzt bestellen')
+      .setEmoji(buttonEmoji('cart', '🛒'))
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('create_support_ticket')
+      .setLabel('Nur Fragen? Support')
+      .setEmoji(buttonEmoji('support', '🎧'))
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   return card({
-    tone: 'primary',
-    eyebrow: `${e('ticket', '🎫')} Support & Bestellungen`,
-    title: 'Wie können wir dir helfen?',
-    body: 'Bestellen oder Hilfe holen – wir öffnen dir einen privaten Kanal mit dem Team.',
+    tone: 'success',
+    eyebrow: `${e('cart', '🛒')} Bestellen`,
+    title: 'Hier kaufst du Items & Geld!',
+    body: 'Klick auf **Jetzt bestellen**, füll das kurze Formular aus – fertig.\nWir öffnen dir einen privaten Bestell-Kanal mit dem Team.',
     thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
-    items: [
-      { text: `${e('euro', '💰')} **Items & Geld**\n-# Ingame-Items und Geld kaufen`, button: button('ticket_cat_items_geld', 'Bestellen', 'cart', '💰', ButtonStyle.Success) },
-      { text: `${e('support', '🎫')} **Support**\n-# Fragen und Probleme`, button: button('create_support_ticket', 'Hilfe', 'support', '🎫', ButtonStyle.Primary) }
+    blocks: [
+      [
+        `${e('clipboard', '1️⃣')} **Formular ausfüllen** – Item, Menge, Ingame-Name, Zahlung`,
+        `${e('card', '2️⃣')} **Bezahlen** – die Infos bekommst du im Bestell-Kanal`,
+        `${e('box', '3️⃣')} **Erhalten** – die Items kommen per /orders`
+      ].join('\n')
     ],
-    footer: 'Bitte pro Anliegen nur ein Ticket',
+    rows: [row],
+    footer: 'Fragen ohne Kauf? Dann „Support“',
     timestamp: false
   });
 }
@@ -107,7 +122,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 9;
+const PANEL_REFRESH_REVISION = 10;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
