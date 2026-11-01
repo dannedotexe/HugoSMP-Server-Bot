@@ -40,7 +40,7 @@ function currentMoneyRate() {
 
 // Regeln + Verifizieren in EINEM Embed (src/services/infoPanels.js)
 function buildVerifyPanel(guild) {
-  return buildRulesVerifyPanel(guild, currentMoneyRate());
+  return buildRulesVerifyPanel(guild);
 }
 
 function buildTicketPanel() {
@@ -107,7 +107,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 4;
+const PANEL_REFRESH_REVISION = 5;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
