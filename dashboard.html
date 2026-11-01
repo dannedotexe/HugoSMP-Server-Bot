@@ -1681,6 +1681,32 @@
         max-width: 92%;
       }
     }
+
+    /* ── Statistik ── */
+    .stats-range { display: flex; gap: 6px; }
+    .stats-range button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .chart-panel h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .chart-panel h2 small { color: var(--muted); font-weight: 500; font-size: 13px; }
+    .bar-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 160px; padding-top: 8px; border-bottom: 1px solid var(--line); }
+    .bar-chart .bar-slot { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+    .bar-chart .bar { width: 100%; min-height: 1px; background: var(--accent); border-radius: 4px 4px 0 0; opacity: .9; }
+    .bar-chart .bar-slot:hover .bar, .bar-chart .bar-slot:focus .bar { opacity: 1; background: var(--accent-violet, #9a86ec); }
+    .bar-chart .bar.zero { background: var(--line); }
+    .chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .chart-tip { position: absolute; pointer-events: none; transform: translate(-50%, -100%); background: #1d1d23; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; color: var(--text); box-shadow: var(--shadow); z-index: 5; }
+    .chart-tip strong { display: block; font-size: 13px; }
+    .star-rows { display: grid; gap: 6px; }
+    .star-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 36px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .star-track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+    .star-fill { height: 100%; background: var(--accent-amber); border-radius: 4px; }
+    .review-card { border-top: 1px solid var(--line); padding: 10px 0; }
+    .review-card p { margin: 4px 0 0; color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+    .review-card small { color: var(--muted); }
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .stats-table th, .stats-table td { text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+    .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+    .stats-table th { color: var(--muted); font-weight: 500; }
+    details.stats-details summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
   </style>
 </head>
 <body>
@@ -1710,6 +1736,7 @@
       </div>
       <nav class="nav" aria-label="Dashboard Bereiche">
         <button class="active" data-view="overview" type="button" aria-current="page"><span class="nav-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="8" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="15" width="7" height="6" rx="1.5"></rect></svg></span>Übersicht</button>
+        <button data-view="stats" type="button"><span class="nav-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10"></path><path d="M10 20V4"></path><path d="M16 20v-7"></path><path d="M22 20H2"></path></svg></span>Statistik</button>
         <button data-view="dms" type="button"><span class="nav-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.6 8.2 9.4 9.4 0 0 1-3.8-.8L3 20l1.2-5.1a8 8 0 0 1-.7-3.4A8.4 8.4 0 0 1 12 3.3a8.4 8.4 0 0 1 9 8.2Z"></path><path d="M8.5 12h.01"></path><path d="M12 12h.01"></path><path d="M15.5 12h.01"></path></svg></span>DMs</button>
         <button data-view="tickets" type="button"><span class="nav-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z"></path><path d="M9 8v8"></path><path d="M13 9h4"></path><path d="M13 15h4"></path></svg></span>Tickets</button>
         <button data-view="orders" type="button"><span class="nav-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2L6 21Z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path><path d="M9 16h3"></path></svg></span>Bestellungen</button>
@@ -1740,6 +1767,54 @@
           <section class="panel">
             <h2>Stock Warnungen</h2>
             <div id="overviewStock" class="row-list"></div>
+          </section>
+        </div>
+      </main>
+
+      <main id="statsView" class="workspace dashboard-view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Statistik</h1>
+            <p>Umsatz, Bestellungen, Mitglieder und Bewertungen.</p>
+          </div>
+          <div class="stats-range" role="group" aria-label="Zeitraum">
+            <button class="small" data-range="7" type="button">7 Tage</button>
+            <button class="small active" data-range="30" type="button">30 Tage</button>
+            <button class="small" data-range="90" type="button">90 Tage</button>
+          </div>
+        </div>
+        <div id="statsMetrics" class="metric-grid"></div>
+        <div class="panel-grid">
+          <section class="panel chart-panel">
+            <h2>Umsatz pro Tag <small id="statsRevenueSum"></small></h2>
+            <div id="statsRevenueChart" class="bar-chart" role="img"></div>
+            <div id="statsRevenueAxis" class="chart-axis"></div>
+          </section>
+          <section class="panel chart-panel">
+            <h2>Fertige Bestellungen pro Tag <small id="statsOrdersSum"></small></h2>
+            <div id="statsOrdersChart" class="bar-chart" role="img"></div>
+            <div id="statsOrdersAxis" class="chart-axis"></div>
+          </section>
+          <section class="panel chart-panel">
+            <h2>Neue Mitglieder pro Tag <small id="statsJoinsSum"></small></h2>
+            <div id="statsJoinsChart" class="bar-chart" role="img"></div>
+            <div id="statsJoinsAxis" class="chart-axis"></div>
+          </section>
+          <section class="panel">
+            <h2>Beliebteste Artikel</h2>
+            <div id="statsTopItems" class="row-list"></div>
+          </section>
+          <section class="panel">
+            <h2>Bewertungen <small id="statsReviewAvg"></small></h2>
+            <div id="statsStars" class="star-rows"></div>
+            <div id="statsReviews"></div>
+          </section>
+          <section class="panel">
+            <h2>Alle Tage als Tabelle</h2>
+            <details class="stats-details">
+              <summary>Tabelle anzeigen</summary>
+              <div style="overflow-x:auto"><table class="stats-table"><thead><tr><th>Tag</th><th>Neu</th><th>Fertig</th><th>Umsatz</th><th>Beitritte</th><th>Austritte</th></tr></thead><tbody id="statsTable"></tbody></table></div>
+            </details>
           </section>
         </div>
       </main>
@@ -3602,8 +3677,120 @@
       sendFn().catch(error => showToast(error.message, true));
     }
 
+
+    // ── Statistik ──
+    state.statsRange = 30;
+    const euro = value => `${Number(value || 0).toFixed(2).replace('.', ',')} €`;
+    const shortDate = key => { const [, m, d] = key.split('-'); return `${d}.${m}.`; };
+
+    function renderBarChart(chartId, axisId, days, field, format) {
+      const chart = $(chartId);
+      chart.replaceChildren();
+      const max = Math.max(0, ...days.map(d => d[field]));
+      const tip = document.createElement('div');
+      tip.className = 'chart-tip hidden';
+      days.forEach(day => {
+        const slot = document.createElement('div');
+        slot.className = 'bar-slot';
+        slot.tabIndex = 0;
+        const bar = document.createElement('div');
+        const value = day[field];
+        bar.className = value ? 'bar' : 'bar zero';
+        bar.style.height = max ? `${Math.max(2, (value / max) * 100)}%` : '1px';
+        slot.appendChild(bar);
+        const show = () => {
+          tip.innerHTML = `<strong>${escapeHtml(format(value))}</strong>${escapeHtml(shortDate(day.date))}`;
+          tip.classList.remove('hidden');
+          const left = slot.offsetLeft + slot.offsetWidth / 2;
+          tip.style.left = `${Math.min(Math.max(left, 50), chart.clientWidth - 50)}px`;
+          tip.style.top = `${Math.max(0, chart.clientHeight - bar.offsetHeight - 6)}px`;
+        };
+        slot.addEventListener('mouseenter', show);
+        slot.addEventListener('focus', show);
+        slot.addEventListener('click', show);
+        slot.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+        slot.addEventListener('blur', () => tip.classList.add('hidden'));
+        chart.appendChild(slot);
+      });
+      chart.appendChild(tip);
+      chart.setAttribute('aria-label', `Höchster Wert: ${format(max)}`);
+      const axis = $(axisId);
+      axis.replaceChildren();
+      if (days.length) {
+        const first = document.createElement('span'); first.textContent = shortDate(days[0].date);
+        const top = document.createElement('span'); top.textContent = `max. ${format(max)}`;
+        const last = document.createElement('span'); last.textContent = 'heute';
+        axis.append(first, top, last);
+      }
+    }
+
+    async function loadStats() {
+      const data = await api(`/api/dashboard/stats?days=${state.statsRange}`);
+      const st = data.stats;
+      const t = st.totals;
+      const r = st.reviews;
+      const delivery = t.avgDeliveryMinutes === null ? '-'
+        : t.avgDeliveryMinutes < 120 ? `${t.avgDeliveryMinutes} min` : `${Math.round(t.avgDeliveryMinutes / 60)} h`;
+      $('statsMetrics').replaceChildren(
+        renderMetric('Umsatz', euro(t.revenue), `Insgesamt ${euro(st.allTime.revenue)}`),
+        renderMetric('Bestellungen', t.completed, `${t.orders} neu - Ø ${euro(t.averageOrder)}`),
+        renderMetric('Lieferzeit', delivery, 'Ø von Bestellung bis fertig'),
+        renderMetric('Mitglieder', st.memberCount ?? '-', `+${t.joins} neu, -${t.leaves} weg`),
+        renderMetric('Bewertung', r.average === null ? '-' : `${String(r.average).replace('.', ',')} ★`, `${r.count} Bewertungen`)
+      );
+
+      const plain = v => String(v);
+      renderBarChart('statsRevenueChart', 'statsRevenueAxis', st.days, 'revenue', euro);
+      renderBarChart('statsOrdersChart', 'statsOrdersAxis', st.days, 'completed', plain);
+      renderBarChart('statsJoinsChart', 'statsJoinsAxis', st.days, 'joins', plain);
+      $('statsRevenueSum').textContent = euro(t.revenue);
+      $('statsOrdersSum').textContent = `${t.completed} gesamt`;
+      $('statsJoinsSum').textContent = `${t.joins} gesamt`;
+
+      const top = $('statsTopItems');
+      top.replaceChildren();
+      if (!st.topItems.length) top.appendChild(emptyNode('Noch keine fertigen Bestellungen in diesem Zeitraum.'));
+      st.topItems.forEach((item, i) => {
+        top.appendChild(rowText(`${i + 1}. ${item.name}`, `${item.quantity}× insgesamt`, `<span class="pill">${item.orders} Bestellungen</span>`));
+      });
+
+      $('statsReviewAvg').textContent = r.average === null ? '' : `${String(r.average).replace('.', ',')} von 5`;
+      const maxStars = Math.max(1, ...Object.values(r.counts));
+      $('statsStars').replaceChildren(...[5, 4, 3, 2, 1].map(n => {
+        const row = document.createElement('div');
+        row.className = 'star-row';
+        row.innerHTML = `<span>${n} ★</span><div class="star-track"><div class="star-fill" style="width:${(r.counts[n] || 0) / maxStars * 100}%"></div></div><span>${r.counts[n] || 0}</span>`;
+        return row;
+      }));
+      const list = $('statsReviews');
+      list.replaceChildren();
+      if (!r.latest.length) list.appendChild(emptyNode('Noch keine Bewertungen gespeichert.'));
+      r.latest.slice(0, 5).forEach(rv => {
+        const card = document.createElement('div');
+        card.className = 'review-card';
+        card.innerHTML = `<strong>${'★'.repeat(rv.stars)}${'☆'.repeat(5 - rv.stars)}</strong> ${escapeHtml(rv.username || 'Kunde')}`
+          + `<p>${escapeHtml(rv.text)}</p><small>${escapeHtml(rv.item ? `Gekauft: ${rv.item} - ` : '')}${new Date(rv.at).toLocaleDateString('de-DE')}</small>`;
+        list.appendChild(card);
+      });
+
+      $('statsTable').replaceChildren(...st.days.slice().reverse().map(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${shortDate(d.date)}</td><td>${d.orders}</td><td>${d.completed}</td><td>${euro(d.revenue)}</td><td>${d.joins}</td><td>${d.leaves}</td>`;
+        return tr;
+      }));
+    }
+
+    document.querySelectorAll('[data-range]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.statsRange = Number(button.dataset.range);
+        document.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('active', b === button));
+        loadStats().catch(error => showToast(error.message, true));
+      });
+    });
+
     async function loadCurrentView() {
       if (state.currentView === 'overview') return loadOverview();
+      if (state.currentView === 'stats') return loadStats();
       if (state.currentView === 'dms') return refreshDashboard();
       if (state.currentView === 'tickets') return loadTickets();
       if (state.currentView === 'orders') return loadOrders();

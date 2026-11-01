@@ -196,6 +196,7 @@ const {
   extractOrderInvoiceDraft,
   ticketTypeLabelForInvoice,
 } = require('./src/services/tickets');
+const { recordEvent, addReview, getReviewSummary, getStats } = require('./src/services/stats');
 // ── Giveaway helpers ──────────────────────────────────────────────
 
 const {
@@ -382,6 +383,7 @@ client.on('messageCreate', async message => {
 
 // ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
+  if (!member.user.bot) recordEvent('joins');
   await coreCommands.applyAutoRoles(member);
 
   try {
@@ -454,6 +456,7 @@ client.on('guildMemberAdd', async member => {
 
 // ── Leave message ────────────────────────────────────────────────────
 client.on('guildMemberRemove', async member => {
+  if (!member.user?.bot) recordEvent('leaves');
   try {
     const data = loadData();
     const lc = data.leaveConfig;
@@ -624,6 +627,9 @@ function buildCtx() {
     hasOrderFormSubmitted,
     hasReviewDecision,
     hasReviewedOrder,
+    addReview,
+    getReviewSummary,
+    getStats,
     isStaff,
     loadData,
     loadPresenceConfig,

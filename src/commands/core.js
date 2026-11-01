@@ -27,7 +27,7 @@ const HELP_CATEGORIES = [
     label: 'Tickets & Bestellungen',
     emoji: '🎫',
     description: 'Tickets bearbeiten und abschließen',
-    commands: ['close', 'adduser', 'fertig', 'getorder']
+    commands: ['close', 'adduser', 'fertig', 'getorder', 'bewertungen']
   },
   {
     key: 'shop',
