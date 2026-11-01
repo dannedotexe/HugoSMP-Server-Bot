@@ -309,12 +309,13 @@ module.exports = function createTickets(ctx) {
 
     if (interaction.customId.startsWith('ticket_cat_')) {
       const catMap = {
-        'ticket_cat_items_geld': { label: 'Items & Geld', emoji: '💰' },
-        'ticket_cat_schematics': { label: 'Schematics', emoji: '📐' },
-        'ticket_cat_resource_pack': { label: 'Resource Pack', emoji: '🎨' }
+        'ticket_cat_items_geld': { label: 'Items & Geld', emoji: '💰' }
       };
       const cat = catMap[interaction.customId];
-      if (!cat) return;
+      if (!cat) {
+        // Alte Buttons (Schematics/Resource Pack gibt es nicht mehr)
+        return interaction.reply({ content: '❌ Diese Kategorie gibt es nicht mehr. Bestell über **Items & Geld**.', ephemeral: true });
+      }
 
       // Check for existing ticket before showing modal
       const existingCheck = interaction.guild.channels.cache.find(c => {
@@ -340,36 +341,6 @@ module.exports = function createTickets(ctx) {
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('amount').setLabel('Menge')
               .setStyle(TextInputStyle.Short).setPlaceholder('z.B. 5 Stück / 10M').setRequired(true)
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
-              .setStyle(TextInputStyle.Short).setPlaceholder('Dein Minecraft Name').setRequired(true)
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('payment').setLabel('Zahlungsmethode')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. PayPal, Paysafecard').setRequired(true)
-          )
-        );
-      } else if (interaction.customId === 'ticket_cat_schematics') {
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('item').setLabel('Welche Schematic möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. Castle Schematic v2').setRequired(true)
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
-              .setStyle(TextInputStyle.Short).setPlaceholder('Dein Minecraft Name').setRequired(true)
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('payment').setLabel('Zahlungsmethode')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. PayPal, Paysafecard').setRequired(true)
-          )
-        );
-      } else if (interaction.customId === 'ticket_cat_resource_pack') {
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('item').setLabel('Welches Resource Pack möchtest du kaufen?')
-              .setStyle(TextInputStyle.Short).setPlaceholder('z.B. HugoSMP Default Pack v3').setRequired(true)
           ),
           new ActionRowBuilder().addComponents(
             new TextInputBuilder().setCustomId('ingame').setLabel('Ingame-Name')
@@ -753,7 +724,7 @@ module.exports = function createTickets(ctx) {
         .setCustomId('purchased_item')
         .setLabel('Was hast du gekauft?')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('z.B. 5M Money, Elytra, Resource Pack...')
+        .setPlaceholder('z.B. 5M Money, Elytra, Ancient Debris...')
         .setRequired(true)
         .setMaxLength(100);
 
@@ -778,9 +749,7 @@ module.exports = function createTickets(ctx) {
     if (interaction.customId.startsWith('pre_order_modal_')) {
       const catKey = interaction.customId.replace('pre_order_modal_', '');
       const catMap = {
-        'ticket_cat_items_geld': { label: 'Items & Geld', emoji: '💰' },
-        'ticket_cat_schematics': { label: 'Schematics', emoji: '📐' },
-        'ticket_cat_resource_pack': { label: 'Resource Pack', emoji: '🎨' }
+        'ticket_cat_items_geld': { label: 'Items & Geld', emoji: '💰' }
       };
       const cat = catMap[catKey];
       if (!cat) return;
@@ -812,13 +781,7 @@ module.exports = function createTickets(ctx) {
 
         // Ticket-Kopf als Karte: Zusammenfassung + Buttons fürs Team
         const facts = [];
-        if (catKey === 'ticket_cat_items_geld') {
-          facts.push(['Item', item], ['Menge', amount]);
-        } else if (catKey === 'ticket_cat_schematics') {
-          facts.push(['Schematic', item]);
-        } else {
-          facts.push(['Resource Pack', item]);
-        }
+        facts.push(['Item', item], ['Menge', amount]);
         facts.push(['Ingame-Name', ingame], ['Zahlung', payment]);
 
         await ticket.send(card({

@@ -67,7 +67,7 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
   const embed = new BrandEmbed()
     .setTitle(cleanShortText(title || 'Shop', 120))
     .setDescription(
-      `${cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500)}\n\n` +
+      `${cleanLongText(description || 'Klicke unten auf „Jetzt bestellen“ und erstelle deine Bestellung.', 500)}\n\n` +
       `${offer ? `> **Angebot** · ${offer.title} – ${offer.discount}\n\n` : ''}` +
       joinEmbedLines(lines)
     )
@@ -116,7 +116,7 @@ function buildShopPanelCard({ title, description, itemIds, includeSale }, orderR
     tone: 'primary',
     eyebrow: `${e('cart', '🛒')} Shop`,
     title: cleanShortText(title || 'Shop', 120),
-    body: cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500),
+    body: cleanLongText(description || 'Klicke unten auf „Jetzt bestellen“ und erstelle deine Bestellung.', 500),
     thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
     blocks: [
       offer ? `${e('sparkle', '🔥')} **Angebot:** ${offer.title} – ${offer.discount}` : null,
