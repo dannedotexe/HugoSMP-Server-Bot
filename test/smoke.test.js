@@ -1,0 +1,37 @@
+'use strict';
+
+// Startet den kompletten Bot (ohne gültiges Discord-Token) und prüft, dass
+// Website-API und Dashboard-Login funktionieren. Fängt Fehler beim Laden ab.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hsb-smoke-'));
+  const port = 39000 + Math.floor(Math.random() * 500);
+  const child = spawn(process.execPath, ['index.js'], {
+    cwd: path.join(__dirname, '..'),
+    env: { ...process.env, DISCORD_TOKEN: 'ungueltig', DASHBOARD_PASSWORD: 'testpasswort', PORT: String(port), HOST: '127.0.0.1', DATA_FILE: path.join(dir, 'data.json') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => child.kill());
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { out += d; });
+  const base = `http://127.0.0.1:${port}`;
+  for (let i = 0; i < 50 && !out.includes('Website API läuft'); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.match(out, /Website API läuft/, out);
+
+  const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
+  assert.equal((await fetch(`${base}/api/stock`)).status, 200);
+  assert.equal((await post('/api/dashboard/login', { password: 'falsch' })).status, 401);
+  const { token } = await (await post('/api/dashboard/login', { password: 'testpasswort' })).json();
+  assert.match(token, /^\d{13}\./);
+  assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
+  assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: 'Bearer testpasswort' } })).status, 401);
+  assert.doesNotMatch(out, /TypeError|ReferenceError|SyntaxError/, out);
+});
