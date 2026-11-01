@@ -263,19 +263,9 @@ function buildOrderStartRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('ticket_cat_items_geld')
-      .setLabel('Items & Geld')
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('ticket_cat_schematics')
-      .setLabel('Schematics')
-      .setEmoji('📐')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('ticket_cat_resource_pack')
-      .setLabel('Resource Pack')
-      .setEmoji('🎨')
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel('Jetzt bestellen')
+      .setEmoji('🛒')
+      .setStyle(ButtonStyle.Success)
   );
 }
 

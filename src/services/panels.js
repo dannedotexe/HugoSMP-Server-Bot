@@ -53,12 +53,10 @@ function buildTicketPanel() {
     tone: 'primary',
     eyebrow: `${e('ticket', '🎫')} Support & Bestellungen`,
     title: 'Wie können wir dir helfen?',
-    body: 'Wähle eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.',
+    body: 'Bestellen oder Hilfe holen – wir öffnen dir einen privaten Kanal mit dem Team.',
     thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
     items: [
       { text: `${e('euro', '💰')} **Items & Geld**\n-# Ingame-Items und Geld kaufen`, button: button('ticket_cat_items_geld', 'Bestellen', 'cart', '💰', ButtonStyle.Success) },
-      { text: `${e('blueprint', '📐')} **Schematics**\n-# Baupläne bestellen`, button: button('ticket_cat_schematics', 'Bestellen', 'cart', '📐') },
-      { text: `${e('palette', '🎨')} **Resource Pack**\n-# Texture- und Resource-Packs`, button: button('ticket_cat_resource_pack', 'Bestellen', 'cart', '🎨') },
       { text: `${e('support', '🎫')} **Support**\n-# Fragen und Probleme`, button: button('create_support_ticket', 'Hilfe', 'support', '🎫', ButtonStyle.Primary) }
     ],
     footer: 'Bitte pro Anliegen nur ein Ticket',
@@ -109,7 +107,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 8;
+const PANEL_REFRESH_REVISION = 9;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
