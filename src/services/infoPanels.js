@@ -13,11 +13,16 @@ function channelKey(name) {
   return plainLetters(name).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// Kurze Ersatz-Stichwörter, falls der Name Zierschrift enthält, die wir nicht kennen
+const SHORT_KEYS = { bestellinfo: 'bestell', preiseundstock: 'preise', inviterewards: 'invite' };
+
 function findChannel(guild, keyword) {
   const key = channelKey(keyword);
-  return guild?.channels?.cache?.find(c =>
-    c.type === ChannelType.GuildText && channelKey(c.name).includes(key)
-  ) || null;
+  const text = guild?.channels?.cache?.filter(c => c.type === ChannelType.GuildText);
+  if (!text) return null;
+  return text.find(c => channelKey(c.name).includes(key)) ||
+    (SHORT_KEYS[key] ? text.find(c => channelKey(c.name).includes(SHORT_KEYS[key])) : null) ||
+    null;
 }
 
 function channelLink(guild, keyword, fallbackName = keyword) {
@@ -70,7 +75,7 @@ function buildRulesVerifyPanel(guild) {
       .setCustomId('verify_member')
       .setLabel('Regeln akzeptieren & verifizieren')
       .setEmoji(buttonEmoji('check', '✅'))
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Primary)
   );
 
   return { embed, row };

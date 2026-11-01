@@ -108,7 +108,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 6;
+const PANEL_REFRESH_REVISION = 7;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';

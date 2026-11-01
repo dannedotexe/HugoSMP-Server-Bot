@@ -117,9 +117,9 @@ const DECOR_RE = /[┃|︱│｜•・»«>→⁠⎮❯❮✦✧★☆◆◇■�
 
 // Zierschriften (ᴘʀᴇɪꜱᴇ, 𝗣𝗥𝗘𝗜𝗦𝗘, Ｐｒｅｉｓｅ, ⓟⓡⓔⓘⓢⓔ …) → normale Buchstaben,
 // sonst erkennt der Bot die Kanäle nicht.
-const SMALL_CAPS = { ᴀ: 'a', ʙ: 'b', ᴄ: 'c', ᴅ: 'd', ᴇ: 'e', ꜰ: 'f', ɢ: 'g', ʜ: 'h', ɪ: 'i', ᴊ: 'j', ᴋ: 'k', ʟ: 'l', ᴍ: 'm', ɴ: 'n', ᴏ: 'o', ᴘ: 'p', ǫ: 'q', ʀ: 'r', ꜱ: 's', ᴛ: 't', ᴜ: 'u', ᴠ: 'v', ᴡ: 'w', ʏ: 'y', ᴢ: 'z' };
+const SMALL_CAPS = { ᴀ: 'a', ʙ: 'b', ᴄ: 'c', ᴅ: 'd', ᴇ: 'e', ꜰ: 'f', ɢ: 'g', ʜ: 'h', ɪ: 'i', ᴊ: 'j', ᴋ: 'k', ʟ: 'l', ᴍ: 'm', ɴ: 'n', ᴏ: 'o', ᴘ: 'p', ǫ: 'q', ʀ: 'r', ꜱ: 's', ᴛ: 't', ᴜ: 'u', ᴠ: 'v', ᴡ: 'w', ʏ: 'y', ᴢ: 'z', ғ: 'f' };
 function plainLetters(text) {
-  return String(text || '').normalize('NFKC').replace(/[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ]/g, ch => SMALL_CAPS[ch]);
+  return String(text || '').normalize('NFKC').replace(/[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢғ]/g, ch => SMALL_CAPS[ch]);
 }
 
 function baseWords(name) {
