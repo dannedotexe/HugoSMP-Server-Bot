@@ -2739,6 +2739,15 @@ const PANEL_DETECTORS = [
   }
 ];
 
+// Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
+// durchsucht werden, auch ohne Design-Änderung.
+const PANEL_REFRESH_REVISION = 2;
+
+function isStockMessage(message) {
+  const title = message.embeds?.[0]?.title || '';
+  return /lagerbestand/i.test(title);
+}
+
 function toPanelPayload({ embed, row }) {
   return { embeds: [embed], components: [row] };
 }
@@ -2764,7 +2773,7 @@ function panelDesignSignature() {
       components: payload.components.map(c => c.toJSON())
     };
   });
-  return require('crypto').createHash('sha1').update(JSON.stringify(payloads)).digest('hex');
+  return require('crypto').createHash('sha1').update(JSON.stringify({ PANEL_REFRESH_REVISION, payloads })).digest('hex');
 }
 
 async function refreshPostedPanels({ force = false } = {}) {
@@ -2787,7 +2796,33 @@ async function refreshPostedPanels({ force = false } = {}) {
       if (!messages) continue;
 
       for (const message of messages.values()) {
-        if (message.author?.id !== client.user.id || !message.components?.length) continue;
+        if (message.author?.id !== client.user.id) continue;
+
+        // Lager-Anzeigen (öffentlich oder Admin-Panel): nur das Embed
+        // erneuern, Buttons bleiben. Eine unbekannte öffentliche Anzeige
+        // wird übernommen, damit künftige Bestandsänderungen sie updaten.
+        if (isStockMessage(message)) {
+          try {
+            await message.edit({ embeds: [buildStockEmbed()] });
+            const tracked = loadData();
+            const isAdminPanel = message.components?.length > 0;
+            const trackedAlive = tracked.publicStockMessageId && tracked.publicStockChannelId
+              ? await client.channels.cache.get(tracked.publicStockChannelId)?.messages
+                .fetch(tracked.publicStockMessageId).then(() => true).catch(() => false)
+              : false;
+            if (!isAdminPanel && !trackedAlive) {
+              tracked.publicStockMessageId = message.id;
+              tracked.publicStockChannelId = channel.id;
+              saveData(tracked);
+            }
+            updated.push(`Lagerbestand in #${channel.name}`);
+          } catch (e) {
+            console.error(`stock refresh error (#${channel.name}):`, e.message);
+          }
+          continue;
+        }
+
+        if (!message.components?.length) continue;
 
         const { ids, urls } = messageButtons(message);
         const detector = PANEL_DETECTORS.find(d => d.match(ids, urls));
