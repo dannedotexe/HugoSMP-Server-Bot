@@ -16,6 +16,7 @@ const guildConfig = require('./src/guildConfig');
 const coreCommands = require('./src/commands/core');
 const updateCommands = require('./src/commands/update');
 const structureCommands = require('./src/commands/structure');
+const renameCommands = require('./src/commands/rename');
 
 // Aktueller Git-Commit, damit man sieht, ob das Auto-Update gegriffen hat.
 function readGitCommitFromFiles() {
@@ -2583,11 +2584,231 @@ async function registerCommands(guildId) {
 
     ...coreCommands.definitions(),
     ...updateCommands.definitions(),
-    ...structureCommands.definitions()
+    ...structureCommands.definitions(),
+    ...renameCommands.definitions()
   ];
 
   await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
   console.log(`✅ Commands registered for guild ${guildId}`);
+}
+
+// ── Panels ────────────────────────────────────────────────────────
+function buildRolesPanel() {
+  const embed = new BrandEmbed()
+    .setTitle('Benachrichtigungen')
+    .setDescription(
+      'Wähle selbst, worüber du informiert werden möchtest.\n' +
+      'Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
+    )
+    .addFields(
+      { name: '🎉  Giveaways', value: 'Neue Verlosungen', inline: true },
+      { name: '📦  Restocks', value: 'Items wieder auf Lager', inline: true },
+      { name: '\u200b', value: '\u200b', inline: true },
+      { name: '💰  Deals', value: 'Rabatte & Freebies', inline: true },
+      { name: '📰  News', value: 'Ankündigungen', inline: true },
+      { name: '\u200b', value: '\u200b', inline: true }
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('role_giveaways')
+      .setLabel('Giveaways')
+      .setEmoji('🎉')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('role_restocks')
+      .setLabel('Restocks')
+      .setEmoji('📦')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('role_deals')
+      .setLabel('Deals')
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('role_news')
+      .setLabel('News')
+      .setEmoji('📰')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embed, row };
+}
+
+function buildVerifyPanel(guild) {
+  const embed = new BrandEmbed()
+    .setTitle('Verifizierung')
+    .setDescription(
+      'Willkommen bei **HugoSMP Market**.\n' +
+      'Bestätige kurz, dass du ein Mensch bist, um alle Kanäle freizuschalten.'
+    )
+    .addFields({ name: 'Kurs', value: '1M = 1,50 €', inline: true })
+    .setThumbnail(guild.iconURL({ size: 256 }) || null);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify_member')
+      .setLabel('Verifizieren')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return { embed, row };
+}
+
+function buildTicketPanel() {
+  const embed = new BrandEmbed()
+    .setTitle('Support & Bestellungen')
+    .setDescription(
+      'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.\n' +
+      '-# Bitte pro Anliegen nur ein Ticket öffnen.'
+    )
+    .addFields(
+      { name: '💰  Items & Geld', value: 'Ingame-Items und Geld kaufen', inline: true },
+      { name: '📐  Schematics', value: 'Baupläne bestellen', inline: true },
+      { name: '\u200b', value: '\u200b', inline: true },
+      { name: '🎨  Resource Pack', value: 'Texture- und Resource-Packs', inline: true },
+      { name: '🎫  Support', value: 'Fragen und Probleme', inline: true },
+      { name: '\u200b', value: '\u200b', inline: true }
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_items_geld')
+      .setLabel('Items & Geld')
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_schematics')
+      .setLabel('Schematics')
+      .setEmoji('📐')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_resource_pack')
+      .setLabel('Resource Pack')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId('create_support_ticket')
+      .setLabel('Support')
+      .setEmoji('🎫')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embed, row };
+}
+
+function buildWebsitePanel() {
+  const embed = new BrandEmbed()
+    .setTitle('HugoSMP Market')
+    .setDescription('Geld, Items, Kits und mehr – direkt über unsere Website bestellen.')
+    .addFields(
+      { name: 'Anmeldung', value: 'Mit Discord', inline: true },
+      { name: 'Bestellung', value: 'Mit Bestellnummer', inline: true },
+      { name: 'Support', value: '<#1499132947041751181>', inline: true }
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('Website öffnen')
+      .setStyle(ButtonStyle.Link)
+      .setURL('https://hugosmpmarket.store')
+  );
+
+  return { embed, row };
+}
+
+// ── Panels automatisch erneuern ───────────────────────────────────
+// Nach einem Update sucht der Bot seine bereits geposteten Panels und
+// ersetzt sie in-place durch die aktuelle Version – kein neues Posten
+// nötig. Läuft nur, wenn sich das Panel-Design geändert hat.
+const PANEL_DETECTORS = [
+  { name: 'Tickets', match: ids => ids.includes('create_support_ticket'), build: () => toPanelPayload(buildTicketPanel()) },
+  { name: 'Verifizierung', match: ids => ids.includes('verify_member'), build: guild => toPanelPayload(buildVerifyPanel(guild)) },
+  { name: 'Benachrichtigungen', match: ids => ids.includes('role_giveaways'), build: () => toPanelPayload(buildRolesPanel()) },
+  { name: 'Invite Rewards', match: ids => ids.includes('gen_invite'), build: () => buildPanel() },
+  {
+    name: 'Website',
+    match: (ids, urls) => ids.length === 0 && urls.some(url => url.includes('hugosmpmarket.store')),
+    build: () => toPanelPayload(buildWebsitePanel())
+  }
+];
+
+function toPanelPayload({ embed, row }) {
+  return { embeds: [embed], components: [row] };
+}
+
+function messageButtons(message) {
+  const ids = [];
+  const urls = [];
+  for (const row of message.components || []) {
+    for (const component of row.components || []) {
+      if (component.customId) ids.push(component.customId);
+      if (component.url) urls.push(component.url);
+    }
+  }
+  return { ids, urls };
+}
+
+function panelDesignSignature() {
+  const placeholderGuild = { iconURL: () => null };
+  const payloads = PANEL_DETECTORS.map(d => {
+    const payload = d.build(placeholderGuild);
+    return {
+      embeds: payload.embeds.map(e => ({ ...e.toJSON(), footer: undefined })),
+      components: payload.components.map(c => c.toJSON())
+    };
+  });
+  return require('crypto').createHash('sha1').update(JSON.stringify(payloads)).digest('hex');
+}
+
+async function refreshPostedPanels({ force = false } = {}) {
+  const data = loadData();
+  const signature = panelDesignSignature();
+  if (!force && data.panelDesignSignature === signature) return [];
+
+  const updated = [];
+
+  for (const guild of client.guilds.cache.values()) {
+    const channels = guild.channels.cache.filter(channel =>
+      channel.type === ChannelType.GuildText &&
+      channel.parentId !== TICKET_CATEGORY_ID &&
+      channel.parentId !== CLOSED_TICKET_CATEGORY_ID &&
+      channel.permissionsFor(guild.members.me)?.has(['ViewChannel', 'ReadMessageHistory'])
+    );
+
+    for (const channel of channels.values()) {
+      const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+      if (!messages) continue;
+
+      for (const message of messages.values()) {
+        if (message.author?.id !== client.user.id || !message.components?.length) continue;
+
+        const { ids, urls } = messageButtons(message);
+        const detector = PANEL_DETECTORS.find(d => d.match(ids, urls));
+        if (!detector) continue;
+
+        try {
+          await message.edit(detector.build(guild));
+          updated.push(`${detector.name} in #${channel.name}`);
+        } catch (e) {
+          console.error(`panel refresh error (#${channel.name}):`, e.message);
+        }
+      }
+    }
+  }
+
+  const fresh = loadData();
+  fresh.panelDesignSignature = signature;
+  saveData(fresh);
+
+  if (updated.length) console.log(`🎨 Panels erneuert: ${updated.join(', ')}`);
+  return updated;
 }
 
 // ── Invite Rewards Panel ──────────────────────────────────────────
@@ -2646,6 +2867,7 @@ client.once('ready', async () => {
 
   await updateStockPanel();
   await updateLeaderboard();
+  await refreshPostedPanels().catch(e => console.error('panel refresh error:', e.message));
 
   // Tempban expiry checker
   setInterval(async () => {
@@ -2878,6 +3100,12 @@ function decorateInteraction(interaction) {
   interaction.followUp = options => followUp(styleNotice(options, isEphemeral(options)));
 }
 
+const renameContext = {
+  ticketCategoryId: TICKET_CATEGORY_ID,
+  closedTicketCategoryId: CLOSED_TICKET_CATEGORY_ID,
+  pingRoles: PING_ROLES
+};
+
 async function replyWithError(interaction, error) {
   console.error(`interaction error (${interaction.commandName || interaction.customId || interaction.type}):`, error);
   if (!interaction.isRepliable()) return;
@@ -2901,6 +3129,8 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand() && await coreCommands.handleCommand(interaction, coreContext)) return;
     if (interaction.isChatInputCommand() && await updateCommands.handleCommand(interaction)) return;
     if (interaction.isChatInputCommand() && await structureCommands.handleCommand(interaction)) return;
+    if (interaction.isChatInputCommand() && await renameCommands.handleCommand(interaction, renameContext)) return;
+    if (interaction.isMessageComponent() && await renameCommands.handleComponent(interaction)) return;
     if (interaction.isMessageComponent() && await coreCommands.handleComponent(interaction)) return;
 
     await handleInteraction(interaction);
@@ -3112,21 +3342,7 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'website') {
-  const embed = new BrandEmbed()
-    .setTitle('HugoSMP Market')
-    .setDescription('Geld, Items, Kits und mehr – direkt über unsere Website bestellen.')
-    .addFields(
-      { name: 'Anmeldung', value: 'Mit Discord', inline: true },
-      { name: 'Bestellung', value: 'Mit Bestellnummer', inline: true },
-      { name: 'Support', value: '<#1499132947041751181>', inline: true }
-    );
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel('Website öffnen')
-      .setStyle(ButtonStyle.Link)
-      .setURL('https://hugosmpmarket.store')
-  );
+  const { embed, row } = buildWebsitePanel();
 
   await interaction.channel.send({
     embeds: [embed],
@@ -3247,46 +3463,7 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'setuproles') {
-      const embed = new BrandEmbed()
-        .setTitle('Benachrichtigungen')
-        .setDescription(
-          'Wähle selbst, worüber du informiert werden möchtest.\n' +
-          'Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
-        )
-        .addFields(
-          { name: '🎉  Giveaways', value: 'Neue Verlosungen', inline: true },
-          { name: '📦  Restocks', value: 'Items wieder auf Lager', inline: true },
-          { name: '\u200b', value: '\u200b', inline: true },
-          { name: '💰  Deals', value: 'Rabatte & Freebies', inline: true },
-          { name: '📰  News', value: 'Ankündigungen', inline: true },
-          { name: '\u200b', value: '\u200b', inline: true }
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('role_giveaways')
-          .setLabel('Giveaways')
-          .setEmoji('🎉')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('role_restocks')
-          .setLabel('Restocks')
-          .setEmoji('📦')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('role_deals')
-          .setLabel('Deals')
-          .setEmoji('💰')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('role_news')
-          .setLabel('News')
-          .setEmoji('📰')
-          .setStyle(ButtonStyle.Secondary)
-      );
+      const { embed, row } = buildRolesPanel();
 
       await interaction.channel.send({
         embeds: [embed],
@@ -3300,21 +3477,7 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'setupverify') {
-      const embed = new BrandEmbed()
-        .setTitle('Verifizierung')
-        .setDescription(
-          'Willkommen bei **HugoSMP Market**.\n' +
-          'Bestätige kurz, dass du ein Mensch bist, um alle Kanäle freizuschalten.'
-        )
-        .addFields({ name: 'Kurs', value: '1M = 1,50 €', inline: true })
-        .setThumbnail(interaction.guild.iconURL({ size: 256 }) || null);
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('verify_member')
-          .setLabel('Verifizieren')
-          .setStyle(ButtonStyle.Primary)
-      );
+      const { embed, row } = buildVerifyPanel(interaction.guild);
 
       await interaction.channel.send({
         embeds: [embed],
@@ -3328,46 +3491,7 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.commandName === 'setuptickets') {
-      const embed = new BrandEmbed()
-        .setTitle('Support & Bestellungen')
-        .setDescription(
-          'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.\n' +
-          '-# Bitte pro Anliegen nur ein Ticket öffnen.'
-        )
-        .addFields(
-          { name: '💰  Items & Geld', value: 'Ingame-Items und Geld kaufen', inline: true },
-          { name: '📐  Schematics', value: 'Baupläne bestellen', inline: true },
-          { name: '\u200b', value: '\u200b', inline: true },
-          { name: '🎨  Resource Pack', value: 'Texture- und Resource-Packs', inline: true },
-          { name: '🎫  Support', value: 'Fragen und Probleme', inline: true },
-          { name: '\u200b', value: '\u200b', inline: true }
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('ticket_cat_items_geld')
-          .setLabel('Items & Geld')
-          .setEmoji('💰')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('ticket_cat_schematics')
-          .setLabel('Schematics')
-          .setEmoji('📐')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('ticket_cat_resource_pack')
-          .setLabel('Resource Pack')
-          .setEmoji('🎨')
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId('create_support_ticket')
-          .setLabel('Support')
-          .setEmoji('🎫')
-          .setStyle(ButtonStyle.Secondary)
-      );
+      const { embed, row } = buildTicketPanel();
 
       await interaction.channel.send({
         embeds: [embed],
