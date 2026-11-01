@@ -14,6 +14,7 @@ const {
   MessageFlags
 } = require('discord.js');
 const { COLORS, BRAND_NAME } = require('./theme');
+const { emojify } = require('./emojis');
 
 const TONE_COLORS = {
   primary: COLORS.primary,
@@ -33,7 +34,7 @@ function emojiImageUrl(item) {
 }
 
 function text(content) {
-  return new TextDisplayBuilder().setContent(String(content).slice(0, 4000));
+  return new TextDisplayBuilder().setContent(emojify(String(content)).slice(0, 4000));
 }
 
 /**
