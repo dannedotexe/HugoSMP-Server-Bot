@@ -304,6 +304,7 @@ client.once('ready', async () => {
     }
   }
 
+  await require('./src/emojis').syncEmojis(client);
   await updateStockPanel();
   await updateLeaderboard();
   await refreshPostedPanels().catch(e => console.error('panel refresh error:', e.message));

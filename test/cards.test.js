@@ -54,7 +54,16 @@ test('Regeln+Verifizierung und Bestell-Info: gültige Embeds mit echten Kanal-Li
   assert.match(r, /<#12>/);
   assert.match(r, /\*\*#bewertungen\*\*/, 'fehlender Kanal als Text');
   assert.doesNotMatch(r, /Kurs/);
-  rules.embed.toJSON().fields.forEach(f => assert.ok(f.value.length <= 1024));
+  assert.ok(rules.embed.toJSON().description.length < 4096);
+  assert.doesNotMatch(r, /###/, 'keine großen Überschriften');
+  // mit hochgeladenen Emojis: eigene Emojis in Text und Button
+  const emojis = require('../src/emojis');
+  emojis._ids.set('ticket', '900000000000000001');
+  emojis._ids.set('check', '900000000000000002');
+  const withEmoji = buildRulesVerifyPanel(guild);
+  assert.match(withEmoji.embed.toJSON().description, /<:hs_ticket:900000000000000001>/);
+  assert.equal(withEmoji.row.toJSON().components[0].emoji.id, '900000000000000002');
+  emojis._ids.clear();
   assert.equal(rules.row.toJSON().components[0].custom_id, 'verify_member');
   const info = buildOrderInfoPanel(guild);
   assert.match(JSON.stringify(info.embed.toJSON()), /<#13>/);

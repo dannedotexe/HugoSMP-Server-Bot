@@ -12,6 +12,7 @@ const { getUserAvatar, getUserDisplayName, getUserSummary } = require('./users')
 const { getDmUserInfo, getMessageAttachments, makeDashboardError } = require('./dms');
 const { trackOrderMeta } = require('./stats');
 const { card, cardText, isCardMessage } = require('../cards');
+const { e } = require('../emojis');
 
 const closingTickets = new Set();
 
@@ -685,7 +686,7 @@ async function sendOrderReviewRequest(channel, ownerId, orderId) {
 
   await channel.send(card({
     tone: 'success',
-    eyebrow: '✅ Bestellung fertig',
+    eyebrow: `${e('check', '✅')} Bestellung fertig`,
     title: `Bestellung ${reviewOrderId} ist erledigt`,
     body:
       `<@${ownerId}>, danke für deinen Einkauf! Wie zufrieden bist du?\n` +
