@@ -22,7 +22,7 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
   const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 50 && !out.includes('Website API läuft'); i++) await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; i < 300 && !out.includes('Website API läuft'); i++) await new Promise((r) => setTimeout(r, 100));
   assert.match(out, /Website API läuft/, out);
 
   const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });

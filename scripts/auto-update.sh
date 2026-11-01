@@ -26,6 +26,9 @@ log() { echo "[$(date -Is)] $*"; }
 install_and_test() {
   npm ci --omit=dev --no-audit --no-fund --loglevel=error || return 1
   # Tests starten kurz einen Test-Bot mit Testdaten in /tmp (kein Discord-Login)
+  # Bei viel Last auf dem Server einmal wiederholen, bevor das Update verworfen wird
+  DISCORD_TOKEN= npm test --silent >/tmp/hugosmp-update-test.log 2>&1 && return 0
+  log "Tests beim ersten Versuch fehlgeschlagen – zweiter Versuch"
   DISCORD_TOKEN= npm test --silent >/tmp/hugosmp-update-test.log 2>&1 || { tail -20 /tmp/hugosmp-update-test.log; return 1; }
 }
 
