@@ -161,7 +161,7 @@ module.exports = function createAdmin(ctx) {
       try {
         await interaction.channel.send(buildPanel());
 
-        return interaction.editReply('✅ Invite Rewards panel sent!');
+        return interaction.editReply('✅ Panel „Einladungs-Belohnungen“ gesendet.');
       } catch (e) {
         return interaction.editReply('❌ Could not send panel.');
       }

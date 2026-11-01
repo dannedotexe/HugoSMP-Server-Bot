@@ -1509,14 +1509,14 @@ function buildLeaderboardEmbed(data = loadData()) {
   // Format "**N** invite(s)" bleibt, importInvitesFromLeaderboardMessage liest es.
   const lines = sorted.length > 0
     ? sorted.map(([userId, count], i) =>
-        `\`${String(i + 1).padStart(2, '0')}\`  <@${userId}> · **${count}** invite${count === 1 ? '' : 's'}`
+        `\`${String(i + 1).padStart(2, '0')}\`  <@${userId}> · **${count}** ${count === 1 ? 'Einladung' : 'Einladungen'}`
       ).join('\n')
     : '-# Noch keine Einladungen vorhanden.';
 
   return new BrandEmbed()
-    .setTitle('Invite Leaderboard')
+    .setTitle('Einladungs-Rangliste')
     .setDescription(lines)
-    .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen · ${REWARD}` })
+    .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen · Belohnung: ${REWARD}` })
     .setTimestamp();
 }
 
@@ -1528,7 +1528,7 @@ function importInvitesFromLeaderboardMessage(data, message) {
 
   for (const line of description.split('\n')) {
     const userMatch = line.match(/<@!?(\d{17,20})>/);
-    const countMatch = line.match(/(?:\*\*)?(\d+)(?:\*\*)?\s+invite/i);
+    const countMatch = line.match(/(?:\*\*)?(\d+)(?:\*\*)?\s+(?:invite|Einladung)/i);
 
     if (!userMatch || !countMatch) continue;
 
@@ -1554,7 +1554,7 @@ function leaderboardMessageHasInviteCounts(message) {
     .split('\n')
     .some(line =>
       /<@!?\d{17,20}>/.test(line) &&
-      /(?:\*\*)?\d+(?:\*\*)?\s+invite/i.test(line)
+      /(?:\*\*)?\d+(?:\*\*)?\s+(?:invite|Einladung)/i.test(line)
     );
 }
 
@@ -1563,7 +1563,7 @@ async function findExistingLeaderboardMessage(channel, preferWithInvites = false
   const leaderboards = messages
     .filter(msg =>
       msg.author?.id === client.user.id &&
-      msg.embeds?.some(msgEmbed => (msgEmbed.title || '').includes('Invite Leaderboard'))
+      msg.embeds?.some(msgEmbed => /Invite Leaderboard|Einladungs-Rangliste/.test(msgEmbed.title || ''))
     )
     .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
@@ -1856,49 +1856,49 @@ function buildCommandDefinitions() {
   return [
     new SlashCommandBuilder()
       .setName('setupinviterewards')
-      .setDescription('Send the invite rewards panel to this channel. Admin only.')
+      .setDescription('Panel „Einladungs-Belohnungen“ in diesem Kanal senden (nur Admin)')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setupleaderboard')
-      .setDescription('Send the live leaderboard to this channel. Admin only.')
+      .setDescription('Live-Einladungs-Rangliste in diesem Kanal senden (nur Admin)')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setupstock')
-      .setDescription('Send the public stock panel without buttons.')
+      .setDescription('Öffentliches Lager-Panel ohne Buttons senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setupstockpanel')
-      .setDescription('Send the staff stock panel with buttons.')
+      .setDescription('Lager-Panel fürs Team mit Buttons senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setuptickets')
-      .setDescription('Send the ticket panel.')
+      .setDescription('Ticket-Panel senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setupverify')
-      .setDescription('Send the verify panel.')
+      .setDescription('Verifizierungs-Panel senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('setuproles')
-      .setDescription('Send the ping roles panel.')
+      .setDescription('Panel für Ping-Rollen senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('say')
-      .setDescription('Send a message as the bot.')
+      .setDescription('Nachricht als Bot senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt =>
         opt.setName('text')
@@ -1933,7 +1933,7 @@ function buildCommandDefinitions() {
 
     new SlashCommandBuilder()
       .setName('embed')
-      .setDescription('Send an embed as the bot.')
+      .setDescription('Embed als Bot senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt =>
         opt.setName('title')
@@ -1949,7 +1949,7 @@ function buildCommandDefinitions() {
 
     new SlashCommandBuilder()
       .setName('clear')
-      .setDescription('Delete messages in this channel.')
+      .setDescription('Nachrichten in diesem Kanal löschen')
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
       .addIntegerOption(opt =>
         opt.setName('amount')
@@ -1962,12 +1962,12 @@ function buildCommandDefinitions() {
 
     new SlashCommandBuilder()
       .setName('inviterewards')
-      .setDescription('Invite your friends to earn rewards!')
+      .setDescription('Freunde einladen und Belohnungen sichern')
       .toJSON(),
 
     new SlashCommandBuilder()
       .setName('leaderboard')
-      .setDescription('Show the top inviters!')
+      .setDescription('Die besten Einlader anzeigen')
       .toJSON(),
 
     new SlashCommandBuilder()
@@ -2199,7 +2199,7 @@ function buildCommandDefinitions() {
 
     new SlashCommandBuilder()
       .setName('setinvites')
-      .setDescription('Set invites manually. Admin only.')
+      .setDescription('Einladungen manuell setzen (nur Admin)')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addUserOption(opt =>
         opt.setName('user')
@@ -2262,18 +2262,16 @@ function buildCommandDefinitions() {
 function buildRolesPanel() {
   const embed = new BrandEmbed()
     .setTitle('Benachrichtigungen')
-    .setDescription(
-      'Wähle selbst, worüber du informiert werden möchtest.\n' +
-      'Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
-    )
-    .addFields(
-      { name: '🎉  Giveaways', value: 'Neue Verlosungen', inline: true },
-      { name: '📦  Restocks', value: 'Items wieder auf Lager', inline: true },
-      { name: '\u200b', value: '\u200b', inline: true },
-      { name: '💰  Deals', value: 'Rabatte & Freebies', inline: true },
-      { name: '📰  News', value: 'Ankündigungen', inline: true },
-      { name: '\u200b', value: '\u200b', inline: true }
-    );
+    .setDescription([
+      'Wähle selbst, worüber du informiert werden möchtest.',
+      '',
+      '🎉 **Giveaways** – neue Verlosungen',
+      '📦 **Restocks** – Items wieder auf Lager',
+      '💰 **Deals** – Rabatte und Gratis-Aktionen',
+      '📰 **News** – Ankündigungen',
+      '',
+      '-# Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
+    ].join('\n'));
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -2304,6 +2302,13 @@ function buildRolesPanel() {
   return { embed, row };
 }
 
+// Kurs für 1M Geld aus dem Lager (Dashboard/Stock), damit er überall gleich ist
+function currentMoneyRate() {
+  const items = loadData().stockItems || STOCK_ITEMS;
+  const money = items.find(item => item.id === 'money');
+  return money ? `1M = ${money.price}` : 'siehe Lager';
+}
+
 function buildVerifyPanel(guild) {
   const embed = new BrandEmbed()
     .setTitle('Verifizierung')
@@ -2311,7 +2316,7 @@ function buildVerifyPanel(guild) {
       'Willkommen bei **HugoSMP Market**.\n' +
       'Bestätige kurz, dass du ein Mensch bist, um alle Kanäle freizuschalten.'
     )
-    .addFields({ name: 'Kurs', value: '1M = 1,50 €', inline: true })
+    .addFields({ name: 'Kurs', value: currentMoneyRate(), inline: true })
     .setThumbnail(guild.iconURL({ size: 256 }) || null);
 
   const row = new ActionRowBuilder().addComponents(
@@ -2327,18 +2332,16 @@ function buildVerifyPanel(guild) {
 function buildTicketPanel() {
   const embed = new BrandEmbed()
     .setTitle('Support & Bestellungen')
-    .setDescription(
-      'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.\n' +
+    .setDescription([
+      'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.',
+      '',
+      '💰 **Items & Geld** – Ingame-Items und Geld kaufen',
+      '📐 **Schematics** – Baupläne bestellen',
+      '🎨 **Resource Pack** – Texture- und Resource-Packs',
+      '🎫 **Support** – Fragen und Probleme',
+      '',
       '-# Bitte pro Anliegen nur ein Ticket öffnen.'
-    )
-    .addFields(
-      { name: '💰  Items & Geld', value: 'Ingame-Items und Geld kaufen', inline: true },
-      { name: '📐  Schematics', value: 'Baupläne bestellen', inline: true },
-      { name: '\u200b', value: '\u200b', inline: true },
-      { name: '🎨  Resource Pack', value: 'Texture- und Resource-Packs', inline: true },
-      { name: '🎫  Support', value: 'Fragen und Probleme', inline: true },
-      { name: '\u200b', value: '\u200b', inline: true }
-    );
+    ].join('\n'));
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -2515,7 +2518,7 @@ async function refreshPostedPanels({ force = false } = {}) {
 // ── Invite Rewards Panel ──────────────────────────────────────────
 function buildPanel() {
   const embed = new BrandEmbed()
-    .setTitle('Invite Rewards')
+    .setTitle('Einladungs-Belohnungen')
     .setDescription('Lade Freunde ein und sichere dir eine Belohnung, sobald sie sich verifiziert haben.')
     .addFields(
       { name: 'Ziel', value: `${REQUIRED_INVITES} verifizierte Einladungen`, inline: true },
