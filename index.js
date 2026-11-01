@@ -11,6 +11,9 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { execSync } = require('child_process');
+const { BrandEmbed, noticeFromText, setBrandIcon } = require('./src/theme');
+const guildConfig = require('./src/guildConfig');
+const coreCommands = require('./src/commands/core');
 
 // Aktueller Git-Commit, damit man sieht, ob das Auto-Update gegriffen hat.
 function readGitCommitFromFiles() {
@@ -178,6 +181,7 @@ const client = new Client({
 // ── Config ────────────────────────────────────────────────────────
 const TOKEN = process.env.DISCORD_TOKEN;
 const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
+guildConfig.init(process.env.GUILD_CONFIG_FILE || path.join(path.dirname(DATA_FILE), 'guild-config.json'));
 const PORT = process.env.PORT || 3000;
 const WEBSITE_URL = process.env.WEBSITE_URL || '*';
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
@@ -393,7 +397,11 @@ function loadData() {
 function saveData(data) {
   try {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    // Erst in eine temp-Datei schreiben, dann ersetzen – so bleibt die
+    // Datei auch bei einem Absturz mitten im Schreiben lesbar.
+    const tmp = `${DATA_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, DATA_FILE);
   } catch (e) {
     console.error('saveData error:', e.message);
   }
@@ -582,8 +590,8 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
       { name: `${channel.name}-transcript.txt` }
     );
 
-    const embed = new EmbedBuilder()
-      .setColor('#b10de7')
+    const embed = new BrandEmbed()
+      .setColor('primary')
       .setTitle('🔒 Ticket geschlossen')
       .setDescription(
         `**Ticket:** ${channel.name}\n` +
@@ -639,7 +647,7 @@ async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
         .setCustomId('reopen_ticket')
         .setLabel('Ticket wieder öffnen')
         .setEmoji('🔓')
-        .setStyle(ButtonStyle.Success)
+        .setStyle(ButtonStyle.Secondary)
     );
 
     await channel.send({
@@ -770,17 +778,17 @@ function buildOrderStartRow() {
       .setCustomId('ticket_cat_items_geld')
       .setLabel('Items & Geld')
       .setEmoji('💰')
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('ticket_cat_schematics')
       .setLabel('Schematics')
       .setEmoji('📐')
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('ticket_cat_resource_pack')
       .setLabel('Resource Pack')
       .setEmoji('🎨')
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -941,8 +949,8 @@ function invoiceItemsText(invoice) {
 }
 
 function buildOrderInvoiceEmbed(invoice, { title = 'Rechnung' } = {}) {
-  const embed = new EmbedBuilder()
-    .setColor('#35d48a')
+  const embed = new BrandEmbed()
+    .setColor('success')
     .setTitle(`🧾 ${title}${invoice.orderId && invoice.orderId !== 'none' ? ` #${invoice.orderId}` : ''}`)
     .setDescription(
       `${invoice.ownerId ? `**Kunde:** <@${invoice.ownerId}>\n` : ''}` +
@@ -1125,8 +1133,8 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
 
   const offer = includeSale ? getLatestShopOffer(data) : null;
 
-  const embed = new EmbedBuilder()
-    .setColor('#b10de7')
+  const embed = new BrandEmbed()
+    .setColor('primary')
     .setTitle(cleanShortText(title || 'HugoSMP Shop', 120))
     .setDescription(
       `${cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500)}\n\n` +
@@ -1140,8 +1148,8 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
 }
 
 function buildSaleEmbed({ title, itemName, discount, description, until }) {
-  const embed = new EmbedBuilder()
-    .setColor('#f5b84b')
+  const embed = new BrandEmbed()
+    .setColor('warning')
     .setTitle(`💰 ${cleanShortText(title || 'Neues Angebot', 120)}`)
     .setDescription(
       `${itemName ? `**Item:** ${itemName}\n` : ''}` +
@@ -1375,8 +1383,8 @@ function buildGiveawayEmbed(gw, ended = false) {
   if (gw.minInvites > 0) reqs.push(`📨 Mindestens **${gw.minInvites}** Einladungen`);
   if (gw.minAccountAgeDays > 0) reqs.push(`🗓️ Account älter als **${gw.minAccountAgeDays}** Tage`);
 
-  const embed = new EmbedBuilder()
-    .setColor(ended ? '#888888' : '#b10de7')
+  const embed = new BrandEmbed()
+    .setColor(ended ? 'muted' : 'primary')
     .setTitle(`🎉 GIVEAWAY — ${gw.prize}`)
     .setDescription(
       (reqs.length ? `**Voraussetzungen:**\n${reqs.join('\n')}\n\n` : '') +
@@ -1450,8 +1458,8 @@ function buildWelcomeLeaveEmbed(template, member, color) {
     .replace(/{server}/g, member.guild.name)
     .replace(/{count}/g, member.guild.memberCount.toString());
 
-  return new EmbedBuilder()
-    .setColor(color || '#b10de7')
+  return new BrandEmbed()
+    .setColor(color || 'primary')
     .setDescription(text)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
     .setFooter({ text: member.guild.name, iconURL: member.guild.iconURL() })
@@ -1484,10 +1492,11 @@ function clearWarnings(userId) {
 }
 
 async function sendPunishLog(guild, { action, color, target, moderator, reason, duration, extra }) {
-  const logChannel = guild.channels.cache.get(PUNISH_LOG_CHANNEL_ID);
+  const logChannelId = guildConfig.get(guild.id).modLogChannelId || PUNISH_LOG_CHANNEL_ID;
+  const logChannel = guild.channels.cache.get(logChannelId);
   if (!logChannel) return;
 
-  const embed = new EmbedBuilder()
+  const embed = new BrandEmbed()
     .setColor(color)
     .setTitle(`🔨 ${action}`)
     .addFields(
@@ -1750,8 +1759,8 @@ async function notifyStaffAboutDm(saved) {
       ? message.content.slice(0, 1000)
       : `${message.attachments?.length || 0} Anhang/Anhänge`;
 
-    const embed = new EmbedBuilder()
-      .setColor('#33c481')
+    const embed = new BrandEmbed()
+      .setColor('success')
       .setTitle('Neue Dashboard-DM')
       .setDescription(contentPreview || 'Neue Nachricht erhalten.')
       .addFields(
@@ -1826,9 +1835,8 @@ function buildLeaderboardEmbed(data = loadData()) {
       ).join('\n')
     : '*Noch keine Einladungen vorhanden.*';
 
-  return new EmbedBuilder()
-    .setColor('#b10de7')
-    .setTitle('🏆 Invite Leaderboard')
+  return new BrandEmbed()
+    .setTitle('Invite Leaderboard')
     .setDescription(lines)
     .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen → ${REWARD}` })
     .setTimestamp();
@@ -1953,9 +1961,8 @@ function buildStockEmbed() {
     return `${item.emoji} **${item.name}** — ${item.price}\n┗ ${status}`;
   }).join('\n\n');
 
-  return new EmbedBuilder()
-    .setColor('#b10de7')
-    .setTitle('🏪 Hugo Shop — Lagerbestand')
+  return new BrandEmbed()
+    .setTitle('Lagerbestand')
     .setDescription(lines)
     .setFooter({ text: 'Zuletzt aktualisiert' })
     .setTimestamp();
@@ -2090,8 +2097,8 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null,
 
   const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
   const shouldMention = options.mention !== false;
-  const embed = new EmbedBuilder()
-    .setColor('#35d48a')
+  const embed = new BrandEmbed()
+    .setColor('success')
     .setTitle('Item aufgefüllt')
     .setDescription(`${item.emoji || ''} **${item.name}** wurde aufgefüllt.`)
     .addFields(
@@ -2565,6 +2572,7 @@ async function registerCommands(guildId) {
       )
       .toJSON(),
 
+    ...coreCommands.definitions()
   ];
 
   await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
@@ -2573,37 +2581,35 @@ async function registerCommands(guildId) {
 
 // ── Invite Rewards Panel ──────────────────────────────────────────
 function buildPanel() {
-  const embed = new EmbedBuilder()
-    .setColor('#b10de7')
-    .setTitle('🎁 Invite Rewards')
-    .setDescription(
-      'Lade deine Freunde auf den Server ein und verdiene Belohnungen!\n\n' +
-      `**Ziel:** ${REQUIRED_INVITES} Verifizierte Einladungen\n` +
-      `**Belohnung:** ${REWARD}\n\n` +
-      '⚠️ **WICHTIG:**\n' +
-      'Nur Einladungen die über den Button unten generiert werden zählen!\n' +
-      'Normale Discord Einladungslinks zählen **NICHT**.\n\n' +
-      'Klicke unten auf die Buttons um deinen persönlichen Link zu erstellen oder deinen Fortschritt zu prüfen.'
+  const embed = new BrandEmbed()
+    .setTitle('Invite Rewards')
+    .setDescription('Lade Freunde ein und sichere dir eine Belohnung, sobald sie sich verifiziert haben.')
+    .addFields(
+      { name: 'Ziel', value: `${REQUIRED_INVITES} verifizierte Einladungen`, inline: true },
+      { name: 'Belohnung', value: REWARD, inline: true },
+      {
+        name: 'Wichtig',
+        value: 'Es zählen nur Links, die du über **Link erstellen** bekommst – normale Discord-Einladungen werden nicht gewertet.'
+      }
     );
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('gen_invite')
-      .setLabel('Generate Invite Link')
+      .setLabel('Link erstellen')
       .setEmoji('🔗')
       .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
       .setCustomId('check_inv')
-      .setLabel('Check Invites')
+      .setLabel('Fortschritt')
       .setEmoji('📊')
       .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
       .setCustomId('claim')
-      .setLabel(`Claim ${REWARD}`)
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Success),
+      .setLabel('Belohnung abholen')
+      .setStyle(ButtonStyle.Primary),
   );
 
   return {
@@ -2615,6 +2621,7 @@ function buildPanel() {
 // ── Ready ─────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  setBrandIcon(client.user.displayAvatarURL({ size: 128 }));
   applyConfiguredPresence();
 
   for (const guild of client.guilds.cache.values()) {
@@ -2641,7 +2648,7 @@ client.once('ready', async () => {
             await guild.members.unban(userId, 'Tempban abgelaufen');
             await sendPunishLog(guild, {
               action: 'Tempban abgelaufen — Auto-Unban',
-              color: '#00ff88',
+              color: 'success',
               target: { id: userId, tag: ban.userTag },
               moderator: client.user,
               reason: `Tempban von ${ban.duration} abgelaufen`
@@ -2706,6 +2713,8 @@ client.on('messageCreate', async message => {
 
 // ── Member joins ──────────────────────────────────────────────────
 client.on('guildMemberAdd', async member => {
+  await coreCommands.applyAutoRoles(member);
+
   try {
     const accountAge = Date.now() - member.user.createdTimestamp;
 
@@ -2787,7 +2796,7 @@ client.on('guildMemberRemove', async member => {
     const embed = buildWelcomeLeaveEmbed(
       lc.message || '**{username}** hat den Server verlassen. 👋',
       member,
-      lc.color || '#ff4444'
+      lc.color || 'neutral'
     );
     await lChannel.send({ embeds: [embed] }).catch(() => {});
   } catch (e) {
@@ -2821,7 +2830,73 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 // ── Interactions ──────────────────────────────────────────────────
+const coreContext = {
+  getInviteCount: userId => Number(loadData().invites?.[userId] || 0),
+  getWarningCount: userId => getWarnings(userId).length,
+  getWelcomeConfig: () => loadData().welcomeConfig || {},
+  getLeaveConfig: () => loadData().leaveConfig || {},
+  defaultModLogChannelId: PUNISH_LOG_CHANNEL_ID
+};
+
+// Kurze, private Statusmeldungen ("✅ …", "❌ …") automatisch im
+// einheitlichen Embed-Stil senden statt als nackten Text.
+function styleNotice(options, ephemeral) {
+  if (!ephemeral) return options;
+  if (typeof options === 'string') {
+    const embed = noticeFromText(options);
+    return embed ? { content: '', embeds: [embed] } : options;
+  }
+  if (!options || typeof options !== 'object' || options.embeds?.length) return options;
+  const embed = noticeFromText(options.content);
+  return embed ? { ...options, content: '', embeds: [embed] } : options;
+}
+
+function decorateInteraction(interaction) {
+  if (!interaction.isRepliable()) return;
+
+  const isEphemeral = options =>
+    Boolean(options?.ephemeral) || (Number(options?.flags) & 64) === 64;
+
+  const reply = interaction.reply.bind(interaction);
+  interaction.reply = options => reply(styleNotice(options, isEphemeral(options)));
+
+  const editReply = interaction.editReply.bind(interaction);
+  interaction.editReply = options => editReply(styleNotice(options, interaction.ephemeral));
+
+  const followUp = interaction.followUp.bind(interaction);
+  interaction.followUp = options => followUp(styleNotice(options, isEphemeral(options)));
+}
+
+async function replyWithError(interaction, error) {
+  console.error(`interaction error (${interaction.commandName || interaction.customId || interaction.type}):`, error);
+  if (!interaction.isRepliable()) return;
+
+  const payload = {
+    content: '❌ Da ist etwas schiefgelaufen. Bitte versuche es gleich noch einmal.',
+    ephemeral: true
+  };
+
+  try {
+    if (interaction.deferred && !interaction.replied) await interaction.editReply(payload);
+    else if (interaction.replied) await interaction.followUp(payload);
+    else await interaction.reply(payload);
+  } catch {}
+}
+
 client.on('interactionCreate', async interaction => {
+  decorateInteraction(interaction);
+
+  try {
+    if (interaction.isChatInputCommand() && await coreCommands.handleCommand(interaction, coreContext)) return;
+    if (interaction.isMessageComponent() && await coreCommands.handleComponent(interaction)) return;
+
+    await handleInteraction(interaction);
+  } catch (error) {
+    await replyWithError(interaction, error);
+  }
+});
+
+async function handleInteraction(interaction) {
   if (interaction.isChatInputCommand()) {
 
 
@@ -2960,8 +3035,8 @@ client.on('interactionCreate', async interaction => {
           chunks.push(gw.participants.slice(i, i + chunkSize));
         }
 
-        const embed = new EmbedBuilder()
-          .setColor('#b10de7')
+        const embed = new BrandEmbed()
+          .setColor('primary')
           .setTitle(`🎉 Teilnehmer — ${gw.prize}`)
           .setDescription(
             chunks[0].map((id, i) => `**${i + 1}.** <@${id}>`).join('\n')
@@ -3023,8 +3098,8 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'website') {
-  const embed = new EmbedBuilder()
-    .setColor('#9B30FF')
+  const embed = new BrandEmbed()
+    .setColor('primary')
     .setTitle('🌐 HugoSMP Market ist online!')
     .setDescription(
       'Bestelle HugoSMP Geld, Items, Kits und mehr direkt über unsere Website.\n\n' +
@@ -3092,8 +3167,8 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'getorder') {
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+      const embed = new BrandEmbed()
+        .setColor('primary')
         .setTitle('✨ — DEINE BESTELLUNG ERHALTEN — ✨')
         .setDescription(
           '**SOBALD GEZAHLT WURDE** 💸\n' +
@@ -3122,8 +3197,8 @@ client.on('interactionCreate', async interaction => {
       const title = interaction.options.getString('title');
       const text = interaction.options.getString('text');
 
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+      const embed = new BrandEmbed()
+        .setColor('primary')
         .setTitle(title)
         .setDescription(text)
         .setTimestamp();
@@ -3159,14 +3234,19 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'setuproles') {
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+      const embed = new BrandEmbed()
+        .setTitle('Benachrichtigungen')
         .setDescription(
-          '**Reagiert mit dem Emoji auf diese Nachricht, von dessen Kategorie ihr zukünftig gepingt werden möchtet:**\n\n' +
-          '🎉 = Giveaways\n\n' +
-          '📦 = Item Restocks\n\n' +
-          '💰 = Deals, Rabatte & Freebies\n\n' +
-          '📰 = News & Ankündigungen'
+          'Wähle selbst, worüber du informiert werden möchtest.\n' +
+          'Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
+        )
+        .addFields(
+          { name: '🎉  Giveaways', value: 'Neue Verlosungen', inline: true },
+          { name: '📦  Restocks', value: 'Items wieder auf Lager', inline: true },
+          { name: '\u200b', value: '\u200b', inline: true },
+          { name: '💰  Deals', value: 'Rabatte & Freebies', inline: true },
+          { name: '📰  News', value: 'Ankündigungen', inline: true },
+          { name: '\u200b', value: '\u200b', inline: true }
         );
 
       const row = new ActionRowBuilder().addComponents(
@@ -3174,25 +3254,25 @@ client.on('interactionCreate', async interaction => {
           .setCustomId('role_giveaways')
           .setLabel('Giveaways')
           .setEmoji('🎉')
-          .setStyle(ButtonStyle.Primary),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('role_restocks')
-          .setLabel('Item Restocks')
+          .setLabel('Restocks')
           .setEmoji('📦')
-          .setStyle(ButtonStyle.Primary),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('role_deals')
           .setLabel('Deals')
           .setEmoji('💰')
-          .setStyle(ButtonStyle.Primary),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('role_news')
           .setLabel('News')
           .setEmoji('📰')
-          .setStyle(ButtonStyle.Primary)
+          .setStyle(ButtonStyle.Secondary)
       );
 
       await interaction.channel.send({
@@ -3207,20 +3287,19 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'setupverify') {
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
-        .setTitle('Captcha Verification')
+      const embed = new BrandEmbed()
+        .setTitle('Verifizierung')
         .setDescription(
-          'Press to Verify\n⬇️\n\n' +
-          '**1M = 1.5€ | HugoSMP Market • Verification**'
+          'Willkommen bei **HugoSMP Market**.\n' +
+          'Bestätige kurz, dass du ein Mensch bist, um alle Kanäle freizuschalten.'
         )
-        .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg');
+        .addFields({ name: 'Kurs', value: '1M = 1,50 €', inline: true })
+        .setThumbnail(interaction.guild.iconURL({ size: 256 }) || null);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('verify_member')
-          .setLabel('Verify')
-          .setEmoji('✅')
+          .setLabel('Verifizieren')
           .setStyle(ButtonStyle.Primary)
       );
 
@@ -3236,12 +3315,19 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'setuptickets') {
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
-        .setTitle('Ticket System')
+      const embed = new BrandEmbed()
+        .setTitle('Support & Bestellungen')
         .setDescription(
-          '**Create Ticket**\n\n' +
-          '⬇️ Wähle eine Kategorie um ein Ticket zu öffnen.'
+          'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.\n' +
+          '-# Bitte pro Anliegen nur ein Ticket öffnen.'
+        )
+        .addFields(
+          { name: '💰  Items & Geld', value: 'Ingame-Items und Geld kaufen', inline: true },
+          { name: '📐  Schematics', value: 'Baupläne bestellen', inline: true },
+          { name: '\u200b', value: '\u200b', inline: true },
+          { name: '🎨  Resource Pack', value: 'Texture- und Resource-Packs', inline: true },
+          { name: '🎫  Support', value: 'Fragen und Probleme', inline: true },
+          { name: '\u200b', value: '\u200b', inline: true }
         );
 
       const row = new ActionRowBuilder().addComponents(
@@ -3249,25 +3335,25 @@ client.on('interactionCreate', async interaction => {
           .setCustomId('ticket_cat_items_geld')
           .setLabel('Items & Geld')
           .setEmoji('💰')
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('ticket_cat_schematics')
           .setLabel('Schematics')
           .setEmoji('📐')
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('ticket_cat_resource_pack')
           .setLabel('Resource Pack')
           .setEmoji('🎨')
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId('create_support_ticket')
           .setLabel('Support')
           .setEmoji('🎫')
-          .setStyle(ButtonStyle.Primary)
+          .setStyle(ButtonStyle.Secondary)
       );
 
       await interaction.channel.send({
@@ -3529,8 +3615,8 @@ client.on('interactionCreate', async interaction => {
         ).join('\n\n');
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor('#b10de7')
+          embeds: [new BrandEmbed()
+            .setColor('primary')
             .setTitle('📦 Stock-Items')
             .setDescription(list)],
           ephemeral: true
@@ -3576,8 +3662,8 @@ client.on('interactionCreate', async interaction => {
         await notifyRestock(newItem, 0, menge, interaction.channelId);
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor('#00ff88')
+          embeds: [new BrandEmbed()
+            .setColor('success')
             .setTitle('✅ Item hinzugefügt')
             .addFields(
               { name: '📦 Name', value: name, inline: true },
@@ -3604,8 +3690,8 @@ client.on('interactionCreate', async interaction => {
         await updateStockPanel();
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor('#ff4444')
+          embeds: [new BrandEmbed()
+            .setColor('danger')
             .setDescription(`✅ **${removed.name}** wurde aus dem Stock-Panel entfernt.`)],
           ephemeral: true
         });
@@ -3640,8 +3726,8 @@ client.on('interactionCreate', async interaction => {
         await updateStockPanel();
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor('#b10de7')
+          embeds: [new BrandEmbed()
+            .setColor('primary')
             .setTitle('✅ Item aktualisiert')
             .addFields(
               { name: '📦 Name', value: item.name, inline: true },
@@ -3669,7 +3755,7 @@ client.on('interactionCreate', async interaction => {
         data.welcomeConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
         saveData(data);
 
-        const previewEmbed = new EmbedBuilder()
+        const previewEmbed = new BrandEmbed()
           .setColor(farbe)
           .setTitle('✅ Willkommensnachricht gespeichert')
           .addFields(
@@ -3692,8 +3778,8 @@ client.on('interactionCreate', async interaction => {
         const wc = data.welcomeConfig;
         if (!wc?.enabled) return interaction.reply({ content: '❌ Willkommensnachrichten sind nicht eingerichtet.', ephemeral: true });
 
-        const fakeEmbed = new EmbedBuilder()
-          .setColor(wc.color || '#b10de7')
+        const fakeEmbed = new BrandEmbed()
+          .setColor(wc.color || 'primary')
           .setDescription(
             (wc.message || 'Willkommen {user} auf **{server}**! 🎉')
               .replace(/{user}/g, `<@${interaction.user.id}>`)
@@ -3713,12 +3799,12 @@ client.on('interactionCreate', async interaction => {
         if (!wc?.enabled) return interaction.reply({ content: '❌ Willkommensnachrichten sind nicht eingerichtet.', ephemeral: true });
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor(wc.color || '#b10de7')
+          embeds: [new BrandEmbed()
+            .setColor(wc.color || 'primary')
             .setTitle('📋 Willkommens-Konfiguration')
             .addFields(
               { name: '📢 Kanal', value: `<#${wc.channelId}>`, inline: true },
-              { name: '🎨 Farbe', value: wc.color || '#b10de7', inline: true },
+              { name: '🎨 Farbe', value: wc.color || 'Standard', inline: true },
               { name: '📝 Nachricht', value: wc.message || '(Standard)' }
             )
             .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
@@ -3740,7 +3826,7 @@ client.on('interactionCreate', async interaction => {
         data.leaveConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
         saveData(data);
 
-        const previewEmbed = new EmbedBuilder()
+        const previewEmbed = new BrandEmbed()
           .setColor(farbe)
           .setTitle('✅ Leave-Nachricht gespeichert')
           .addFields(
@@ -3763,8 +3849,8 @@ client.on('interactionCreate', async interaction => {
         const lc = data.leaveConfig;
         if (!lc?.enabled) return interaction.reply({ content: '❌ Leave-Nachrichten sind nicht eingerichtet.', ephemeral: true });
 
-        const fakeEmbed = new EmbedBuilder()
-          .setColor(lc.color || '#ff4444')
+        const fakeEmbed = new BrandEmbed()
+          .setColor(lc.color || 'neutral')
           .setDescription(
             (lc.message || '**{username}** hat den Server verlassen. 👋')
               .replace(/{user}/g, `<@${interaction.user.id}>`)
@@ -3784,12 +3870,12 @@ client.on('interactionCreate', async interaction => {
         if (!lc?.enabled) return interaction.reply({ content: '❌ Leave-Nachrichten sind nicht eingerichtet.', ephemeral: true });
 
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor(lc.color || '#ff4444')
+          embeds: [new BrandEmbed()
+            .setColor(lc.color || 'neutral')
             .setTitle('📋 Leave-Konfiguration')
             .addFields(
               { name: '📢 Kanal', value: `<#${lc.channelId}>`, inline: true },
-              { name: '🎨 Farbe', value: lc.color || '#ff4444', inline: true },
+              { name: '🎨 Farbe', value: lc.color || 'Standard', inline: true },
               { name: '📝 Nachricht', value: lc.message || '(Standard)' }
             )
             .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
@@ -3807,8 +3893,8 @@ client.on('interactionCreate', async interaction => {
 
       const warnCount = addWarning(target.id, interaction.user.id, grund);
 
-      const dmEmbed = new EmbedBuilder()
-        .setColor('#ffaa00')
+      const dmEmbed = new BrandEmbed()
+        .setColor('warning')
         .setTitle('⚠️ Du wurdest verwarnt!')
         .setDescription(`**Server:** ${interaction.guild.name}`)
         .addFields(
@@ -3820,7 +3906,7 @@ client.on('interactionCreate', async interaction => {
       await tryDM(target, dmEmbed);
       await sendPunishLog(interaction.guild, {
         action: `Verwarnung #${warnCount}`,
-        color: '#ffaa00',
+        color: 'warning',
         target,
         moderator: interaction.user,
         reason: grund,
@@ -3828,8 +3914,8 @@ client.on('interactionCreate', async interaction => {
       });
 
       return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#ffaa00')
+        embeds: [new BrandEmbed()
+          .setColor('warning')
           .setDescription(`✅ <@${target.id}> wurde verwarnt. (Verwarnung #${warnCount})
 📝 Grund: **${grund}**`)],
         ephemeral: true
@@ -3850,8 +3936,8 @@ client.on('interactionCreate', async interaction => {
       ).join('\n\n');
 
       return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#ffaa00')
+        embeds: [new BrandEmbed()
+          .setColor('warning')
           .setTitle(`⚠️ Verwarnungen von ${target.tag || target.username}`)
           .setDescription(list.slice(0, 4000))
           .setFooter({ text: `${warns.length} Verwarnung(en) gesamt` })],
@@ -3867,7 +3953,7 @@ client.on('interactionCreate', async interaction => {
 
       await sendPunishLog(interaction.guild, {
         action: 'Verwarnungen gelöscht',
-        color: '#888888',
+        color: 'muted',
         target,
         moderator: interaction.user,
         reason: `${before} Verwarnung(en) wurden gelöscht`
@@ -3894,8 +3980,8 @@ client.on('interactionCreate', async interaction => {
       try {
         await member.timeout(durMs, grund);
 
-        const dmEmbed = new EmbedBuilder()
-          .setColor('#ff6600')
+        const dmEmbed = new BrandEmbed()
+          .setColor('warning')
           .setTitle('🔇 Du wurdest gemutet!')
           .setDescription(`**Server:** ${interaction.guild.name}`)
           .addFields(
@@ -3904,10 +3990,10 @@ client.on('interactionCreate', async interaction => {
           ).setTimestamp();
 
         await tryDM(target, dmEmbed);
-        await sendPunishLog(interaction.guild, { action: 'Mute / Timeout', color: '#ff6600', target, moderator: interaction.user, reason: grund, duration: durStr });
+        await sendPunishLog(interaction.guild, { action: 'Mute / Timeout', color: 'warning', target, moderator: interaction.user, reason: grund, duration: durStr });
 
         return interaction.reply({
-          embeds: [new EmbedBuilder().setColor('#ff6600')
+          embeds: [new BrandEmbed().setColor('warning')
             .setDescription(`✅ <@${target.id}> wurde für **${durStr}** gemutet.
 📝 Grund: **${grund}**`)],
           ephemeral: true
@@ -3927,9 +4013,9 @@ client.on('interactionCreate', async interaction => {
 
       try {
         await member.timeout(null, grund);
-        await sendPunishLog(interaction.guild, { action: 'Unmute', color: '#00ff88', target, moderator: interaction.user, reason: grund });
+        await sendPunishLog(interaction.guild, { action: 'Unmute', color: 'success', target, moderator: interaction.user, reason: grund });
         return interaction.reply({
-          embeds: [new EmbedBuilder().setColor('#00ff88').setDescription(`✅ <@${target.id}> wurde entmutet.`)],
+          embeds: [new BrandEmbed().setColor('success').setDescription(`✅ <@${target.id}> wurde entmutet.`)],
           ephemeral: true
         });
       } catch (e) {
@@ -3945,8 +4031,8 @@ client.on('interactionCreate', async interaction => {
 
       if (!member) return interaction.reply({ content: '❌ User nicht auf dem Server.', ephemeral: true });
 
-      const dmEmbed = new EmbedBuilder()
-        .setColor('#ff4444')
+      const dmEmbed = new BrandEmbed()
+        .setColor('danger')
         .setTitle('👢 Du wurdest gekickt!')
         .setDescription(`**Server:** ${interaction.guild.name}`)
         .addFields({ name: '📝 Grund', value: grund })
@@ -3956,9 +4042,9 @@ client.on('interactionCreate', async interaction => {
 
       try {
         await member.kick(grund);
-        await sendPunishLog(interaction.guild, { action: 'Kick', color: '#ff4444', target, moderator: interaction.user, reason: grund });
+        await sendPunishLog(interaction.guild, { action: 'Kick', color: 'danger', target, moderator: interaction.user, reason: grund });
         return interaction.reply({
-          embeds: [new EmbedBuilder().setColor('#ff4444').setDescription(`✅ <@${target.id}> wurde gekickt.
+          embeds: [new BrandEmbed().setColor('danger').setDescription(`✅ <@${target.id}> wurde gekickt.
 📝 Grund: **${grund}**`)],
           ephemeral: true
         });
@@ -3977,8 +4063,8 @@ client.on('interactionCreate', async interaction => {
       const durMs = durStr ? parseDuration(durStr) : null;
       if (durStr && !durMs) return interaction.reply({ content: '❌ Ungültige Dauer! Beispiele: `1h`, `7d`', ephemeral: true });
 
-      const dmEmbed = new EmbedBuilder()
-        .setColor('#cc0000')
+      const dmEmbed = new BrandEmbed()
+        .setColor('danger')
         .setTitle('🔨 Du wurdest gebannt!')
         .setDescription(`**Server:** ${interaction.guild.name}`)
         .addFields(
@@ -4005,7 +4091,7 @@ client.on('interactionCreate', async interaction => {
 
         await sendPunishLog(interaction.guild, {
           action: durStr ? `Tempban (${durStr})` : 'Permanenter Ban',
-          color: '#cc0000',
+          color: 'danger',
           target,
           moderator: interaction.user,
           reason: grund,
@@ -4013,7 +4099,7 @@ client.on('interactionCreate', async interaction => {
         });
 
         return interaction.reply({
-          embeds: [new EmbedBuilder().setColor('#cc0000')
+          embeds: [new BrandEmbed().setColor('danger')
             .setDescription(`✅ <@${target.id}> wurde ${durStr ? `für **${durStr}**` : '**permanent**'} gebannt.
 📝 Grund: **${grund}**`)],
           ephemeral: true
@@ -4040,14 +4126,14 @@ client.on('interactionCreate', async interaction => {
 
         await sendPunishLog(interaction.guild, {
           action: 'Unban',
-          color: '#00ff88',
+          color: 'success',
           target: bannedUser.user,
           moderator: interaction.user,
           reason: grund
         });
 
         return interaction.reply({
-          embeds: [new EmbedBuilder().setColor('#00ff88').setDescription(`✅ **${bannedUser.user.tag || userId}** wurde entbannt.
+          embeds: [new BrandEmbed().setColor('success').setDescription(`✅ **${bannedUser.user.tag || userId}** wurde entbannt.
 📝 Grund: **${grund}**`)],
           ephemeral: true
         });
@@ -4084,8 +4170,8 @@ client.on('interactionCreate', async interaction => {
       }
 
       return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#b10de7')
+        embeds: [new BrandEmbed()
+          .setColor('primary')
           .setTitle(`📋 Modlog — ${target.username}`)
           .setThumbnail(target.displayAvatarURL())
           .setDescription(lines.join('\n'))
@@ -4251,7 +4337,7 @@ client.on('interactionCreate', async interaction => {
           await member.roles.remove(roleId);
 
           return interaction.reply({
-            content: `❌ Rolle entfernt: <@&${roleId}>`,
+            content: `ℹ️ Rolle entfernt: <@&${roleId}>`,
             ephemeral: true
           });
         }
@@ -4330,8 +4416,8 @@ client.on('interactionCreate', async interaction => {
           ]
         });
 
-        const ticketEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+        const ticketEmbed = new BrandEmbed()
+          .setColor('primary')
           .setTitle('🎫 Support')
           .setDescription('Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.')
           .setTimestamp();
@@ -4921,8 +5007,8 @@ client.on('interactionCreate', async interaction => {
           ]
         });
 
-        const ticketEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+        const ticketEmbed = new BrandEmbed()
+          .setColor('primary')
           .setTitle('✨ — DEIN REWARD EINLÖSEN — ✨')
           .setDescription(
             `💎 **Belohnungswert:** 1.000.000 $\n\n` +
@@ -5073,8 +5159,8 @@ client.on('interactionCreate', async interaction => {
         });
 
         // Header embed
-        const headerEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+        const headerEmbed = new BrandEmbed()
+          .setColor('primary')
           .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
           .setDescription(
             `**Kategorie:** ${cat.emoji} ${cat.label}\n` +
@@ -5105,8 +5191,8 @@ client.on('interactionCreate', async interaction => {
             { name: '💳 Zahlungsmethode', value: payment, inline: true }
           );
         }
-        const formEmbed = new EmbedBuilder()
-          .setColor('#b10de7')
+        const formEmbed = new BrandEmbed()
+          .setColor('primary')
           .setTitle(`📋 Bestellformular #${ticketOrderId}`)
           .addFields(...formFields)
           .setTimestamp();
@@ -5170,8 +5256,8 @@ client.on('interactionCreate', async interaction => {
 
       markOrderFormSubmitted(interaction.channel.id);
 
-      const embed = new EmbedBuilder()
-        .setColor('#b10de7')
+      const embed = new BrandEmbed()
+        .setColor('primary')
         .setTitle(`🛒 Neue Bestellung${orderId !== 'none' ? ` #${orderId}` : ''}`)
         .addFields(
           { name: 'Item', value: item, inline: true },
@@ -5284,7 +5370,7 @@ client.on('interactionCreate', async interaction => {
       const starsEmoji = '⭐'.repeat(stars);
       const reviewer = interaction.user;
 
-      const embed = new EmbedBuilder()
+      const embed = new BrandEmbed()
         .setAuthor({
           name: reviewer.username,
           iconURL: reviewer.displayAvatarURL()
@@ -5297,7 +5383,7 @@ client.on('interactionCreate', async interaction => {
         )
         .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
         .setFooter({ text: `Order-ID: ${orderId}` })
-        .setColor(0x00ff00)
+        .setColor('success')
         .setTimestamp();
 
       await reviewChannel.send({
@@ -5357,7 +5443,7 @@ client.on('interactionCreate', async interaction => {
       return;
     }
   }
-});
+}
 
 
 // ── Website API ───────────────────────────────────────────────────
@@ -6529,8 +6615,8 @@ app.post('/api/order', async (req, res) => {
       return `• **${name}** x${qty} — ${price}`;
     }).join('\n');
 
-    const embed = new EmbedBuilder()
-      .setColor('#b10de7')
+    const embed = new BrandEmbed()
+      .setColor('primary')
       .setTitle(`🛒 Website-Bestellung #${ticketOrderId}`)
       .setDescription(
         `**Käufer:** <@${discordId}>\n` +
