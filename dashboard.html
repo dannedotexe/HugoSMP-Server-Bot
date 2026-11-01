@@ -3639,13 +3639,15 @@
       event.preventDefault();
       const password = $('passwordInput').value;
       try {
-        await api('/api/dashboard/login', {
+        const res = await api('/api/dashboard/login', {
           method: 'POST',
           noAuth: true,
           body: { password }
         });
-        state.token = password;
-        localStorage.setItem('hugoDmDashboardToken', password);
+        // Gespeichert wird nur das Login-Token, nie das Passwort
+        state.token = res.token;
+        localStorage.setItem('hugoDmDashboardToken', res.token);
+        $('passwordInput').value = '';
         $('loginView').classList.add('hidden');
         $('appView').classList.remove('hidden');
         await showView(state.currentView || 'overview');

@@ -285,7 +285,18 @@ const STOCK_ITEMS = [
 ];
 
 // ── Data helpers ──────────────────────────────────────────────────
+// Daten liegen einmal im Speicher: Alle Teile des Bots arbeiten auf demselben
+// Objekt. Früher wurde die Datei bei jedem Zugriff neu gelesen – passierten zwei
+// Dinge gleichzeitig (z. B. zwei Einladungen), konnte eins davon verloren gehen.
+let dataCache = null;
+
 function loadData() {
+  if (dataCache) return dataCache;
+  dataCache = readDataFile();
+  return dataCache;
+}
+
+function readDataFile() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -398,6 +409,7 @@ function loadData() {
 }
 
 function saveData(data) {
+  if (data) dataCache = data;
   try {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     // Erst in eine temp-Datei schreiben, dann ersetzen – so bleibt die
@@ -5708,6 +5720,9 @@ async function handleInteraction(interaction) {
 
 // ── Website API ───────────────────────────────────────────────────
 const app = express();
+// Hinter Caddy (HTTPS) kommt die echte IP im X-Forwarded-For-Header
+app.set('trust proxy', 'loopback');
+app.disable('x-powered-by');
 
 app.use(cors({
   origin: WEBSITE_URL === '*' ? true : WEBSITE_URL
@@ -5716,13 +5731,56 @@ app.use(cors({
 app.use(express.json({ limit: '16mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
+// ── Dashboard-Login ──
+// Nach dem Login gibt es ein eigenes, signiertes Token (30 Tage gültig) statt des
+// Passworts. Es übersteht Neustarts und wird ungültig, wenn das Passwort geändert wird.
+// Das Passwort selbst wird nie gespeichert oder in Adressen übertragen.
+const crypto = require('crypto');
+const DASHBOARD_TOKEN_DAYS = 30;
+const tokenKey = () => crypto.createHash('sha256').update(`hugosmp-dashboard:${DASHBOARD_PASSWORD}`).digest();
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+
+function createDashboardToken() {
+  const expires = Date.now() + DASHBOARD_TOKEN_DAYS * 24 * 3600 * 1000;
+  const sig = crypto.createHmac('sha256', tokenKey()).update(String(expires)).digest('base64url');
+  return `${expires}.${sig}`;
+}
+
+function validDashboardToken(token) {
+  const [expires, sig] = String(token || '').split('.');
+  if (!/^\d{13}$/.test(expires || '') || Number(expires) < Date.now() || !sig) return false;
+  const expected = crypto.createHmac('sha256', tokenKey()).update(expires).digest('base64url');
+  return safeEqual(sig, expected);
+}
+
+// Einfache Bremse pro IP (Login, öffentliche Bestellungen)
+function rateLimiter({ max, windowMs, message }) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip;
+    const list = (hits.get(key) || []).filter(t => now - t < windowMs);
+    if (list.length >= max) {
+      return res.status(429).json({ success: false, error: message });
+    }
+    list.push(now);
+    hits.set(key, list);
+    if (hits.size > 5000) hits.clear();
+    next();
+  };
+}
+
 function getDashboardToken(req) {
   const auth = req.get('authorization') || '';
   if (auth.toLowerCase().startsWith('bearer ')) {
     return auth.slice(7).trim();
   }
 
-  return String(req.body?.token || req.query?.token || '').trim();
+  return String(req.body?.token || '').trim();
 }
 
 function requireDashboardAuth(req, res, next) {
@@ -5733,7 +5791,7 @@ function requireDashboardAuth(req, res, next) {
     });
   }
 
-  if (getDashboardToken(req) !== DASHBOARD_PASSWORD) {
+  if (!validDashboardToken(getDashboardToken(req))) {
     return res.status(401).json({
       success: false,
       error: 'Nicht eingeloggt.'
@@ -5915,7 +5973,7 @@ app.get('/api/dashboard/status', (req, res) => {
   });
 });
 
-app.post('/api/dashboard/login', (req, res) => {
+app.post('/api/dashboard/login', rateLimiter({ max: 8, windowMs: 15 * 60 * 1000, message: 'Zu viele Versuche. Warte 15 Minuten.' }), (req, res) => {
   if (!DASHBOARD_PASSWORD) {
     return res.status(503).json({
       success: false,
@@ -5923,14 +5981,14 @@ app.post('/api/dashboard/login', (req, res) => {
     });
   }
 
-  if (String(req.body?.password || '') !== DASHBOARD_PASSWORD) {
+  if (!safeEqual(String(req.body?.password || ''), DASHBOARD_PASSWORD)) {
     return res.status(401).json({
       success: false,
       error: 'Falsches Passwort.'
     });
   }
 
-  return res.json({ success: true });
+  return res.json({ success: true, token: createDashboardToken() });
 });
 
 app.get('/api/dashboard/overview', requireDashboardAuth, async (req, res) => {
@@ -6792,7 +6850,7 @@ app.get('/api/stock', (req, res) => {
   }
 });
 
-app.post('/api/order', async (req, res) => {
+app.post('/api/order', rateLimiter({ max: 5, windowMs: 10 * 60 * 1000, message: 'Zu viele Bestellungen in kurzer Zeit. Bitte warte ein paar Minuten.' }), async (req, res) => {
   try {
     const {
       discordId,
@@ -6926,8 +6984,10 @@ app.post('/api/order', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🌐 Website API läuft auf Port ${PORT} – Version ${BOT_VERSION}`);
+// HOST=127.0.0.1 → nur noch über Caddy (HTTPS) erreichbar, nicht direkt über die IP
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => {
+  console.log(`🌐 Website API läuft auf ${HOST}:${PORT} – Version ${BOT_VERSION}`);
   if (!DASHBOARD_URL) {
     console.warn('⚠️ DASHBOARD_URL ist nicht gesetzt – Dashboard-Links in Discord sind deaktiviert.');
   }
