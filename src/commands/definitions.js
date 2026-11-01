@@ -52,8 +52,19 @@ function buildCommandDefinitions() {
 
     new SlashCommandBuilder()
       .setName('setupverify')
-      .setDescription('Verifizierungs-Panel senden')
+      .setDescription('Regeln & Verifizierung (ein Embed mit Button) senden')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('setupbestellinfo')
+      .setDescription('Bestell-Informationen als Embed in diesen Kanal senden')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addBooleanOption(opt =>
+        opt.setName('aufraeumen')
+          .setDescription('Alte Nachrichten in diesem Kanal löschen (Standard: ja)')
+          .setRequired(false)
+      )
       .toJSON(),
 
     new SlashCommandBuilder()

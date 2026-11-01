@@ -405,4 +405,4 @@ async function handleComponent(interaction) {
   return true;
 }
 
-module.exports = { definitions, handleCommand, handleComponent, buildPlan, planText, textChannelName };
+module.exports = { definitions, handleCommand, handleComponent, buildPlan, planText, textChannelName, plainLetters };

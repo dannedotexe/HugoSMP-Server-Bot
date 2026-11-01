@@ -141,6 +141,29 @@ module.exports = function createAdmin(ctx) {
       });
     }
 
+    if (interaction.commandName === 'setupbestellinfo') {
+      const { buildOrderInfoPanel, ORDER_INFO_TITLE } = require('../services/infoPanels');
+      const cleanUp = interaction.options.getBoolean('aufraeumen') ?? true;
+      await interaction.deferReply({ ephemeral: true });
+
+      let removed = 0;
+      if (cleanUp) {
+        const messages = await interaction.channel.messages.fetch({ limit: 50 }).catch(() => null);
+        for (const message of messages?.values() || []) {
+          if (message.pinned) continue;
+          const ok = await message.delete().then(() => true).catch(() => false);
+          if (ok) removed++;
+        }
+      }
+
+      const { embed, row } = buildOrderInfoPanel(interaction.guild);
+      await interaction.channel.send({ embeds: [embed], components: [row] });
+
+      return interaction.editReply({
+        content: `✅ ${ORDER_INFO_TITLE} gesendet!${cleanUp ? ` ${removed} alte Nachricht(en) gelöscht.` : ''}`
+      });
+    }
+
     if (interaction.commandName === 'setuptickets') {
       const { embed, row } = buildTicketPanel();
 
@@ -229,7 +252,7 @@ module.exports = function createAdmin(ctx) {
 
   return {
     name: 'admin',
-    commands: ["website","version","dashboard","say","embed","clear","setuproles","setupverify","setuptickets","setupinviterewards","setupleaderboard","botstatus"],
+    commands: ["website","version","dashboard","say","embed","clear","setuproles","setupverify","setupbestellinfo","setuptickets","setupinviterewards","setupleaderboard","botstatus"],
     command,
   };
 };
