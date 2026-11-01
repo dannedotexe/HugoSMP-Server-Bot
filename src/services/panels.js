@@ -3,54 +3,32 @@
 // Aus index.js ausgelagert.
 
 const { BrandEmbed } = require('../theme');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags } = require('discord.js');
+const { card, collectButtons } = require('../cards');
 const { loadData, saveData } = require('../store');
 const { CLOSED_TICKET_CATEGORY_ID, REQUIRED_INVITES, REWARD, STOCK_ITEMS, TICKET_CATEGORY_ID } = require('../config');
 const { client } = require('../client');
 const { buildStockEmbed } = require('./stock');
 const { buildRulesVerifyPanel, buildOrderInfoPanel, ORDER_INFO_TITLE } = require('./infoPanels');
 
+function roleButton(id, label, emoji) {
+  return new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Secondary);
+}
+
 function buildRolesPanel() {
-  const embed = new BrandEmbed()
-    .setTitle('Benachrichtigungen')
-    .setDescription([
-      'Wähle selbst, worüber du informiert werden möchtest.',
-      '',
-      '🎉 **Giveaways** – neue Verlosungen',
-      '📦 **Restocks** – Items wieder auf Lager',
-      '💰 **Deals** – Rabatte und Gratis-Aktionen',
-      '📰 **News** – Ankündigungen',
-      '',
-      '-# Ein Klick fügt die Rolle hinzu, ein zweiter entfernt sie wieder.'
-    ].join('\n'));
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('role_giveaways')
-      .setLabel('Giveaways')
-      .setEmoji('🎉')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('role_restocks')
-      .setLabel('Restocks')
-      .setEmoji('📦')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('role_deals')
-      .setLabel('Deals')
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('role_news')
-      .setLabel('News')
-      .setEmoji('📰')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embed, row };
+  return card({
+    tone: 'primary',
+    eyebrow: '🔔 Benachrichtigungen',
+    title: 'Worüber willst du informiert werden?',
+    body: '-# Ein Klick gibt dir die Rolle, ein zweiter nimmt sie wieder weg.',
+    items: [
+      { text: '🎉 **Giveaways**\n-# Neue Verlosungen', button: roleButton('role_giveaways', 'Giveaways', '🎉') },
+      { text: '📦 **Restocks**\n-# Items wieder auf Lager', button: roleButton('role_restocks', 'Restocks', '📦') },
+      { text: '💰 **Deals**\n-# Rabatte und Gratis-Aktionen', button: roleButton('role_deals', 'Deals', '💰') },
+      { text: '📰 **News**\n-# Ankündigungen', button: roleButton('role_news', 'News', '📰') }
+    ],
+    timestamp: false
+  });
 }
 
 // Kurs für 1M Geld aus dem Lager (Dashboard/Stock), damit er überall gleich ist
@@ -66,66 +44,45 @@ function buildVerifyPanel(guild) {
 }
 
 function buildTicketPanel() {
-  const embed = new BrandEmbed()
-    .setTitle('Support & Bestellungen')
-    .setDescription([
-      'Wähle unten eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.',
-      '',
-      '💰 **Items & Geld** – Ingame-Items und Geld kaufen',
-      '📐 **Schematics** – Baupläne bestellen',
-      '🎨 **Resource Pack** – Texture- und Resource-Packs',
-      '🎫 **Support** – Fragen und Probleme',
-      '',
-      '-# Bitte pro Anliegen nur ein Ticket öffnen.'
-    ].join('\n'));
+  const button = (id, label, emoji, style = ButtonStyle.Secondary) =>
+    new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(emoji).setStyle(style);
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ticket_cat_items_geld')
-      .setLabel('Items & Geld')
-      .setEmoji('💰')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('ticket_cat_schematics')
-      .setLabel('Schematics')
-      .setEmoji('📐')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('ticket_cat_resource_pack')
-      .setLabel('Resource Pack')
-      .setEmoji('🎨')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('create_support_ticket')
-      .setLabel('Support')
-      .setEmoji('🎫')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embed, row };
+  return card({
+    tone: 'primary',
+    eyebrow: '🎫 Support & Bestellungen',
+    title: 'Wie können wir dir helfen?',
+    body: 'Wähle eine Kategorie – wir öffnen dir einen privaten Kanal mit dem Team.',
+    thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
+    items: [
+      { text: '💰 **Items & Geld**\n-# Ingame-Items und Geld kaufen', button: button('ticket_cat_items_geld', 'Bestellen', '💰', ButtonStyle.Success) },
+      { text: '📐 **Schematics**\n-# Baupläne bestellen', button: button('ticket_cat_schematics', 'Bestellen', '📐') },
+      { text: '🎨 **Resource Pack**\n-# Texture- und Resource-Packs', button: button('ticket_cat_resource_pack', 'Bestellen', '🎨') },
+      { text: '🎫 **Support**\n-# Fragen und Probleme', button: button('create_support_ticket', 'Hilfe', '🎫', ButtonStyle.Primary) }
+    ],
+    footer: 'Bitte pro Anliegen nur ein Ticket',
+    timestamp: false
+  });
 }
 
 function buildWebsitePanel() {
-  const embed = new BrandEmbed()
-    .setTitle('HugoSMP Market')
-    .setDescription('Geld, Items, Kits und mehr – direkt über unsere Website bestellen.')
-    .addFields(
-      { name: 'Anmeldung', value: 'Mit Discord', inline: true },
-      { name: 'Bestellung', value: 'Mit Bestellnummer', inline: true },
-      { name: 'Support', value: '<#1499132947041751181>', inline: true }
-    );
-
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setLabel('Website öffnen')
+      .setEmoji('🌐')
       .setStyle(ButtonStyle.Link)
       .setURL('https://hugosmpmarket.store')
   );
 
-  return { embed, row };
+  return card({
+    tone: 'primary',
+    eyebrow: '🌐 Website',
+    title: 'HugoSMP Market',
+    body: 'Geld, Items, Kits und mehr – direkt über unsere Website bestellen.',
+    thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
+    blocks: ['**Anmeldung:** mit Discord\n**Bestellung:** mit Bestellnummer\n**Support:** <#1499132947041751181>'],
+    rows: [row],
+    timestamp: false
+  });
 }
 
 // Nach einem Update sucht der Bot seine bereits geposteten Panels und
@@ -137,20 +94,20 @@ const PANEL_DETECTORS = [
     match: (ids, urls, message) => (message?.embeds?.[0]?.title || '') === ORDER_INFO_TITLE,
     build: guild => toPanelPayload(buildOrderInfoPanel(guild))
   },
-  { name: 'Tickets', match: ids => ids.includes('create_support_ticket'), build: () => toPanelPayload(buildTicketPanel()) },
+  { name: 'Tickets', match: ids => ids.includes('create_support_ticket'), build: () => buildTicketPanel() },
   { name: 'Verifizierung', match: ids => ids.includes('verify_member'), build: guild => toPanelPayload(buildVerifyPanel(guild)) },
-  { name: 'Benachrichtigungen', match: ids => ids.includes('role_giveaways'), build: () => toPanelPayload(buildRolesPanel()) },
+  { name: 'Benachrichtigungen', match: ids => ids.includes('role_giveaways'), build: () => buildRolesPanel() },
   { name: 'Invite Rewards', match: ids => ids.includes('gen_invite'), build: () => buildPanel() },
   {
     name: 'Website',
     match: (ids, urls) => ids.length === 0 && urls.some(url => url.includes('hugosmpmarket.store')),
-    build: () => toPanelPayload(buildWebsitePanel())
+    build: () => buildWebsitePanel()
   }
 ];
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 3;
+const PANEL_REFRESH_REVISION = 4;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
@@ -162,15 +119,7 @@ function toPanelPayload({ embed, row }) {
 }
 
 function messageButtons(message) {
-  const ids = [];
-  const urls = [];
-  for (const row of message.components || []) {
-    for (const component of row.components || []) {
-      if (component.customId) ids.push(component.customId);
-      if (component.url) urls.push(component.url);
-    }
-  }
-  return { ids, urls };
+  return collectButtons(message);
 }
 
 function panelDesignSignature() {
@@ -178,11 +127,25 @@ function panelDesignSignature() {
   const payloads = PANEL_DETECTORS.map(d => {
     const payload = d.build(placeholderGuild);
     return {
-      embeds: payload.embeds.map(e => ({ ...e.toJSON(), footer: undefined })),
+      embeds: (payload.embeds || []).map(e => ({ ...e.toJSON(), footer: undefined })),
       components: payload.components.map(c => c.toJSON())
     };
   });
   return require('crypto').createHash('sha1').update(JSON.stringify({ PANEL_REFRESH_REVISION, payloads })).digest('hex');
+}
+
+// Altes Embed-Panel → Karte: erst bearbeiten versuchen; lässt Discord das
+// nicht zu, neu senden und das alte löschen.
+async function replacePanelMessage(message, payload) {
+  const isCard = Boolean(Number(payload.flags || 0) & MessageFlags.IsComponentsV2);
+  if (!isCard) return message.edit(payload);
+  try {
+    await message.edit(message.content ? { ...payload, content: '', embeds: [] } : { ...payload, embeds: [] });
+  } catch (e) {
+    console.log(`Panel wird neu gesendet (${e.message})`);
+    await message.channel.send(payload);
+    await message.delete().catch(() => {});
+  }
 }
 
 async function refreshPostedPanels({ force = false } = {}) {
@@ -238,7 +201,7 @@ async function refreshPostedPanels({ force = false } = {}) {
         if (!detector) continue;
 
         try {
-          await message.edit(detector.build(guild));
+          await replacePanelMessage(message, detector.build(guild));
           updated.push(`${detector.name} in #${channel.name}`);
           // Regeln stehen jetzt im Verifizierungs-Embed → altes Regel-Embed entfernen
           if (detector.name === 'Verifizierung') {
@@ -266,41 +229,24 @@ async function refreshPostedPanels({ force = false } = {}) {
 }
 
 function buildPanel() {
-  const embed = new BrandEmbed()
-    .setTitle('Einladungs-Belohnungen')
-    .setDescription('Lade Freunde ein und sichere dir eine Belohnung, sobald sie sich verifiziert haben.')
-    .addFields(
-      { name: 'Ziel', value: `${REQUIRED_INVITES} verifizierte Einladungen`, inline: true },
-      { name: 'Belohnung', value: REWARD, inline: true },
-      {
-        name: 'Wichtig',
-        value: 'Es zählen nur Links, die du über **Link erstellen** bekommst – normale Discord-Einladungen werden nicht gewertet.'
-      }
-    );
-
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('gen_invite')
-      .setLabel('Link erstellen')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('check_inv')
-      .setLabel('Fortschritt')
-      .setEmoji('📊')
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId('claim')
-      .setLabel('Belohnung abholen')
-      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('gen_invite').setLabel('Link erstellen').setEmoji('🔗').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('check_inv').setLabel('Fortschritt').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('claim').setLabel('Belohnung abholen').setEmoji('🎁').setStyle(ButtonStyle.Success)
   );
 
-  return {
-    embeds: [embed],
-    components: [row]
-  };
+  return card({
+    tone: 'success',
+    eyebrow: '🎁 Einladungs-Belohnungen',
+    title: 'Freunde einladen & belohnt werden',
+    body: 'Lade Freunde ein und sichere dir eine Belohnung, sobald sie sich verifiziert haben.',
+    blocks: [
+      `**Ziel:** ${REQUIRED_INVITES} verifizierte Einladungen\n**Belohnung:** ${REWARD}`,
+      '⚠️ Es zählen nur Links, die du über **Link erstellen** bekommst – normale Discord-Einladungen werden nicht gewertet.'
+    ],
+    rows: [row],
+    timestamp: false
+  });
 }
 
 module.exports = {
