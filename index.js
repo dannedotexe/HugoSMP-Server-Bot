@@ -11,7 +11,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { execSync } = require('child_process');
-const { BrandEmbed, noticeFromText, setBrandIcon } = require('./src/theme');
+const { BrandEmbed, notice, noticeFromText, setBrandIcon } = require('./src/theme');
 const guildConfig = require('./src/guildConfig');
 const coreCommands = require('./src/commands/core');
 const updateCommands = require('./src/commands/update');
@@ -592,16 +592,17 @@ async function sendTicketLog(guild, channel, closedBy, reason = 'Geschlossen') {
     );
 
     const embed = new BrandEmbed()
-      .setColor('primary')
-      .setTitle('🔒 Ticket geschlossen')
-      .setDescription(
-        `**Ticket:** ${channel.name}\n` +
-        `**Typ:** ${ticketType}\n` +
-        `**Order:** ${ticketOrderId}\n` +
-        `**Owner:** ${ownerId ? `<@${ownerId}>` : 'Unbekannt'}\n` +
-        `**Geschlossen von:** <@${closedBy.id}>\n` +
-        `**Grund:** ${reason}`
+      .setTone('neutral')
+      .setTitle('Ticket geschlossen')
+      .setDescription(`\`#${channel.name}\``)
+      .addFields(
+        { name: 'Typ', value: String(ticketType || '—'), inline: true },
+        { name: 'Bestellung', value: ticketOrderId && ticketOrderId !== 'none' ? `#${ticketOrderId}` : '—', inline: true },
+        { name: 'Kunde', value: ownerId ? `<@${ownerId}>` : 'Unbekannt', inline: true },
+        { name: 'Geschlossen von', value: `<@${closedBy.id}>`, inline: true },
+        { name: 'Grund', value: String(reason || '—').slice(0, 1024), inline: true }
       )
+      .setFooter({ text: 'Transkript im Anhang' })
       .setTimestamp();
 
     await logChannel.send({
@@ -652,7 +653,7 @@ async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
     );
 
     await channel.send({
-      content: '🔒 Dieses Ticket wurde geschlossen. Staff kann es wieder öffnen.',
+      embeds: [notice('Dieses Ticket wurde geschlossen. Das Team kann es wieder öffnen.', 'neutral')],
       components: [reopenRow]
     }).catch(() => {});
   } finally {
@@ -682,12 +683,12 @@ async function reopenTicket(channel, reopenedBy) {
   const logChannel = channel.guild.channels.cache.get(TICKET_LOG_CHANNEL_ID);
   if (logChannel) {
     await logChannel.send({
-      content: `🔓 Ticket wieder geöffnet: <#${channel.id}> von <@${reopenedBy.id}>`
+      embeds: [notice(`Ticket <#${channel.id}> wurde von <@${reopenedBy.id}> wieder geöffnet.`, 'neutral')]
     }).catch(() => {});
   }
 
   await channel.send({
-    content: `🔓 Ticket wurde von <@${reopenedBy.id}> wieder geöffnet.`
+    embeds: [notice(`Ticket wurde von <@${reopenedBy.id}> wieder geöffnet.`, 'neutral')]
   }).catch(() => {});
 }
 
@@ -769,7 +770,7 @@ function buildOrderTicketButtons() {
       .setCustomId('close_ticket')
       .setLabel('Ticket schließen')
       .setEmoji('🔒')
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -950,22 +951,21 @@ function invoiceItemsText(invoice) {
 }
 
 function buildOrderInvoiceEmbed(invoice, { title = 'Rechnung' } = {}) {
+  const facts = [
+    invoice.ownerId && { name: 'Kunde', value: `<@${invoice.ownerId}>`, inline: true },
+    invoice.category && { name: 'Kategorie', value: String(invoice.category), inline: true },
+    invoice.ingame && { name: 'Ingame', value: String(invoice.ingame), inline: true },
+    invoice.payment && { name: 'Zahlung', value: String(invoice.payment), inline: true }
+  ].filter(Boolean);
+
   const embed = new BrandEmbed()
-    .setColor('success')
-    .setTitle(`🧾 ${title}${invoice.orderId && invoice.orderId !== 'none' ? ` #${invoice.orderId}` : ''}`)
-    .setDescription(
-      `${invoice.ownerId ? `**Kunde:** <@${invoice.ownerId}>\n` : ''}` +
-      `${invoice.category ? `**Kategorie:** ${invoice.category}\n` : ''}` +
-      `${invoice.ingame ? `**Ingame:** ${invoice.ingame}\n` : ''}` +
-      `${invoice.payment ? `**Zahlung:** ${invoice.payment}\n` : ''}` +
-      `**Gesamt:** ${invoice.total || 'Offen'}`
+    .setTitle(`${title}${invoice.orderId && invoice.orderId !== 'none' ? ` #${invoice.orderId}` : ''}`)
+    .addFields(
+      ...facts,
+      { name: 'Produkte', value: invoiceItemsText(invoice).slice(0, 1024), inline: false },
+      { name: 'Gesamt', value: `**${invoice.total || 'Offen'}**`, inline: false }
     )
-    .addFields({
-      name: 'Produkte',
-      value: invoiceItemsText(invoice).slice(0, 1024),
-      inline: false
-    })
-    .setFooter({ text: 'HugoSMP Market' })
+    .setFooter({ text: 'Market' })
     .setTimestamp();
 
   if (invoice.note) {
@@ -1088,9 +1088,9 @@ async function resolveDashboardTextChannel(channelId) {
 }
 
 function stockStatusText(amount) {
-  if (amount === 0) return 'Ausverkauft';
-  if (amount <= 5) return `${amount} auf Lager - knapp`;
-  return `${amount} auf Lager`;
+  if (amount === 0) return '-# Ausverkauft';
+  if (amount <= 5) return `-# Nur noch ${amount} verfügbar`;
+  return `-# ${amount} verfügbar`;
 }
 
 function joinEmbedLines(lines, limit = 3600) {
@@ -1129,20 +1129,19 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
 
   const lines = items.map(item => {
     const amount = Number(data.stock?.[item.id] || 0);
-    return `${item.emoji || ''} **${item.name}** - ${item.price}\n${stockStatusText(amount)}`;
+    return `${item.emoji || ''} **${item.name}** · ${item.price}\n${stockStatusText(amount)}`;
   });
 
   const offer = includeSale ? getLatestShopOffer(data) : null;
 
   const embed = new BrandEmbed()
-    .setColor('primary')
-    .setTitle(cleanShortText(title || 'HugoSMP Shop', 120))
+    .setTitle(cleanShortText(title || 'Shop', 120))
     .setDescription(
       `${cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500)}\n\n` +
-      `${offer ? `**Aktuelles Angebot:** ${offer.title} - ${offer.discount}\n\n` : ''}` +
+      `${offer ? `> **Angebot** · ${offer.title} – ${offer.discount}\n\n` : ''}` +
       joinEmbedLines(lines)
     )
-    .setFooter({ text: 'Bestellung per Button starten' })
+    .setFooter({ text: 'Bestellung über die Buttons starten' })
     .setTimestamp();
 
   return embed;
@@ -1150,15 +1149,16 @@ function buildShopPanelEmbed({ title, description, itemIds, includeSale }, data 
 
 function buildSaleEmbed({ title, itemName, discount, description, until }) {
   const embed = new BrandEmbed()
-    .setColor('warning')
-    .setTitle(`💰 ${cleanShortText(title || 'Neues Angebot', 120)}`)
-    .setDescription(
-      `${itemName ? `**Item:** ${itemName}\n` : ''}` +
-      `${discount ? `**Deal:** ${discount}\n` : ''}` +
-      `${until ? `**Gültig bis:** ${until}\n` : ''}` +
-      `\n${cleanLongText(description || 'Sichere dir das Angebot im Shop-Ticket.', 900)}`
+    .setTitle(cleanShortText(title || 'Neues Angebot', 120))
+    .setDescription(cleanLongText(description || 'Sichere dir das Angebot im Shop-Ticket.', 900))
+    .addFields(
+      ...[
+        itemName && { name: 'Item', value: String(itemName), inline: true },
+        discount && { name: 'Angebot', value: String(discount), inline: true },
+        until && { name: 'Gültig bis', value: String(until), inline: true }
+      ].filter(Boolean)
     )
-    .setFooter({ text: 'HugoSMP Market' })
+    .setFooter({ text: 'Market' })
     .setTimestamp();
 
   return embed;
@@ -1381,21 +1381,31 @@ function formatTimeLeft(ms) {
 function buildGiveawayEmbed(gw, ended = false) {
   const timeLeft = ended ? 'Beendet' : formatTimeLeft(gw.endTime - Date.now());
   const reqs = [];
-  if (gw.minInvites > 0) reqs.push(`📨 Mindestens **${gw.minInvites}** Einladungen`);
-  if (gw.minAccountAgeDays > 0) reqs.push(`🗓️ Account älter als **${gw.minAccountAgeDays}** Tage`);
+  if (gw.minInvites > 0) reqs.push(`Mindestens **${gw.minInvites}** Einladungen`);
+  if (gw.minAccountAgeDays > 0) reqs.push(`Konto älter als **${gw.minAccountAgeDays}** Tage`);
 
   const embed = new BrandEmbed()
     .setColor(ended ? 'muted' : 'primary')
-    .setTitle(`🎉 GIVEAWAY — ${gw.prize}`)
-    .setDescription(
-      (reqs.length ? `**Voraussetzungen:**\n${reqs.join('\n')}\n\n` : '') +
-      `**Gewinner:** ${gw.winnersCount}\n` +
-      `**Teilnehmer:** ${gw.participants.length}\n` +
-      `**Endet:** ${ended ? 'Beendet' : `<t:${Math.floor(gw.endTime / 1000)}:R>`}\n` +
-      `**Veranstaltet von:** <@${gw.hostedBy}>` +
-      (ended ? `\n\n${gw.winners?.length ? `🏆 **Gewinner:** ${gw.winners.map(w => `<@${w}>`).join(', ')}` : '❌ Keine gültigen Teilnehmer.'}` : '')
-    )
-    .setFooter({ text: ended ? `Beendet` : `Klicke 🎉 um teilzunehmen` })
+    .setAuthor({ name: ended ? 'Giveaway beendet' : 'Giveaway' })
+    .setTitle(gw.prize)
+    .addFields(
+      { name: ended ? 'Endete' : 'Endet', value: `<t:${Math.floor(gw.endTime / 1000)}:R>`, inline: true },
+      { name: 'Gewinner', value: String(gw.winnersCount), inline: true },
+      { name: 'Teilnehmer', value: String(gw.participants.length), inline: true },
+      { name: 'Veranstaltet von', value: `<@${gw.hostedBy}>`, inline: true }
+    );
+
+  if (reqs.length) embed.addFields({ name: 'Voraussetzungen', value: reqs.map(x => `• ${x}`).join('\n'), inline: false });
+  if (ended) {
+    embed.addFields({
+      name: 'Ergebnis',
+      value: gw.winners?.length ? gw.winners.map(w => `<@${w}>`).join(', ') : 'Keine gültigen Teilnehmer.',
+      inline: false
+    });
+  }
+
+  embed
+    .setFooter({ text: ended ? 'Beendet' : 'Teilnahme über den Button' })
     .setTimestamp(new Date(gw.endTime));
 
   return embed;
@@ -1439,10 +1449,11 @@ async function endGiveaway(messageId) {
 
     if (winners.length > 0) {
       await channel.send({
-        content: `🎉 Herzlichen Glückwunsch ${winners.map(w => `<@${w}>`).join(', ')}! Ihr habt **${gw.prize}** gewonnen!`
+        content: winners.map(w => `<@${w}>`).join(' '),
+        embeds: [notice(`Glückwunsch! Ihr habt **${gw.prize}** gewonnen.`, 'success')]
       });
     } else {
-      await channel.send({ content: `❌ Das Giveaway für **${gw.prize}** hat geendet, aber es gab keine gültigen Teilnehmer.` });
+      await channel.send({ embeds: [notice(`Das Giveaway **${gw.prize}** ist beendet – es gab keine gültigen Teilnehmer.`, 'muted')] });
     }
   } catch (e) {
     console.error('endGiveaway error:', e.message);
@@ -1461,9 +1472,10 @@ function buildWelcomeLeaveEmbed(template, member, color) {
 
   return new BrandEmbed()
     .setColor(color || 'primary')
+    .setAuthor({ name: member.user.username, iconURL: member.user.displayAvatarURL({ size: 64 }) })
     .setDescription(text)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-    .setFooter({ text: member.guild.name, iconURL: member.guild.iconURL() })
+    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+    .setFooter({ text: `Mitglied #${member.guild.memberCount}` })
     .setTimestamp();
 }
 
@@ -1499,16 +1511,17 @@ async function sendPunishLog(guild, { action, color, target, moderator, reason, 
 
   const embed = new BrandEmbed()
     .setColor(color)
-    .setTitle(`🔨 ${action}`)
+    .setAuthor({ name: 'Moderation' })
+    .setTitle(action)
     .addFields(
-      { name: '👤 User', value: `<@${target.id}> (${target.tag || target.id})`, inline: true },
-      { name: '🛡️ Moderator', value: `<@${moderator.id}>`, inline: true },
-      { name: '📝 Grund', value: reason || 'Kein Grund angegeben', inline: false }
+      { name: 'User', value: `<@${target.id}>\n-# ${target.tag || target.id}`, inline: true },
+      { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+      { name: 'Grund', value: reason || 'Kein Grund angegeben', inline: false }
     )
     .setTimestamp();
 
-  if (duration) embed.addFields({ name: '⏱️ Dauer', value: duration, inline: true });
-  if (extra) embed.addFields({ name: '📋 Info', value: extra, inline: false });
+  if (duration) embed.addFields({ name: 'Dauer', value: duration, inline: true });
+  if (extra) embed.addFields({ name: 'Info', value: extra, inline: false });
 
   await logChannel.send({ embeds: [embed] }).catch(() => {});
 }
@@ -1761,8 +1774,8 @@ async function notifyStaffAboutDm(saved) {
       : `${message.attachments?.length || 0} Anhang/Anhänge`;
 
     const embed = new BrandEmbed()
-      .setColor('success')
-      .setTitle('Neue Dashboard-DM')
+      .setTone('neutral')
+      .setTitle('Neue Direktnachricht')
       .setDescription(contentPreview || 'Neue Nachricht erhalten.')
       .addFields(
         { name: 'User', value: `<@${thread.userId}>`, inline: true },
@@ -1828,18 +1841,17 @@ function buildLeaderboardEmbed(data = loadData()) {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 10);
 
-  const medals = ['🥇', '🥈', '🥉'];
-
+  // Format "**N** invite(s)" bleibt, importInvitesFromLeaderboardMessage liest es.
   const lines = sorted.length > 0
     ? sorted.map(([userId, count], i) =>
-        `${medals[i] ?? `**${i + 1}.**`} <@${userId}> — **${count}** invite${count === 1 ? '' : 's'}`
+        `\`${String(i + 1).padStart(2, '0')}\`  <@${userId}> · **${count}** invite${count === 1 ? '' : 's'}`
       ).join('\n')
-    : '*Noch keine Einladungen vorhanden.*';
+    : '-# Noch keine Einladungen vorhanden.';
 
   return new BrandEmbed()
     .setTitle('Invite Leaderboard')
     .setDescription(lines)
-    .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen → ${REWARD}` })
+    .setFooter({ text: `Ziel: ${REQUIRED_INVITES} verifizierte Einladungen · ${REWARD}` })
     .setTimestamp();
 }
 
@@ -1953,19 +1965,13 @@ function buildStockEmbed() {
   const lines = items.map(item => {
     const amount = data.stock[item.id] ?? 0;
 
-    const status = amount === 0
-      ? '🔴 Ausverkauft'
-      : amount <= 5
-        ? `🟡 ${amount} auf Lager`
-        : `🟢 ${amount} auf Lager`;
-
-    return `${item.emoji} **${item.name}** — ${item.price}\n┗ ${status}`;
+    return `${item.emoji} **${item.name}** · ${item.price}\n${stockStatusText(amount)}`;
   }).join('\n\n');
 
   return new BrandEmbed()
     .setTitle('Lagerbestand')
     .setDescription(lines)
-    .setFooter({ text: 'Zuletzt aktualisiert' })
+    .setFooter({ text: 'Live-Bestand · zuletzt aktualisiert' })
     .setTimestamp();
 }
 
@@ -2099,12 +2105,13 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null,
   const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
   const shouldMention = options.mention !== false;
   const embed = new BrandEmbed()
-    .setColor('success')
-    .setTitle('Item aufgefüllt')
-    .setDescription(`${item.emoji || ''} **${item.name}** wurde aufgefüllt.`)
+    .setAuthor({ name: 'Restock' })
+    .setTitle(item.name)
+    .setDescription(`${item.emoji ? `${item.emoji} ` : ''}Wieder auf Lager – bestell über das Ticket-Panel.`)
     .addFields(
-      { name: 'Preis', value: item.price || 'Nicht gesetzt', inline: true },
-      { name: 'Lager', value: `${previousAmount} → ${currentAmount} (+${addedAmount})`, inline: true }
+      { name: 'Preis', value: item.price || '—', inline: true },
+      { name: 'Verfügbar', value: `${currentAmount}`, inline: true },
+      { name: 'Neu', value: `+${addedAmount}`, inline: true }
     )
     .setTimestamp();
 
@@ -2769,10 +2776,10 @@ client.on('guildMemberAdd', async member => {
       const wChannel = member.guild.channels.cache.get(wc.channelId);
       if (wChannel) {
         const inviterText = usedInviterId
-          ? `\n👤 **Eingeladen von:** <@${usedInviterId}>`
-          : '\n👤 **Eingeladen von:** Unbekannt';
+          ? `\n-# Eingeladen von <@${usedInviterId}>`
+          : '';
         const embed = buildWelcomeLeaveEmbed(
-          (wc.message || 'Willkommen {user} auf **{server}**! 🎉') + inviterText,
+          (wc.message || 'Willkommen {user} auf **{server}**.') + inviterText,
           member,
           wc.color
         );
@@ -2796,7 +2803,7 @@ client.on('guildMemberRemove', async member => {
     if (!lChannel) return;
 
     const embed = buildWelcomeLeaveEmbed(
-      lc.message || '**{username}** hat den Server verlassen. 👋',
+      lc.message || '**{username}** hat den Server verlassen.',
       member,
       lc.color || 'neutral'
     );
@@ -2998,7 +3005,7 @@ async function handleInteraction(interaction) {
 
         const channel = client.channels.cache.get(gw.channelId);
         if (channel) {
-          await channel.send({ content: `🔁 **Reroll!** Neuer Gewinner: <@${newWinner}> — Herzlichen Glückwunsch! 🎉` });
+          await channel.send({ content: `<@${newWinner}>`, embeds: [notice(`Neu ausgelost: <@${newWinner}> gewinnt **${gw.prize}**. Glückwunsch!`, 'success')] });
         }
         return interaction.editReply(`✅ Neuer Gewinner: <@${newWinner}>`);
       }
@@ -3040,11 +3047,12 @@ async function handleInteraction(interaction) {
 
         const embed = new BrandEmbed()
           .setColor('primary')
-          .setTitle(`🎉 Teilnehmer — ${gw.prize}`)
+          .setAuthor({ name: 'Giveaway-Teilnehmer' })
+          .setTitle(gw.prize)
           .setDescription(
             chunks[0].map((id, i) => `**${i + 1}.** <@${id}>`).join('\n')
           )
-          .setFooter({ text: `${gw.participants.length} Teilnehmer gesamt${gw.zinkedWinner ? ` • 🎰 Gezinkt: ${gw.zinkedWinner}` : ''}` });
+          .setFooter({ text: `${gw.participants.length} Teilnehmer${gw.zinkedWinner ? ` · festgelegt: ${gw.zinkedWinner}` : ''}` });
 
         if (chunks.length > 1) {
           embed.addFields(
@@ -3102,20 +3110,17 @@ async function handleInteraction(interaction) {
 
     if (interaction.commandName === 'website') {
   const embed = new BrandEmbed()
-    .setColor('primary')
-    .setTitle('🌐 HugoSMP Market ist online!')
-    .setDescription(
-      'Bestelle HugoSMP Geld, Items, Kits und mehr direkt über unsere Website.\n\n' +
-      '✅ Schnell & einfach bestellen\n' +
-      '✅ Discord Login\n' +
-      '✅ Sichere Bestellnummer\n' +
-      '✅ Support per Ticket\n\n' +
-      '🎟️ Bei Fragen öffnet ein Ticket in <#1499132947041751181>'
+    .setTitle('HugoSMP Market')
+    .setDescription('Geld, Items, Kits und mehr – direkt über unsere Website bestellen.')
+    .addFields(
+      { name: 'Anmeldung', value: 'Mit Discord', inline: true },
+      { name: 'Bestellung', value: 'Mit Bestellnummer', inline: true },
+      { name: 'Support', value: '<#1499132947041751181>', inline: true }
     );
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel('🌐 Website öffnen')
+      .setLabel('Website öffnen')
       .setStyle(ButtonStyle.Link)
       .setURL('https://hugosmpmarket.store')
   );
@@ -3133,7 +3138,7 @@ async function handleInteraction(interaction) {
     
     if (interaction.commandName === 'version') {
       return interaction.reply({
-        content: `🤖 Bot-Version: \`${BOT_VERSION}\``,
+        content: `ℹ️ Bot-Version \`${BOT_VERSION}\``,
         ephemeral: true
       });
     }
@@ -3171,19 +3176,21 @@ async function handleInteraction(interaction) {
 
     if (interaction.commandName === 'getorder') {
       const embed = new BrandEmbed()
-        .setColor('primary')
-        .setTitle('✨ — DEINE BESTELLUNG ERHALTEN — ✨')
-        .setDescription(
-          '**SOBALD GEZAHLT WURDE** 💸\n' +
-          '↓\n\n' +
-          '🧮 **KURZRECHNUNG:**\n' +
-          'Bestellung (z.B: 5 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (125 Stück)\n\n' +
-          '🛠️ **DEINE AUFGABE:**\n' +
-          '↳ Order Ingame erstellen (Menge laut Rechnung)\n' +
-          '↳ Preis pro Stück: 1$\n' +
-          '↳ Steuern: Sind so gut wie keine Vorhanden!\n\n' +
-          '*Das ganze Ancient machst du dann in die höchste Order rein und\n' +
-          'somit hast du dein gekauftes Geld!*'
+        .setTitle('So erhältst du deine Bestellung')
+        .setDescription('Sobald die Zahlung eingegangen ist:')
+        .addFields(
+          {
+            name: '1 · Menge berechnen',
+            value: 'Bestellung ÷ Ancient-Wert = Menge\n-# Beispiel: 5 Mio ÷ 40k = 125 Stück'
+          },
+          {
+            name: '2 · Order ingame erstellen',
+            value: 'Menge laut Rechnung, Preis **1 $** pro Stück\n-# Steuern fallen praktisch keine an'
+          },
+          {
+            name: '3 · Fertig',
+            value: 'Wir liefern das Ancient in deine Order – damit hast du dein Geld.'
+          }
         );
 
       await interaction.channel.send({
@@ -3488,7 +3495,7 @@ async function handleInteraction(interaction) {
         });
 
         await channel.send({
-          content: `✅ <@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`
+          embeds: [notice(`<@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`, 'neutral')]
         });
 
         return interaction.reply({
@@ -3524,7 +3531,7 @@ async function handleInteraction(interaction) {
         });
 
         await channel.send({
-          content: `✅ <@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`
+          embeds: [notice(`<@${user.id}> wurde von <@${interaction.user.id}> zum Ticket hinzugefügt.`, 'neutral')]
         });
 
         return interaction.reply({
@@ -3558,7 +3565,7 @@ async function handleInteraction(interaction) {
         }
 
         await interaction.reply({
-          content: `🔒 Ticket von <@${targetUser.id}> wird geschlossen...`,
+          content: `ℹ️ Ticket von <@${targetUser.id}> wird geschlossen…`,
           ephemeral: true
         });
 
@@ -3585,7 +3592,7 @@ async function handleInteraction(interaction) {
       }
 
       await interaction.reply({
-        content: '🔒 Ticket wird geschlossen...',
+        content: 'ℹ️ Ticket wird geschlossen…',
         ephemeral: true
       });
 
@@ -3620,7 +3627,7 @@ async function handleInteraction(interaction) {
         return interaction.reply({
           embeds: [new BrandEmbed()
             .setColor('primary')
-            .setTitle('📦 Stock-Items')
+            .setTitle('Stock-Items')
             .setDescription(list)],
           ephemeral: true
         });
@@ -3667,13 +3674,14 @@ async function handleInteraction(interaction) {
         return interaction.reply({
           embeds: [new BrandEmbed()
             .setColor('success')
-            .setTitle('✅ Item hinzugefügt')
+            .setTone('success')
+            .setTitle('Item hinzugefügt')
             .addFields(
-              { name: '📦 Name', value: name, inline: true },
-              { name: '💰 Preis', value: preis, inline: true },
-              { name: '🔢 Startmenge', value: `${menge}`, inline: true },
-              { name: '🆔 ID', value: `\`${id}\``, inline: true },
-              { name: '😀 Emoji', value: emoji, inline: true }
+              { name: 'Name', value: name, inline: true },
+              { name: 'Preis', value: preis, inline: true },
+              { name: 'Startmenge', value: `${menge}`, inline: true },
+              { name: 'ID', value: `\`${id}\``, inline: true },
+              { name: 'Emoji', value: emoji, inline: true }
             )],
           ephemeral: true
         });
@@ -3730,13 +3738,13 @@ async function handleInteraction(interaction) {
 
         return interaction.reply({
           embeds: [new BrandEmbed()
-            .setColor('primary')
-            .setTitle('✅ Item aktualisiert')
+            .setTone('success')
+            .setTitle('Item aktualisiert')
             .addFields(
-              { name: '📦 Name', value: item.name, inline: true },
-              { name: '💰 Preis', value: item.price, inline: true },
-              { name: '😀 Emoji', value: item.emoji, inline: true },
-              { name: '🆔 ID', value: `\`${item.id}\``, inline: true }
+              { name: 'Name', value: item.name, inline: true },
+              { name: 'Preis', value: item.price, inline: true },
+              { name: 'Emoji', value: item.emoji, inline: true },
+              { name: 'ID', value: `\`${item.id}\``, inline: true }
             )],
           ephemeral: true
         });
@@ -3753,18 +3761,18 @@ async function handleInteraction(interaction) {
       if (sub === 'set') {
         const channel = interaction.options.getChannel('channel');
         const nachricht = interaction.options.getString('nachricht');
-        const farbe = interaction.options.getString('farbe') || '#b10de7';
+        const farbe = interaction.options.getString('farbe') || 'primary';
 
         data.welcomeConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
         saveData(data);
 
         const previewEmbed = new BrandEmbed()
           .setColor(farbe)
-          .setTitle('✅ Willkommensnachricht gespeichert')
+          .setTitle('Willkommensnachricht gespeichert')
           .addFields(
-            { name: '📢 Kanal', value: `<#${channel.id}>`, inline: true },
-            { name: '🎨 Farbe', value: farbe, inline: true },
-            { name: '📝 Nachricht', value: nachricht }
+            { name: 'Kanal', value: `<#${channel.id}>`, inline: true },
+            { name: 'Farbe', value: farbe, inline: true },
+            { name: 'Nachricht', value: nachricht }
           )
           .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' });
 
@@ -3784,7 +3792,7 @@ async function handleInteraction(interaction) {
         const fakeEmbed = new BrandEmbed()
           .setColor(wc.color || 'primary')
           .setDescription(
-            (wc.message || 'Willkommen {user} auf **{server}**! 🎉')
+            (wc.message || 'Willkommen {user} auf **{server}**.')
               .replace(/{user}/g, `<@${interaction.user.id}>`)
               .replace(/{username}/g, interaction.user.username)
               .replace(/{server}/g, interaction.guild.name)
@@ -3804,11 +3812,11 @@ async function handleInteraction(interaction) {
         return interaction.reply({
           embeds: [new BrandEmbed()
             .setColor(wc.color || 'primary')
-            .setTitle('📋 Willkommens-Konfiguration')
+            .setTitle('Willkommensnachricht')
             .addFields(
-              { name: '📢 Kanal', value: `<#${wc.channelId}>`, inline: true },
-              { name: '🎨 Farbe', value: wc.color || 'Standard', inline: true },
-              { name: '📝 Nachricht', value: wc.message || '(Standard)' }
+              { name: 'Kanal', value: `<#${wc.channelId}>`, inline: true },
+              { name: 'Farbe', value: wc.color || 'Standard', inline: true },
+              { name: 'Nachricht', value: wc.message || '(Standard)' }
             )
             .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
           ephemeral: true
@@ -3824,18 +3832,18 @@ async function handleInteraction(interaction) {
       if (sub === 'set') {
         const channel = interaction.options.getChannel('channel');
         const nachricht = interaction.options.getString('nachricht');
-        const farbe = interaction.options.getString('farbe') || '#ff4444';
+        const farbe = interaction.options.getString('farbe') || 'neutral';
 
         data.leaveConfig = { enabled: true, channelId: channel.id, message: nachricht, color: farbe };
         saveData(data);
 
         const previewEmbed = new BrandEmbed()
           .setColor(farbe)
-          .setTitle('✅ Leave-Nachricht gespeichert')
+          .setTitle('Abschiedsnachricht gespeichert')
           .addFields(
-            { name: '📢 Kanal', value: `<#${channel.id}>`, inline: true },
-            { name: '🎨 Farbe', value: farbe, inline: true },
-            { name: '📝 Nachricht', value: nachricht }
+            { name: 'Kanal', value: `<#${channel.id}>`, inline: true },
+            { name: 'Farbe', value: farbe, inline: true },
+            { name: 'Nachricht', value: nachricht }
           )
           .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' });
 
@@ -3855,7 +3863,7 @@ async function handleInteraction(interaction) {
         const fakeEmbed = new BrandEmbed()
           .setColor(lc.color || 'neutral')
           .setDescription(
-            (lc.message || '**{username}** hat den Server verlassen. 👋')
+            (lc.message || '**{username}** hat den Server verlassen.')
               .replace(/{user}/g, `<@${interaction.user.id}>`)
               .replace(/{username}/g, interaction.user.username)
               .replace(/{server}/g, interaction.guild.name)
@@ -3875,11 +3883,11 @@ async function handleInteraction(interaction) {
         return interaction.reply({
           embeds: [new BrandEmbed()
             .setColor(lc.color || 'neutral')
-            .setTitle('📋 Leave-Konfiguration')
+            .setTitle('Abschiedsnachricht')
             .addFields(
-              { name: '📢 Kanal', value: `<#${lc.channelId}>`, inline: true },
-              { name: '🎨 Farbe', value: lc.color || 'Standard', inline: true },
-              { name: '📝 Nachricht', value: lc.message || '(Standard)' }
+              { name: 'Kanal', value: `<#${lc.channelId}>`, inline: true },
+              { name: 'Farbe', value: lc.color || 'Standard', inline: true },
+              { name: 'Nachricht', value: lc.message || '(Standard)' }
             )
             .setFooter({ text: 'Platzhalter: {user} {username} {server} {count}' })],
           ephemeral: true
@@ -3898,11 +3906,11 @@ async function handleInteraction(interaction) {
 
       const dmEmbed = new BrandEmbed()
         .setColor('warning')
-        .setTitle('⚠️ Du wurdest verwarnt!')
-        .setDescription(`**Server:** ${interaction.guild.name}`)
+        .setAuthor({ name: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined })
+        .setTitle('Du wurdest verwarnt')
         .addFields(
-          { name: '📝 Grund', value: grund },
-          { name: '📊 Verwarnungen gesamt', value: `${warnCount}` }
+          { name: 'Grund', value: grund },
+          { name: 'Verwarnungen gesamt', value: `${warnCount}` }
         )
         .setTimestamp();
 
@@ -3919,8 +3927,8 @@ async function handleInteraction(interaction) {
       return interaction.reply({
         embeds: [new BrandEmbed()
           .setColor('warning')
-          .setDescription(`✅ <@${target.id}> wurde verwarnt. (Verwarnung #${warnCount})
-📝 Grund: **${grund}**`)],
+          .setDescription(`<@${target.id}> wurde verwarnt. (Verwarnung #${warnCount})
+-# Grund: ${grund}`)],
         ephemeral: true
       });
     }
@@ -3935,13 +3943,14 @@ async function handleInteraction(interaction) {
       }
 
       const list = warns.map((w, i) =>
-        `**#${i + 1}** — ${w.reason}\n└ Von <@${w.moderatorId}> • <t:${Math.floor(w.timestamp / 1000)}:R>`
+        `\`#${i + 1}\`  ${w.reason}\n-# von <@${w.moderatorId}> · <t:${Math.floor(w.timestamp / 1000)}:R>`
       ).join('\n\n');
 
       return interaction.reply({
         embeds: [new BrandEmbed()
           .setColor('warning')
-          .setTitle(`⚠️ Verwarnungen von ${target.tag || target.username}`)
+          .setAuthor({ name: target.tag || target.username, iconURL: target.displayAvatarURL() })
+          .setTitle('Verwarnungen')
           .setDescription(list.slice(0, 4000))
           .setFooter({ text: `${warns.length} Verwarnung(en) gesamt` })],
         ephemeral: true
@@ -3985,11 +3994,11 @@ async function handleInteraction(interaction) {
 
         const dmEmbed = new BrandEmbed()
           .setColor('warning')
-          .setTitle('🔇 Du wurdest gemutet!')
-          .setDescription(`**Server:** ${interaction.guild.name}`)
+          .setAuthor({ name: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined })
+          .setTitle('Du wurdest gemutet')
           .addFields(
-            { name: '⏱️ Dauer', value: durStr },
-            { name: '📝 Grund', value: grund }
+            { name: 'Dauer', value: durStr },
+            { name: 'Grund', value: grund }
           ).setTimestamp();
 
         await tryDM(target, dmEmbed);
@@ -3997,8 +4006,8 @@ async function handleInteraction(interaction) {
 
         return interaction.reply({
           embeds: [new BrandEmbed().setColor('warning')
-            .setDescription(`✅ <@${target.id}> wurde für **${durStr}** gemutet.
-📝 Grund: **${grund}**`)],
+            .setDescription(`<@${target.id}> wurde für **${durStr}** gemutet.
+-# Grund: ${grund}`)],
           ephemeral: true
         });
       } catch (e) {
@@ -4018,7 +4027,7 @@ async function handleInteraction(interaction) {
         await member.timeout(null, grund);
         await sendPunishLog(interaction.guild, { action: 'Unmute', color: 'success', target, moderator: interaction.user, reason: grund });
         return interaction.reply({
-          embeds: [new BrandEmbed().setColor('success').setDescription(`✅ <@${target.id}> wurde entmutet.`)],
+          embeds: [new BrandEmbed().setColor('success').setDescription(`<@${target.id}> wurde entmutet.`)],
           ephemeral: true
         });
       } catch (e) {
@@ -4036,9 +4045,9 @@ async function handleInteraction(interaction) {
 
       const dmEmbed = new BrandEmbed()
         .setColor('danger')
-        .setTitle('👢 Du wurdest gekickt!')
-        .setDescription(`**Server:** ${interaction.guild.name}`)
-        .addFields({ name: '📝 Grund', value: grund })
+        .setAuthor({ name: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined })
+        .setTitle('Du wurdest gekickt')
+        .addFields({ name: 'Grund', value: grund })
         .setTimestamp();
 
       await tryDM(target, dmEmbed);
@@ -4047,8 +4056,8 @@ async function handleInteraction(interaction) {
         await member.kick(grund);
         await sendPunishLog(interaction.guild, { action: 'Kick', color: 'danger', target, moderator: interaction.user, reason: grund });
         return interaction.reply({
-          embeds: [new BrandEmbed().setColor('danger').setDescription(`✅ <@${target.id}> wurde gekickt.
-📝 Grund: **${grund}**`)],
+          embeds: [new BrandEmbed().setColor('danger').setDescription(`<@${target.id}> wurde gekickt.
+-# Grund: ${grund}`)],
           ephemeral: true
         });
       } catch (e) {
@@ -4068,11 +4077,11 @@ async function handleInteraction(interaction) {
 
       const dmEmbed = new BrandEmbed()
         .setColor('danger')
-        .setTitle('🔨 Du wurdest gebannt!')
-        .setDescription(`**Server:** ${interaction.guild.name}`)
+        .setAuthor({ name: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined })
+        .setTitle('Du wurdest gebannt')
         .addFields(
-          { name: '📝 Grund', value: grund },
-          { name: '⏱️ Dauer', value: durStr || 'Permanent' }
+          { name: 'Grund', value: grund },
+          { name: 'Dauer', value: durStr || 'Permanent' }
         ).setTimestamp();
 
       if (member) await tryDM(target, dmEmbed);
@@ -4103,8 +4112,8 @@ async function handleInteraction(interaction) {
 
         return interaction.reply({
           embeds: [new BrandEmbed().setColor('danger')
-            .setDescription(`✅ <@${target.id}> wurde ${durStr ? `für **${durStr}**` : '**permanent**'} gebannt.
-📝 Grund: **${grund}**`)],
+            .setDescription(`<@${target.id}> wurde ${durStr ? `für **${durStr}**` : '**permanent**'} gebannt.
+-# Grund: ${grund}`)],
           ephemeral: true
         });
       } catch (e) {
@@ -4136,8 +4145,8 @@ async function handleInteraction(interaction) {
         });
 
         return interaction.reply({
-          embeds: [new BrandEmbed().setColor('success').setDescription(`✅ **${bannedUser.user.tag || userId}** wurde entbannt.
-📝 Grund: **${grund}**`)],
+          embeds: [new BrandEmbed().setColor('success').setDescription(`**${bannedUser.user.tag || userId}** wurde entbannt.
+-# Grund: ${grund}`)],
           ephemeral: true
         });
       } catch (e) {
@@ -4175,7 +4184,8 @@ async function handleInteraction(interaction) {
       return interaction.reply({
         embeds: [new BrandEmbed()
           .setColor('primary')
-          .setTitle(`📋 Modlog — ${target.username}`)
+          .setAuthor({ name: target.tag || target.username, iconURL: target.displayAvatarURL() })
+          .setTitle('Moderations-Verlauf')
           .setThumbnail(target.displayAvatarURL())
           .setDescription(lines.join('\n'))
           .setTimestamp()],
@@ -4420,13 +4430,15 @@ async function handleInteraction(interaction) {
         });
 
         const ticketEmbed = new BrandEmbed()
-          .setColor('primary')
-          .setTitle('🎫 Support')
-          .setDescription('Willkommen beim Support! Bitte beschreibe dein Anliegen so genau wie möglich.')
+          .setTitle('Support')
+          .setDescription(
+            `Hi <@${interaction.user.id}>, danke für deine Anfrage.\n` +
+            'Beschreib dein Anliegen so genau wie möglich – das Team meldet sich hier.'
+          )
           .setTimestamp();
 
         const ticketButtons = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('Ticket schließen').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
         );
 
         await ticket.send({
@@ -4648,7 +4660,7 @@ async function handleInteraction(interaction) {
         );
 
         return interaction.reply({
-          content: 'Möchtest du dieses Ticket wirklich schließen?',
+          embeds: [notice('Möchtest du dieses Ticket wirklich schließen?', 'warning')],
           components: [row],
           ephemeral: true
         });
@@ -4713,7 +4725,8 @@ async function handleInteraction(interaction) {
       markReviewDecision(requestId);
 
       await interaction.update({
-        content: '🔒 Ticket wird geschlossen...',
+        content: '',
+        embeds: [notice('Ticket wird geschlossen', 'neutral')],
         components: []
       });
 
@@ -4744,7 +4757,8 @@ async function handleInteraction(interaction) {
       markReviewDecision(requestId);
 
       return interaction.update({
-        content: '📌 Das Ticket bleibt offen.',
+        content: '',
+        embeds: [notice('Das Ticket bleibt offen.', 'neutral')],
         components: []
       });
     }
@@ -4768,7 +4782,8 @@ async function handleInteraction(interaction) {
       }
 
       await interaction.update({
-        content: '🔒 Ticket wird geschlossen...',
+        content: '',
+        embeds: [notice('Ticket wird geschlossen', 'neutral')],
         components: []
       });
 
@@ -4792,7 +4807,7 @@ async function handleInteraction(interaction) {
       }
 
       await interaction.reply({
-        content: '🔓 Ticket wird wieder geöffnet...',
+        content: 'ℹ️ Ticket wird wieder geöffnet…',
         ephemeral: true
       });
 
@@ -4814,7 +4829,8 @@ async function handleInteraction(interaction) {
       markReviewDecision(reviewDecisionId);
 
       return interaction.update({
-        content: '📌 Das Ticket bleibt offen.',
+        content: '',
+        embeds: [notice('Das Ticket bleibt offen.', 'neutral')],
         components: []
       });
     }
@@ -4833,7 +4849,8 @@ async function handleInteraction(interaction) {
       markReviewDecision(reviewDecisionId);
 
       await interaction.update({
-        content: '🔒 Ticket wird geschlossen...',
+        content: '',
+        embeds: [notice('Ticket wird geschlossen', 'neutral')],
         components: []
       });
 
@@ -5011,19 +5028,21 @@ async function handleInteraction(interaction) {
         });
 
         const ticketEmbed = new BrandEmbed()
-          .setColor('primary')
-          .setTitle('✨ — DEIN REWARD EINLÖSEN — ✨')
-          .setDescription(
-            `💎 **Belohnungswert:** 1.000.000 $\n\n` +
-            `🧮 **KURZRECHNUNG:**\n` +
-            `Reward (1 Mio) ÷ Ancient-Wert (z.B. 40k) = Menge (25 Stück)\n\n` +
-            `🛠️ **DEINE AUFGABE:**\n` +
-            `↳ Order Ingame erstellen (Menge laut Rechnung)\n` +
-            `↳ Preis pro Stück: 1$\n` +
-            `↳ Steuern: Sind so gut wie keine Vorhanden!\n\n` +
-            `📩 **SCHREIB UNS:**\n` +
-            `• Ingame-Name:\n` +
-            `• Status: "Ich habe die Order reingestellt!"`
+          .setTitle('Reward einlösen')
+          .setDescription(`Glückwunsch! Dein Reward: **${REWARD}**`)
+          .addFields(
+            {
+              name: '1 · Menge berechnen',
+              value: 'Reward ÷ Ancient-Wert = Menge\n-# Beispiel: 5 Mio ÷ 40k = 125 Stück'
+            },
+            {
+              name: '2 · Order ingame erstellen',
+              value: 'Menge laut Rechnung, Preis **1 $** pro Stück\n-# Steuern fallen praktisch keine an'
+            },
+            {
+              name: '3 · Hier melden',
+              value: 'Schreib uns deinen **Ingame-Namen** und „Order ist drin“.'
+            }
           )
           .setTimestamp();
 
@@ -5032,7 +5051,7 @@ async function handleInteraction(interaction) {
             .setCustomId('close_ticket')
             .setLabel('Ticket schließen')
             .setEmoji('🔒')
-            .setStyle(ButtonStyle.Danger)
+            .setStyle(ButtonStyle.Secondary)
         );
 
         await ticket.send({
@@ -5163,12 +5182,11 @@ async function handleInteraction(interaction) {
 
         // Header embed
         const headerEmbed = new BrandEmbed()
-          .setColor('primary')
-          .setTitle(`🛒 Bestellung #${ticketOrderId} — ${cat.emoji} ${cat.label}`)
+          .setAuthor({ name: `Bestellung #${ticketOrderId}` })
+          .setTitle(`${cat.emoji} ${cat.label}`)
           .setDescription(
-            `**Kategorie:** ${cat.emoji} ${cat.label}\n` +
-            `**Käufer:** <@${interaction.user.id}>\n\n` +
-            'Das Bestellformular wurde bereits ausgefüllt. Du kannst noch weitere Infos in den Chat schreiben.'
+            `Danke, <@${interaction.user.id}>! Deine Angaben sind unten zusammengefasst.\n` +
+            '-# Weitere Infos kannst du einfach hier in den Chat schreiben.'
           )
           .setTimestamp();
 
@@ -5176,27 +5194,26 @@ async function handleInteraction(interaction) {
         const formFields = [];
         if (catKey === 'ticket_cat_items_geld') {
           formFields.push(
-            { name: '🛍️ Item', value: item, inline: true },
-            { name: '🔢 Menge', value: amount, inline: true },
-            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
-            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+            { name: 'Item', value: item, inline: true },
+            { name: 'Menge', value: amount, inline: true },
+            { name: 'Ingame-Name', value: ingame, inline: true },
+            { name: 'Zahlungsmethode', value: payment, inline: true }
           );
         } else if (catKey === 'ticket_cat_schematics') {
           formFields.push(
-            { name: '📐 Schematic', value: item, inline: true },
-            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
-            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+            { name: 'Schematic', value: item, inline: true },
+            { name: 'Ingame-Name', value: ingame, inline: true },
+            { name: 'Zahlungsmethode', value: payment, inline: true }
           );
         } else {
           formFields.push(
-            { name: '🎨 Resource Pack', value: item, inline: true },
-            { name: '⚔️ Ingame-Name', value: ingame, inline: true },
-            { name: '💳 Zahlungsmethode', value: payment, inline: true }
+            { name: 'Resource Pack', value: item, inline: true },
+            { name: 'Ingame-Name', value: ingame, inline: true },
+            { name: 'Zahlungsmethode', value: payment, inline: true }
           );
         }
         const formEmbed = new BrandEmbed()
-          .setColor('primary')
-          .setTitle(`📋 Bestellformular #${ticketOrderId}`)
+          .setTitle('Bestellformular')
           .addFields(...formFields)
           .setTimestamp();
 
@@ -5260,8 +5277,7 @@ async function handleInteraction(interaction) {
       markOrderFormSubmitted(interaction.channel.id);
 
       const embed = new BrandEmbed()
-        .setColor('primary')
-        .setTitle(`🛒 Neue Bestellung${orderId !== 'none' ? ` #${orderId}` : ''}`)
+        .setTitle(`Neue Bestellung${orderId !== 'none' ? ` #${orderId}` : ''}`)
         .addFields(
           { name: 'Item', value: item, inline: true },
           { name: 'Menge', value: amount, inline: true },
@@ -5378,15 +5394,13 @@ async function handleInteraction(interaction) {
           name: reviewer.username,
           iconURL: reviewer.displayAvatarURL()
         })
-        .setTitle('Bewertung — HugoSMP Market')
-        .setDescription(
-          `**Bewertet von:** **<@${reviewer.id}>**\n` +
-          `**Gekauft:** ${purchasedItem}\n\n` +
-          `${starsEmoji} **(${stars}/5)**\n\n${text}`
+        .setTitle(`${starsEmoji}  ${stars}/5`)
+        .setDescription(text)
+        .addFields(
+          { name: 'Kunde', value: `<@${reviewer.id}>`, inline: true },
+          { name: 'Gekauft', value: String(purchasedItem || '—').slice(0, 1024), inline: true }
         )
-        .setThumbnail('https://cdn.discordapp.com/attachments/1499135826624249996/1501579033291522299/Hugo_SMP_Shop_Icon.jpg')
-        .setFooter({ text: `Order-ID: ${orderId}` })
-        .setColor('success')
+        .setFooter({ text: `Bewertung · Bestellung ${orderId}` })
         .setTimestamp();
 
       await reviewChannel.send({
@@ -6242,7 +6256,7 @@ app.post('/api/dashboard/orders/:channelId/assign', requireDashboardAuth, async 
           assigneeName: null
         });
 
-        await channel.send('📌 Bearbeiter wurde entfernt.').catch(() => {});
+        await channel.send({ embeds: [notice('Bearbeiter wurde entfernt.', 'neutral')] }).catch(() => {});
       }
 
       return res.json({
@@ -6615,21 +6629,20 @@ app.post('/api/order', async (req, res) => {
       const name = String(item.name || 'Unbekanntes Item').slice(0, 80);
       const qty = Number(item.quantity || item.qty || 1);
       const price = String(item.price || 'Unbekannt').slice(0, 40);
-      return `• **${name}** x${qty} — ${price}`;
+      return `• **${name}** × ${qty} · ${price}`;
     }).join('\n');
 
     const embed = new BrandEmbed()
-      .setColor('primary')
-      .setTitle(`🛒 Website-Bestellung #${ticketOrderId}`)
-      .setDescription(
-        `**Käufer:** <@${discordId}>\n` +
-        `**Name:** ${String(username).slice(0, 80)}\n` +
-        `**Zahlungsmethode:** ${paymentMethod ? String(paymentMethod).slice(0, 80) : 'Nicht angegeben'}\n` +
-        `**Gesamt:** ${total ? String(total).slice(0, 40) : 'Unbekannt'}\n\n` +
-        `**Produkte:**\n${itemLines}\n\n` +
-        `**Notiz:** ${note ? String(note).slice(0, 500) : 'Keine'}`
+      .setAuthor({ name: `Website-Bestellung #${ticketOrderId}` })
+      .setTitle('Neue Bestellung')
+      .addFields(
+        { name: 'Kunde', value: `<@${discordId}>\n-# ${String(username).slice(0, 80)}`, inline: true },
+        { name: 'Zahlung', value: paymentMethod ? String(paymentMethod).slice(0, 80) : '—', inline: true },
+        { name: 'Gesamt', value: `**${total ? String(total).slice(0, 40) : '—'}**`, inline: true },
+        { name: 'Produkte', value: (itemLines || '—').slice(0, 1024) },
+        ...(note ? [{ name: 'Notiz', value: String(note).slice(0, 500) }] : [])
       )
-      .setFooter({ text: 'Erstellt über die Website' })
+      .setFooter({ text: 'Über die Website erstellt' })
       .setTimestamp();
 
     await ticket.send({
