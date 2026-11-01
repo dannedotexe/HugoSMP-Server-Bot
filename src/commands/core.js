@@ -51,7 +51,7 @@ const HELP_CATEGORIES = [
     commands: [
       'config', 'setuptickets', 'setupverify', 'setuproles', 'setupinviterewards',
       'setupleaderboard', 'setupstock', 'setupstockpanel', 'botstatus', 'setinvites',
-      'embed', 'say', 'dashboard', 'version'
+      'embed', 'say', 'dashboard', 'version', 'aktualisieren'
     ]
   }
 ];
