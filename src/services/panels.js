@@ -8,6 +8,7 @@ const { loadData, saveData } = require('../store');
 const { CLOSED_TICKET_CATEGORY_ID, REQUIRED_INVITES, REWARD, STOCK_ITEMS, TICKET_CATEGORY_ID } = require('../config');
 const { client } = require('../client');
 const { buildStockEmbed } = require('./stock');
+const { buildRulesVerifyPanel, buildOrderInfoPanel, ORDER_INFO_TITLE } = require('./infoPanels');
 
 function buildRolesPanel() {
   const embed = new BrandEmbed()
@@ -59,24 +60,9 @@ function currentMoneyRate() {
   return money ? `1M = ${money.price}` : 'siehe Lager';
 }
 
+// Regeln + Verifizieren in EINEM Embed (src/services/infoPanels.js)
 function buildVerifyPanel(guild) {
-  const embed = new BrandEmbed()
-    .setTitle('Verifizierung')
-    .setDescription(
-      'Willkommen bei **HugoSMP Market**.\n' +
-      'Bestätige kurz, dass du ein Mensch bist, um alle Kanäle freizuschalten.'
-    )
-    .addFields({ name: 'Kurs', value: currentMoneyRate(), inline: true })
-    .setThumbnail(guild.iconURL({ size: 256 }) || null);
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('verify_member')
-      .setLabel('Verifizieren')
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  return { embed, row };
+  return buildRulesVerifyPanel(guild, currentMoneyRate());
 }
 
 function buildTicketPanel() {
@@ -146,6 +132,11 @@ function buildWebsitePanel() {
 // ersetzt sie in-place durch die aktuelle Version – kein neues Posten
 // nötig. Läuft nur, wenn sich das Panel-Design geändert hat.
 const PANEL_DETECTORS = [
+  {
+    name: 'Bestell-Info',
+    match: (ids, urls, message) => (message?.embeds?.[0]?.title || '') === ORDER_INFO_TITLE,
+    build: guild => toPanelPayload(buildOrderInfoPanel(guild))
+  },
   { name: 'Tickets', match: ids => ids.includes('create_support_ticket'), build: () => toPanelPayload(buildTicketPanel()) },
   { name: 'Verifizierung', match: ids => ids.includes('verify_member'), build: guild => toPanelPayload(buildVerifyPanel(guild)) },
   { name: 'Benachrichtigungen', match: ids => ids.includes('role_giveaways'), build: () => toPanelPayload(buildRolesPanel()) },
@@ -159,7 +150,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 2;
+const PANEL_REFRESH_REVISION = 3;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
@@ -243,12 +234,22 @@ async function refreshPostedPanels({ force = false } = {}) {
         if (!message.components?.length) continue;
 
         const { ids, urls } = messageButtons(message);
-        const detector = PANEL_DETECTORS.find(d => d.match(ids, urls));
+        const detector = PANEL_DETECTORS.find(d => d.match(ids, urls, message));
         if (!detector) continue;
 
         try {
           await message.edit(detector.build(guild));
           updated.push(`${detector.name} in #${channel.name}`);
+          // Regeln stehen jetzt im Verifizierungs-Embed → altes Regel-Embed entfernen
+          if (detector.name === 'Verifizierung') {
+            for (const old of messages.values()) {
+              const title = old.embeds?.[0]?.title || '';
+              if (old.author?.id === client.user.id && !old.components?.length && /server-regeln/i.test(title)) {
+                await old.delete().catch(() => {});
+                updated.push(`altes Regel-Embed in #${channel.name} entfernt`);
+              }
+            }
+          }
         } catch (e) {
           console.error(`panel refresh error (#${channel.name}):`, e.message);
         }
@@ -306,6 +307,7 @@ module.exports = {
   buildRolesPanel,
   currentMoneyRate,
   buildVerifyPanel,
+  buildOrderInfoPanel,
   buildTicketPanel,
   buildWebsitePanel,
   buildPanel,

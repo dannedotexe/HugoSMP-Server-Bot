@@ -38,3 +38,25 @@ test('Karten: Shop, Angebot, Bewertung, Übersicht', () => {
   json(buildReviewSummaryCard());
   assert.throws(() => buildShopPanelCard({ itemIds: [] }, row()), /mindestens ein Item/);
 });
+
+test('Regeln+Verifizierung und Bestell-Info: gültige Embeds mit echten Kanal-Links', () => {
+  const { Collection, ChannelType } = require('discord.js');
+  const { buildRulesVerifyPanel, buildOrderInfoPanel } = require('../src/services/infoPanels');
+  const channels = new Collection([
+    ['11', { id: '11', type: ChannelType.GuildText, name: '🎫┃tickets' }],
+    ['12', { id: '12', type: ChannelType.GuildText, name: '🛒 | bestell-inꜰo' }],
+    ['13', { id: '13', type: ChannelType.GuildText, name: '📈┃preise-und-stock' }]
+  ]);
+  const guild = { id: '1', channels: { cache: channels }, iconURL: () => null };
+  const rules = buildRulesVerifyPanel(guild, '1M = 0,50 €');
+  const r = rules.embed.toJSON();
+  assert.ok(r.description.length < 4096);
+  assert.match(r.description, /<#11>/);
+  assert.match(r.description, /<#12>/);
+  assert.match(r.description, /\*\*#proofs\*\*/, 'fehlender Kanal als Text');
+  assert.equal(rules.row.toJSON().components[0].custom_id, 'verify_member');
+  const info = buildOrderInfoPanel(guild);
+  assert.match(JSON.stringify(info.embed.toJSON()), /<#13>/);
+  assert.equal(info.row.toJSON().components.length, 2);
+  assert.equal(buildOrderInfoPanel({ iconURL: () => null }).row.toJSON().components.length, 1);
+});
