@@ -137,6 +137,11 @@ function buildCommandDefinitions() {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('bewertungen')
+      .setDescription('Zeigt die Kundenbewertungen des Shops')
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('fertig')
       .setDescription('Bestellung als fertig markieren + Bewertung anfordern')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)

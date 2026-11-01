@@ -10,6 +10,7 @@ const { cleanLongText, cleanShortText, formatEuroValue, parsePriceNumber } = req
 const { client } = require('../client');
 const { getUserAvatar, getUserDisplayName, getUserSummary } = require('./users');
 const { getDmUserInfo, getMessageAttachments, makeDashboardError } = require('./dms');
+const { trackOrderMeta } = require('./stats');
 
 const closingTickets = new Set();
 
@@ -663,6 +664,7 @@ function updateDashboardOrderMeta(channelId, patch) {
     ...patch,
     updatedAt: Date.now()
   };
+  trackOrderMeta(data, channelId, data.dashboardOrderMeta[channelId]);
   saveData(data);
   return data.dashboardOrderMeta[channelId];
 }

@@ -76,6 +76,7 @@ module.exports = function createWebApi(ctx) {
     updateDashboardOrderMeta,
     updateLeaderboard,
     updateStockPanel,
+    getStats,
   } = ctx;
 
   // ── Website API ───────────────────────────────────────────────────
@@ -319,6 +320,24 @@ module.exports = function createWebApi(ctx) {
         success: false,
         error: 'Übersicht konnte nicht geladen werden.'
       });
+    }
+  });
+
+  app.get('/api/dashboard/stats', requireDashboardAuth, (req, res) => {
+    try {
+      const days = Math.max(7, Math.min(365, Number.parseInt(req.query.days, 10) || 30));
+      const data = loadData();
+      const guild = client.guilds.cache.get(GUILD_ID) || null;
+      res.json({
+        success: true,
+        stats: {
+          ...getStats(days, data),
+          memberCount: guild?.memberCount || null
+        }
+      });
+    } catch (e) {
+      console.error('dashboard stats error:', e.message);
+      res.status(500).json({ success: false, error: 'Statistiken konnten nicht geladen werden.' });
     }
   });
 

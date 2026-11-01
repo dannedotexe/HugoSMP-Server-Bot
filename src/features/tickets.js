@@ -42,9 +42,15 @@ module.exports = function createTickets(ctx) {
     reopenTicket,
     sendOrderInvoice,
     updateDashboardOrderMeta,
+    addReview,
   } = ctx;
+  const { buildReviewSummaryEmbed, refreshReviewSummary } = require('../services/reviews');
 
   async function command(interaction) {
+    if (interaction.commandName === 'bewertungen') {
+      return interaction.reply({ embeds: [buildReviewSummaryEmbed(undefined, { latest: 3 })] });
+    }
+
     if (interaction.commandName === 'getorder') {
       const embed = new BrandEmbed()
         .setTitle('So erhältst du deine Bestellung')
@@ -203,6 +209,9 @@ module.exports = function createTickets(ctx) {
     if (interaction.commandName === 'fertig') {
       const user = interaction.options.getUser('user');
       const orderId = getNextOrderId();
+      if (interaction.channel && getTicketType(interaction.channel) === 'bestellung') {
+        updateDashboardOrderMeta(interaction.channel.id, { status: 'fertig', completedAt: Date.now(), reviewOrderId: orderId });
+      }
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -974,6 +983,16 @@ module.exports = function createTickets(ctx) {
         embeds: [embed]
       });
 
+      addReview({
+        orderId,
+        userId: reviewer.id,
+        username: reviewer.username,
+        stars,
+        item: purchasedItem,
+        text
+      });
+      refreshReviewSummary(reviewChannel).catch(() => {});
+
       try {
         const member = await interaction.guild.members.fetch(reviewer.id);
 
@@ -1030,7 +1049,7 @@ module.exports = function createTickets(ctx) {
 
   return {
     name: 'tickets',
-    commands: ["getorder","adduser","close","fertig"],
+    commands: ["getorder","adduser","close","fertig","bewertungen"],
     buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/],
     modals: [/^pre_order_modal_/, /^order_form_modal$/, /^review_modal_/],
     command,
