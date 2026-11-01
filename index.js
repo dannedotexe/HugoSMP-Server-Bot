@@ -181,341 +181,77 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-// ── Config ────────────────────────────────────────────────────────
-const TOKEN = process.env.DISCORD_TOKEN;
-const DATA_FILE = process.env.DATA_FILE || '/app/data/data.json';
+// ── Config ── (src/config.js)
+const {
+  TOKEN,
+  DATA_FILE,
+  PORT,
+  WEBSITE_URL,
+  DASHBOARD_PASSWORD,
+  DASHBOARD_URL,
+  GUILD_ID,
+  REVIEWS_CHANNEL_ID,
+  KUNDEN_ROLE_ID,
+  REQUIRED_INVITES,
+  REWARD,
+  RULES_CHANNEL_ID,
+  VERIFY_ROLE_ID,
+  REWARD_LOG_ID,
+  LEADERBOARD_CHANNEL_ID,
+  TICKET_CATEGORY_ID,
+  CLOSED_TICKET_CATEGORY_ID,
+  TICKET_LOG_CHANNEL_ID,
+  DM_STAFF_CHANNEL_ID,
+  DM_STAFF_MENTION,
+  MAX_DASHBOARD_ATTACHMENTS,
+  MAX_DASHBOARD_ATTACHMENT_BYTES,
+  MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES,
+  STOCK_CHANNEL_ID,
+  RESTOCK_CHANNEL_ID,
+  SHOP_PANEL_CHANNEL_ID,
+  PUNISH_LOG_CHANNEL_ID,
+  STAFF_ROLE_IDS,
+  PING_ROLES,
+  MIN_ACCOUNT_AGE_MS,
+  STOCK_ITEMS,
+} = require('./src/config');
 guildConfig.init(process.env.GUILD_CONFIG_FILE || path.join(path.dirname(DATA_FILE), 'guild-config.json'));
-const PORT = process.env.PORT || 3000;
-const WEBSITE_URL = process.env.WEBSITE_URL || '*';
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://130.61.188.221:3000/dashboard';
-const GUILD_ID = '1499129162378514524';
 
-const REVIEWS_CHANNEL_ID = '1499131549826813962';
-const KUNDEN_ROLE_ID = '1499472189420732421';
+// ── Hilfsfunktionen ── (src/util.js)
+const {
+  cleanUsername,
+  cleanShortText,
+  cleanLongText,
+  normalizeStockItemId,
+  parsePriceNumber,
+  formatEuroValue,
+  parseDuration,
+  formatTimeLeft,
+  joinEmbedLines,
+  stockStatusText,
+} = require('./src/util');
 
-const REQUIRED_INVITES = 8;
-const REWARD = '$5m on HugoSMP';
-
-const RULES_CHANNEL_ID = '1499135456133255239';
-const VERIFY_ROLE_ID = '1499149656951885956';
-const REWARD_LOG_ID = '1500479671031169144';
-const LEADERBOARD_CHANNEL_ID = '1499132426947919903';
-
-const TICKET_CATEGORY_ID = '1499147835528974356';
-const CLOSED_TICKET_CATEGORY_ID = '1499148006270963732';
-const TICKET_LOG_CHANNEL_ID = '1499147413355626646';
-const DM_STAFF_CHANNEL_ID = process.env.DM_STAFF_CHANNEL_ID || TICKET_LOG_CHANNEL_ID;
-const DM_STAFF_MENTION = process.env.DM_STAFF_MENTION || '';
-const MAX_DASHBOARD_ATTACHMENTS = 5;
-const MAX_DASHBOARD_ATTACHMENT_BYTES = 8 * 1024 * 1024;
-const MAX_DASHBOARD_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
-
-const STOCK_CHANNEL_ID = '1502271613968846878';
-const RESTOCK_CHANNEL_ID = process.env.RESTOCK_CHANNEL_ID || '1533616215963209828';
-const SHOP_PANEL_CHANNEL_ID = process.env.SHOP_PANEL_CHANNEL_ID || STOCK_CHANNEL_ID;
-
-const PUNISH_LOG_CHANNEL_ID = '1506807507564232714'; // ← Mod-Log Channel ID eintragen
-
-const STAFF_ROLE_IDS = [
-  '1499146219946250241',
-  '1499159379902074880'
-];
-
-const PING_ROLES = {
-  giveaways: '1501296933732618360',
-  restocks: '1501297036719423700',
-  deals: '1501297197113938100',
-  news: '1501297279804641474'
-};
-
-const MIN_ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
-// ── Stock items ───────────────────────────────────────────────────
-const STOCK_ITEMS = [
-  {
-    id: 'money',
-    name: '1M Money',
-    emoji: '<:Money:1502281700774772908>',
-    emojiId: '1502281700774772908',
-    price: '1,50 €'
-  },
-  {
-    id: 'elytra',
-    name: 'Elytra',
-    emoji: '<:Elytra:1502281765492883497>',
-    emojiId: '1502281765492883497',
-    price: '110 €'
-  },
-  {
-    id: 'mace',
-    name: 'Mace mit Windburst I',
-    emoji: '<:Mace:1502281825131692163>',
-    emojiId: '1502281825131692163',
-    price: '1,50 €'
-  },
-  {
-    id: 'deepslate',
-    name: 'Deepslate Emerald Ore',
-    emoji: '<:DeepslateEmeraldOre:1502281747667353610>',
-    emojiId: '1502281747667353610',
-    price: '0,70 €'
-  },
-  {
-    id: 'ancient',
-    name: 'Ancient Debris',
-    emoji: '<:Ancient:1502281804780933293>',
-    emojiId: '1502281804780933293',
-    price: '0,08 €'
-  },
-  {
-    id: 'gilded',
-    name: 'Gilded Blackstone',
-    emoji: '<:GildedBlackstone:1502281854051680469>',
-    emojiId: '1502281854051680469',
-    price: '0,04 €'
-  },
-  {
-    id: 'skeleton_spawner',
-    name: 'Skeleton Spawner',
-    emoji: '<:SkeletonSpawner:1504552157053980793>',
-    emojiId: '1504552157053980793',
-    price: '6 €'
-  },
-];
-
-// ── Data helpers ──────────────────────────────────────────────────
-// Daten liegen einmal im Speicher: Alle Teile des Bots arbeiten auf demselben
-// Objekt. Früher wurde die Datei bei jedem Zugriff neu gelesen – passierten zwei
-// Dinge gleichzeitig (z. B. zwei Einladungen), konnte eins davon verloren gehen.
-let dataCache = null;
-
-function loadData() {
-  if (dataCache) return dataCache;
-  dataCache = readDataFile();
-  return dataCache;
-}
-
-function readDataFile() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-
-      data.invites = data.invites || {};
-      data.counted = data.counted || [];
-      data.pending = data.pending || {};
-
-      data.leaderboardMessageId = data.leaderboardMessageId || null;
-
-      data.stockMessageId = data.stockMessageId || null;
-      data.stockButtonsMessageId = data.stockButtonsMessageId || null;
-      data.stockChannelId = data.stockChannelId || STOCK_CHANNEL_ID;
-      data.restockChannelId = data.restockChannelId || RESTOCK_CHANNEL_ID;
-
-      data.publicStockMessageId = data.publicStockMessageId || null;
-      data.publicStockChannelId = data.publicStockChannelId || null;
-
-      if (typeof data.nextOrderId !== 'number') data.nextOrderId = 1;
-      if (typeof data.nextTicketOrderId !== 'number') data.nextTicketOrderId = 1;
-
-      data.reviewedOrders = data.reviewedOrders || [];
-      data.giveaways = data.giveaways || {};
-      data.warnings = data.warnings || {};
-      data.tempbans = data.tempbans || {};
-      data.welcomeConfig = data.welcomeConfig || {};
-      data.leaveConfig = data.leaveConfig || {};
-      data.presence = data.presence || null;
-      data.dmThreads = data.dmThreads || {};
-      data.dashboardTicketMeta = data.dashboardTicketMeta || {};
-      data.dashboardOrderMeta = data.dashboardOrderMeta || {};
-      data.dashboardShop = data.dashboardShop || {};
-      data.shopOffers = Array.isArray(data.shopOffers) ? data.shopOffers : [];
-      data.reviewTicketDecisions = data.reviewTicketDecisions || [];
-      data.orderFormsSubmitted = data.orderFormsSubmitted || {};
-
-      if (!data.stock) data.stock = {};
-
-      // Migrate hardcoded STOCK_ITEMS into data.stockItems on first run
-      if (!data.stockItems || data.stockItems.length === 0) {
-        data.stockItems = JSON.parse(JSON.stringify(STOCK_ITEMS));
-      }
-
-      // Fix any items where emoji was stored as a raw ID number
-      data.stockItems.forEach(item => {
-        if (item.emoji && /^\d{15,20}$/.test(item.emoji.trim())) {
-          // Raw ID stored as emoji — build proper format
-          item.emojiId = item.emoji.trim();
-          item.emoji = `<:item:${item.emojiId}>`;
-        } else if (item.emoji) {
-          // Re-extract emojiId in case it got lost
-          const m = item.emoji.match(/<a?:([^:]+):(\d+)>/);
-          if (m) item.emojiId = m[2];
-        }
-      });
-
-      data.stockItems.forEach(item => {
-        if (typeof data.stock[item.id] !== 'number') {
-          data.stock[item.id] = 0;
-        }
-      });
-
-      return data;
-    }
-  } catch (e) {
-    console.error('loadData error:', e.message);
-  }
-
-  const initial = {
-    invites: {},
-    counted: [],
-    pending: {},
-    leaderboardMessageId: null,
-
-    stockMessageId: null,
-    stockButtonsMessageId: null,
-    stockChannelId: STOCK_CHANNEL_ID,
-    restockChannelId: RESTOCK_CHANNEL_ID,
-
-    publicStockMessageId: null,
-    publicStockChannelId: null,
-
-    nextOrderId: 1,
-    nextTicketOrderId: 1,
-
-    reviewedOrders: [],
-    reviewTicketDecisions: [],
-    orderFormsSubmitted: {},
-    giveaways: {},
-    warnings: {},
-    tempbans: {},
-    welcomeConfig: {},
-    leaveConfig: {},
-    presence: null,
-    dmThreads: {},
-    dashboardTicketMeta: {},
-    dashboardOrderMeta: {},
-    dashboardShop: {},
-    shopOffers: [],
-
-    stock: {},
-    stockItems: JSON.parse(JSON.stringify(STOCK_ITEMS))
-  };
-
-  STOCK_ITEMS.forEach(item => {
-    initial.stock[item.id] = 0;
-  });
-
-  return initial;
-}
-
-function saveData(data) {
-  if (data) dataCache = data;
-  try {
-    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    // Erst in eine temp-Datei schreiben, dann ersetzen – so bleibt die
-    // Datei auch bei einem Absturz mitten im Schreiben lesbar.
-    const tmp = `${DATA_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-    fs.renameSync(tmp, DATA_FILE);
-  } catch (e) {
-    console.error('saveData error:', e.message);
-  }
-}
-
-function getInvites(userId) {
-  return loadData().invites[userId] ?? 0;
-}
-
-function setInvites(userId, amount) {
-  const data = loadData();
-  data.invites[userId] = Math.max(0, amount);
-  saveData(data);
-}
-
-function addInvite(userId) {
-  const data = loadData();
-  data.invites[userId] = (data.invites[userId] ?? 0) + 1;
-  saveData(data);
-  return data.invites[userId];
-}
-
-function hasBeenCounted(memberId) {
-  return loadData().counted?.includes(memberId) ?? false;
-}
-
-function markAsCounted(memberId) {
-  const data = loadData();
-  if (!data.counted) data.counted = [];
-  if (!data.counted.includes(memberId)) data.counted.push(memberId);
-  saveData(data);
-}
-
-function setPending(memberId, inviterId) {
-  const data = loadData();
-  if (!data.pending) data.pending = {};
-  data.pending[memberId] = inviterId;
-  saveData(data);
-}
-
-function getPending(memberId) {
-  return loadData().pending?.[memberId] ?? null;
-}
-
-function removePending(memberId) {
-  const data = loadData();
-  if (data.pending) delete data.pending[memberId];
-  saveData(data);
-}
-
-function getNextOrderId() {
-  const data = loadData();
-  const orderId = `#${String(data.nextOrderId).padStart(4, '0')}`;
-  data.nextOrderId += 1;
-  saveData(data);
-  return orderId;
-}
-
-function getNextTicketOrderId() {
-  const data = loadData();
-  const orderId = String(data.nextTicketOrderId).padStart(4, '0');
-  data.nextTicketOrderId += 1;
-  saveData(data);
-  return orderId;
-}
-
-function hasReviewedOrder(orderId) {
-  return loadData().reviewedOrders.includes(orderId);
-}
-
-function markReviewedOrder(orderId) {
-  const data = loadData();
-  if (!data.reviewedOrders.includes(orderId)) {
-    data.reviewedOrders.push(orderId);
-  }
-  saveData(data);
-}
-
-function hasReviewDecision(id) {
-  return loadData().reviewTicketDecisions.includes(id);
-}
-
-function markReviewDecision(id) {
-  const data = loadData();
-  if (!data.reviewTicketDecisions.includes(id)) {
-    data.reviewTicketDecisions.push(id);
-  }
-  saveData(data);
-}
-
-function hasOrderFormSubmitted(channelId) {
-  return !!loadData().orderFormsSubmitted[channelId];
-}
-
-function markOrderFormSubmitted(channelId) {
-  const data = loadData();
-  data.orderFormsSubmitted[channelId] = true;
-  saveData(data);
-}
+// ── Data helpers ── (src/store.js)
+const {
+  loadData,
+  saveData,
+  getInvites,
+  setInvites,
+  addInvite,
+  hasBeenCounted,
+  markAsCounted,
+  setPending,
+  getPending,
+  removePending,
+  getNextOrderId,
+  getNextTicketOrderId,
+  hasReviewedOrder,
+  markReviewedOrder,
+  hasReviewDecision,
+  markReviewDecision,
+  hasOrderFormSubmitted,
+  markOrderFormSubmitted,
+} = require('./src/store');
 
 // ── Helpers ───────────────────────────────────────────────────────
 const closingTickets = new Set();
@@ -523,13 +259,6 @@ const closingTickets = new Set();
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId)) ||
     member.permissions.has(PermissionFlagsBits.Administrator);
-}
-
-function cleanUsername(username) {
-  return username
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]/g, '')
-    .slice(0, 80);
 }
 
 function getTicketOwnerId(channel) {
@@ -808,24 +537,6 @@ function buildOrderStartRow() {
   );
 }
 
-function cleanShortText(value, limit = 120) {
-  return String(value || '').trim().slice(0, limit);
-}
-
-function cleanLongText(value, limit = 1200) {
-  return String(value || '').trim().slice(0, limit);
-}
-
-function normalizeStockItemId(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .replace(/_+/g, '_')
-    .slice(0, 30);
-}
-
 function normalizeStockEmoji(value) {
   let emoji = cleanShortText(value, 80);
   let emojiId = null;
@@ -883,20 +594,6 @@ function findStockItemByText(value, data = loadData()) {
     const hay = `${item.id} ${item.name}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     return hay === needle || hay.includes(needle) || needle.includes(hay);
   }) || null;
-}
-
-function parsePriceNumber(value) {
-  const clean = String(value || '')
-    .replace(/[^\d,.]/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-  const number = Number.parseFloat(clean);
-  return Number.isFinite(number) ? number : null;
-}
-
-function formatEuroValue(value) {
-  if (!Number.isFinite(value)) return '';
-  return `${value.toFixed(2).replace('.', ',')} €`;
 }
 
 function buildInvoiceFromOrderInput({
@@ -1099,29 +796,6 @@ async function resolveDashboardTextChannel(channelId) {
   }
 
   return channel;
-}
-
-function stockStatusText(amount) {
-  if (amount === 0) return '-# Ausverkauft';
-  if (amount <= 5) return `-# Nur noch ${amount} verfügbar`;
-  return `-# ${amount} verfügbar`;
-}
-
-function joinEmbedLines(lines, limit = 3600) {
-  const output = [];
-  let length = 0;
-
-  for (const line of lines) {
-    const nextLength = length + line.length + (output.length ? 2 : 0);
-    if (nextLength > limit) {
-      output.push('... weitere Items im Stock-Tab');
-      break;
-    }
-    output.push(line);
-    length = nextLength;
-  }
-
-  return output.join('\n\n') || 'Keine Items ausgewählt.';
 }
 
 function getLatestShopOffer(data = loadData()) {
@@ -1367,29 +1041,6 @@ async function sendOrderReviewRequest(channel, ownerId, orderId) {
   });
 
   return reviewOrderId;
-}
-
-function parseDuration(str) {
-  const match = str.match(/^(\d+)([smhd])$/i);
-  if (!match) return null;
-  const n = parseInt(match[1]);
-  const unit = match[2].toLowerCase();
-  const ms = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit];
-  return n * ms;
-}
-
-function formatTimeLeft(ms) {
-  if (ms <= 0) return 'Beendet';
-  const d = Math.floor(ms / 86400000); ms %= 86400000;
-  const h = Math.floor(ms / 3600000); ms %= 3600000;
-  const m = Math.floor(ms / 60000); ms %= 60000;
-  const s = Math.floor(ms / 1000);
-  const parts = [];
-  if (d) parts.push(`${d}d`);
-  if (h) parts.push(`${h}h`);
-  if (m) parts.push(`${m}m`);
-  if (s && !d) parts.push(`${s}s`);
-  return parts.join(' ') || '< 1s';
 }
 
 function buildGiveawayEmbed(gw, ended = false) {
@@ -5731,48 +5382,8 @@ app.use(cors({
 app.use(express.json({ limit: '16mb' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
-// ── Dashboard-Login ──
-// Nach dem Login gibt es ein eigenes, signiertes Token (30 Tage gültig) statt des
-// Passworts. Es übersteht Neustarts und wird ungültig, wenn das Passwort geändert wird.
-// Das Passwort selbst wird nie gespeichert oder in Adressen übertragen.
-const crypto = require('crypto');
-const DASHBOARD_TOKEN_DAYS = 30;
-const tokenKey = () => crypto.createHash('sha256').update(`hugosmp-dashboard:${DASHBOARD_PASSWORD}`).digest();
-const safeEqual = (a, b) => {
-  const x = Buffer.from(String(a));
-  const y = Buffer.from(String(b));
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
-
-function createDashboardToken() {
-  const expires = Date.now() + DASHBOARD_TOKEN_DAYS * 24 * 3600 * 1000;
-  const sig = crypto.createHmac('sha256', tokenKey()).update(String(expires)).digest('base64url');
-  return `${expires}.${sig}`;
-}
-
-function validDashboardToken(token) {
-  const [expires, sig] = String(token || '').split('.');
-  if (!/^\d{13}$/.test(expires || '') || Number(expires) < Date.now() || !sig) return false;
-  const expected = crypto.createHmac('sha256', tokenKey()).update(expires).digest('base64url');
-  return safeEqual(sig, expected);
-}
-
-// Einfache Bremse pro IP (Login, öffentliche Bestellungen)
-function rateLimiter({ max, windowMs, message }) {
-  const hits = new Map();
-  return (req, res, next) => {
-    const now = Date.now();
-    const key = req.ip;
-    const list = (hits.get(key) || []).filter(t => now - t < windowMs);
-    if (list.length >= max) {
-      return res.status(429).json({ success: false, error: message });
-    }
-    list.push(now);
-    hits.set(key, list);
-    if (hits.size > 5000) hits.clear();
-    next();
-  };
-}
+// ── Dashboard-Login ── (src/web/auth.js)
+const { createDashboardToken, validDashboardToken, safeEqual, rateLimiter } = require('./src/web/auth');
 
 function getDashboardToken(req) {
   const auth = req.get('authorization') || '';
