@@ -12,8 +12,9 @@ const { buildStockEmbed } = require('./stock');
 const { buildRulesVerifyPanel, buildOrderInfoPanel, OLD_ORDER_INFO_TITLES } = require('./infoPanels');
 const { e, buttonEmoji } = require('../emojis');
 
-function roleButton(id, label, icon, fallback) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(buttonEmoji(icon, fallback)).setStyle(ButtonStyle.Secondary);
+// Gleich breite Buttons, damit sie auf dem Handy rechts neben dem Text bleiben
+function roleButton(id) {
+  return new ButtonBuilder().setCustomId(id).setLabel('An/Aus').setEmoji(buttonEmoji('bell', '🔔')).setStyle(ButtonStyle.Secondary);
 }
 
 function buildRolesPanel() {
@@ -23,10 +24,10 @@ function buildRolesPanel() {
     title: 'Worüber willst du informiert werden?',
     body: '-# Ein Klick gibt dir die Rolle, ein zweiter nimmt sie wieder weg.',
     items: [
-      { text: `${e('gift', '🎉')} **Giveaways**\n-# Neue Verlosungen`, button: roleButton('role_giveaways', 'Giveaways', 'gift', '🎉') },
-      { text: `${e('box', '📦')} **Restocks**\n-# Items wieder auf Lager`, button: roleButton('role_restocks', 'Restocks', 'box', '📦') },
-      { text: `${e('sparkle', '💰')} **Deals**\n-# Rabatte und Gratis-Aktionen`, button: roleButton('role_deals', 'Deals', 'sparkle', '💰') },
-      { text: `${e('news', '📰')} **News**\n-# Ankündigungen`, button: roleButton('role_news', 'News', 'news', '📰') }
+      { text: `${e('gift', '🎉')} **Giveaways**\n-# Neue Verlosungen`, button: roleButton('role_giveaways') },
+      { text: `${e('box', '📦')} **Restocks**\n-# Items wieder auf Lager`, button: roleButton('role_restocks') },
+      { text: `${e('sparkle', '💰')} **Deals**\n-# Rabatte und Gratis-Aktionen`, button: roleButton('role_deals') },
+      { text: `${e('news', '📰')} **News**\n-# Ankündigungen`, button: roleButton('role_news') }
     ],
     timestamp: false
   });
@@ -108,7 +109,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 7;
+const PANEL_REFRESH_REVISION = 8;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
