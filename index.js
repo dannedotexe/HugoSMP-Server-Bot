@@ -15,6 +15,7 @@ const { BrandEmbed, notice, noticeFromText, setBrandIcon } = require('./src/them
 const guildConfig = require('./src/guildConfig');
 const coreCommands = require('./src/commands/core');
 const updateCommands = require('./src/commands/update');
+const structureCommands = require('./src/commands/structure');
 
 // Aktueller Git-Commit, damit man sieht, ob das Auto-Update gegriffen hat.
 function readGitCommitFromFiles() {
@@ -2581,7 +2582,8 @@ async function registerCommands(guildId) {
       .toJSON(),
 
     ...coreCommands.definitions(),
-    ...updateCommands.definitions()
+    ...updateCommands.definitions(),
+    ...structureCommands.definitions()
   ];
 
   await rest.put(Routes.applicationGuildCommands(client.user.id, guildId), { body: commands });
@@ -2898,6 +2900,7 @@ client.on('interactionCreate', async interaction => {
   try {
     if (interaction.isChatInputCommand() && await coreCommands.handleCommand(interaction, coreContext)) return;
     if (interaction.isChatInputCommand() && await updateCommands.handleCommand(interaction)) return;
+    if (interaction.isChatInputCommand() && await structureCommands.handleCommand(interaction)) return;
     if (interaction.isMessageComponent() && await coreCommands.handleComponent(interaction)) return;
 
     await handleInteraction(interaction);
