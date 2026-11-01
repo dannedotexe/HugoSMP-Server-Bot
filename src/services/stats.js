@@ -173,7 +173,9 @@ function getStats(rangeDays = 30, data = loadData()) {
       joins: d.joins || 0,
       leaves: d.leaves || 0,
       tickets: d.tickets || 0,
-      reviews: d.reviews || 0
+      reviews: d.reviews || 0,
+      responses: d.responses || 0,
+      responseMinutes: d.responseMinutes || 0
     });
   }
 
@@ -215,7 +217,8 @@ function getStats(rangeDays = 30, data = loadData()) {
       leaves: sumOf('leaves'),
       tickets: sumOf('tickets'),
       reviews: sumOf('reviews'),
-      avgDeliveryMinutes
+      avgDeliveryMinutes,
+      avgResponseMinutes: sumOf('responses') ? Math.round(sumOf('responseMinutes') / sumOf('responses')) : null
     },
     allTime: {
       completed: s.orders.length,

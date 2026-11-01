@@ -127,6 +127,7 @@ async function closeTicket(channel, closedBy, reason = 'Geschlossen') {
   }
 
   closingTickets.add(channel.id);
+  require('./ticketWait').clearWait(channel.id);
 
   try {
     const ownerId = getTicketOwnerId(channel);
@@ -534,7 +535,8 @@ async function serializeDashboardTicket(channel, data = loadData(), options = {}
     createdAt: channel.createdTimestamp || null,
     lastMessageId: channel.lastMessageId || null,
     note: meta.note || '',
-    pinned: Boolean(meta.pinned)
+    pinned: Boolean(meta.pinned),
+    waitingSince: require('./ticketWait').getWait(channel.id, data)?.waitingSince || null
   };
 }
 

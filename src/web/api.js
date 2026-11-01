@@ -218,6 +218,10 @@ module.exports = function createWebApi(ctx) {
           : 0
       },
       dms: getDashboardDmStats(data),
+      backup: {
+        lastAt: data.lastBackupAt || null,
+        count: require('../services/backup').listBackups().length
+      },
       stock: {
         totalItems: stock.length,
         out: stock.filter(item => item.status === 'out').length,
@@ -874,7 +878,15 @@ module.exports = function createWebApi(ctx) {
       if (allowedStatuses.includes(status)) patch.status = status;
       if (typeof req.body?.note === 'string') patch.note = req.body.note.trim().slice(0, 800);
 
+      const before = getOrderDashboardMeta(loadData(), channelId).status;
       updateDashboardOrderMeta(channelId, patch);
+
+      // Kunde sieht Status-Änderungen direkt im Ticket
+      if (patch.status && patch.status !== before && patch.status !== 'fertig') {
+        const { buildStatusChangeCard } = require('../services/orderStatus');
+        await channel.send(buildStatusChangeCard(`#${String(getTicketOrderId(channel)).replace(/^#/, '')}`, patch.status, getTicketOwnerId(channel)))
+          .catch(e => console.error('status card error:', e.message));
+      }
 
       res.json({
         success: true,
