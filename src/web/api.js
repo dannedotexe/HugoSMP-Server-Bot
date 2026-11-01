@@ -276,9 +276,28 @@ module.exports = function createWebApi(ctx) {
     return saved;
   }
 
+  // Dashboard = dashboard.html + assets/dashboard.css + assets/dashboard.js.
+  // ?v=<Prüfsumme> sorgt dafür, dass Handys nach einem Update nie alte Dateien nutzen.
+  function renderDashboardPage() {
+    const root = path.join(__dirname, '..', '..');
+    const fs = require('fs');
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha1');
+    for (const file of ['assets/dashboard.css', 'assets/dashboard.js']) {
+      hash.update(fs.readFileSync(path.join(root, file)));
+    }
+    const version = hash.digest('hex').slice(0, 10);
+    return fs.readFileSync(path.join(root, 'dashboard.html'), 'utf8').replaceAll('__V__', version);
+  }
+
   app.get('/dashboard', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(path.join(__dirname, '..', '..', 'dashboard.html'));
+    try {
+      res.type('html').send(renderDashboardPage());
+    } catch (e) {
+      console.error('dashboard page error:', e.message);
+      res.status(500).send('Dashboard konnte nicht geladen werden.');
+    }
   });
 
   app.get('/api/dashboard/status', (req, res) => {
