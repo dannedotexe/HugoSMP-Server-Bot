@@ -29,7 +29,12 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
   const page = await fetch(`${base}/dashboard`);
   assert.equal(page.status, 200, 'Dashboard-Seite wird ausgeliefert');
-  assert.match(await page.text(), /<html/i);
+  const html = await page.text();
+  assert.match(html, /<html/i);
+  const version = html.match(/dashboard\.js\?v=([0-9a-f]{10})/);
+  assert.ok(version, 'Dashboard-Skript mit Version eingebunden');
+  assert.equal((await fetch(`${base}/assets/dashboard.js?v=${version[1]}`)).status, 200);
+  assert.equal((await fetch(`${base}/assets/dashboard.css?v=${version[1]}`)).status, 200);
   assert.equal((await fetch(`${base}/assets/dashboard-icon.jpg`)).status, 200, 'Bilder werden ausgeliefert');
   assert.equal((await fetch(`${base}/api/stock`)).status, 200);
   assert.equal((await post('/api/dashboard/login', { password: 'falsch' })).status, 401);
