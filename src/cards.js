@@ -108,12 +108,15 @@ function card({
     container.addActionRowComponents(...rows);
   }
 
-  const footerText = [
-    BRAND_NAME,
-    footer || null,
-    timestamp ? `<t:${Math.floor(Date.now() / 1000)}:R>` : null
-  ].filter(Boolean).join(' · ');
-  container.addTextDisplayComponents(text(`-# ${footerText}`));
+  // Fußzeile nur, wenn sie etwas sagt (nicht nur „HugoSMP“)
+  if (footer || timestamp) {
+    const footerText = [
+      BRAND_NAME,
+      footer || null,
+      timestamp ? `<t:${Math.floor(Date.now() / 1000)}:R>` : null
+    ].filter(Boolean).join(' · ');
+    container.addTextDisplayComponents(text(`-# ${footerText}`));
+  }
 
   const components = [];
   if (mention) components.push(text(mention));
