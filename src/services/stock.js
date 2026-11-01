@@ -9,6 +9,7 @@ const { BrandEmbed } = require('../theme');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { makeDashboardError } = require('./dms');
 const { client } = require('../client');
+const { card, emojiImageUrl } = require('../cards');
 
 function normalizeStockEmoji(value) {
   let emoji = cleanShortText(value, 80);
@@ -90,6 +91,61 @@ function buildSaleEmbed({ title, itemName, discount, description, until }) {
     .setTimestamp();
 
   return embed;
+}
+
+// Shop-Panel als moderne Karte (Dashboard → „Shop-Panel posten“)
+function buildShopPanelCard({ title, description, itemIds, includeSale }, orderRow, data = loadData()) {
+  if (Array.isArray(itemIds) && itemIds.length === 0) {
+    throw makeDashboardError('Wähle mindestens ein Item aus.', 400);
+  }
+  const wanted = Array.isArray(itemIds) && itemIds.length ? new Set(itemIds.map(String)) : null;
+  const items = (data.stockItems || STOCK_ITEMS)
+    .filter(item => !wanted || wanted.has(item.id))
+    .slice(0, 20);
+
+  const lines = items.map(item => {
+    const amount = Number(data.stock?.[item.id] || 0);
+    const status = amount === 0 ? '🔴 ausverkauft' : amount <= 5 ? `🟡 nur noch ${amount}` : `🟢 ${amount} da`;
+    return `${item.emoji || '•'} **${item.name}** — ${item.price}  ·  ${status}`;
+  });
+
+  const offer = includeSale ? getLatestShopOffer(data) : null;
+
+  return card({
+    tone: 'primary',
+    eyebrow: '🛒 Shop',
+    title: cleanShortText(title || 'Shop', 120),
+    body: cleanLongText(description || 'Wähle unten eine Kategorie und erstelle deine Bestellung.', 500),
+    thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
+    blocks: [
+      offer ? `🔥 **Angebot:** ${offer.title} – ${offer.discount}` : null,
+      joinEmbedLines(lines) || 'Gerade keine Artikel.'
+    ],
+    footer: 'Bestellung über die Buttons starten',
+    rows: orderRow ? [orderRow] : []
+  });
+}
+
+function buildSaleCard({ title, itemName, discount, description, until, itemId }, orderRow, mention, data = loadData()) {
+  const item = (data.stockItems || STOCK_ITEMS).find(i => i.id === itemId);
+  const facts = [
+    itemName && `**Item:** ${itemName}`,
+    discount && `**Angebot:** ${discount}`,
+    until && `**Gültig bis:** ${until}`
+  ].filter(Boolean).join('\n');
+
+  return card({
+    tone: 'warning',
+    eyebrow: '🔥 Angebot',
+    title: cleanShortText(title || 'Neues Angebot', 120),
+    body: cleanLongText(description || 'Sichere dir das Angebot im Shop-Ticket.', 900),
+    thumbnail: emojiImageUrl(item),
+    blocks: [facts || null],
+    footer: 'Nur solange der Vorrat reicht',
+    rows: orderRow ? [orderRow] : [],
+    mention: mention || null,
+    allowedMentions: { roles: mention ? [mention.replace(/\D/g, '')] : [] }
+  });
 }
 
 function buildStockEmbed() {
@@ -237,24 +293,33 @@ async function notifyRestock(item, oldAmount, newAmount, sourceChannelId = null,
 
   const mention = PING_ROLES.restocks ? `<@&${PING_ROLES.restocks}>` : '';
   const shouldMention = options.mention !== false;
-  const embed = new BrandEmbed()
-    .setAuthor({ name: 'Restock' })
-    .setTitle(item.name)
-    .setDescription(`${item.emoji ? `${item.emoji} ` : ''}Wieder auf Lager – bestell über das Ticket-Panel.`)
-    .addFields(
-      { name: 'Preis', value: item.price || '—', inline: true },
-      { name: 'Verfügbar', value: `${currentAmount}`, inline: true },
-      { name: 'Neu', value: `+${addedAmount}`, inline: true }
-    )
-    .setTimestamp();
+  const topLine = shouldMention && mention ? mention : (options.content ? `-# ${options.content}` : null);
 
-  const message = await channel.send({
-    content: shouldMention && mention ? mention : options.content,
-    embeds: [embed],
+  const orderRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_cat_items_geld')
+      .setLabel('Jetzt bestellen')
+      .setEmoji('🛒')
+      .setStyle(ButtonStyle.Success)
+  );
+
+  const payload = card({
+    tone: 'success',
+    eyebrow: '📦 Restock',
+    title: `${item.emoji && !emojiImageUrl(item) ? `${item.emoji} ` : ''}${item.name} ist wieder da!`,
+    body:
+      `**Preis:** ${item.price || '—'}\n` +
+      `**Verfügbar:** ${currentAmount} Stück  ·  **neu:** +${addedAmount}`,
+    thumbnail: emojiImageUrl(item),
+    footer: 'Schnell sein lohnt sich',
+    rows: [orderRow],
+    mention: topLine,
     allowedMentions: {
       roles: shouldMention && PING_ROLES.restocks ? [PING_ROLES.restocks] : []
     }
-  }).catch(e => console.error('restock notify error:', e.message));
+  });
+
+  const message = await channel.send(payload).catch(e => console.error('restock notify error:', e.message));
 
   return {
     channelId,
@@ -318,6 +383,8 @@ module.exports = {
   getLatestShopOffer,
   buildShopPanelEmbed,
   buildSaleEmbed,
+  buildShopPanelCard,
+  buildSaleCard,
   buildStockEmbed,
   buildStockButtons,
   updateStockPanel,
