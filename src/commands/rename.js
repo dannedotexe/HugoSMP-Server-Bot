@@ -37,25 +37,37 @@ const TRANSLATIONS = {
   restocks: 'restock', restock: 'restock',
   deals: 'angebote', offers: 'angebote', sales: 'angebote',
   payments: 'zahlung', payment: 'zahlung',
-  waiting: 'warteraum', afk: 'afk', music: 'musik'
+  waiting: 'warteraum', afk: 'afk', music: 'musik',
+  'our ad': 'werbung', ad: 'werbung', ads: 'werbung', advertising: 'werbung',
+  'invite rewards': 'einladungs belohnungen', rewards: 'belohnungen', reward: 'belohnungs',
+  'ping claim': 'ping claim', unverified: 'unverifiziert', reports: 'meldungen', report: 'meldungen',
+  alerts: 'alarme', alert: 'alarme', schematic: 'schematics', 'resource packs': 'resource packs',
+  'new members': 'neue mitglieder', members: 'mitglieder'
 };
 
 // Kanal-Art → Emoji. Erste passende Regel gewinnt, gleiche Art = gleiches Emoji.
 const CHANNEL_KINDS = [
   { emoji: '📜', words: ['regeln', 'tos', 'agb'] },
+  { emoji: '🔒', words: ['unverifiziert'] },
+  { emoji: '💰', words: ['belohnungs', 'auszahlung', 'auszahlungen'] },
+  { emoji: '📺', words: ['werbung'] },
+  { emoji: '📌', words: ['claim', 'pings', 'ping'] },
+  { emoji: '🏗️', words: ['schematics', 'baupläne'] },
+  { emoji: '🎨', words: ['resource', 'pack', 'packs', 'texture', 'texturepack'] },
+  { emoji: '🚨', words: ['meldungen', 'alarme', 'warnungen'] },
   { emoji: '📢', words: ['ankündigungen', 'updates', 'announcement'] },
   { emoji: '📰', words: ['news', 'neuigkeiten'] },
-  { emoji: '👋', words: ['willkommen', 'abschied'] },
+  { emoji: '👋', words: ['willkommen', 'abschied', 'mitglieder'] },
   { emoji: '✅', words: ['verifizierung'] },
   { emoji: '🎭', words: ['rollen'] },
   { emoji: '📈', words: ['preise', 'stock', 'lager', 'bestand'] },
   { emoji: '📦', words: ['restock'] },
   { emoji: '🏷️', words: ['angebote'] },
-  { emoji: '🛒', words: ['shop', 'market', 'kaufen', 'bestellen', 'bestellungen'] },
+  { emoji: '🛒', words: ['shop', 'market', 'kaufen', 'bestellen', 'bestellungen', 'bestell'] },
   { emoji: '🌐', words: ['website', 'web'] },
   { emoji: '⭐', words: ['bewertungen', 'feedback'] },
   { emoji: '🎉', words: ['giveaways', 'events'] },
-  { emoji: '📨', words: ['einladungen'] },
+  { emoji: '📨', words: ['einladungen', 'einladungs'] },
   { emoji: '🏆', words: ['bestenliste', 'ranking', 'top'] },
   { emoji: '📸', words: ['medien', 'bilder', 'clips', 'screenshots'] },
   { emoji: '😂', words: ['memes', 'meme'] },
@@ -66,9 +78,9 @@ const CHANNEL_KINDS = [
   { emoji: '🎫', words: ['support', 'ticket', 'tickets', 'hilfe'] },
   { emoji: '❓', words: ['faq', 'fragen'] },
   { emoji: '💳', words: ['zahlung'] },
-  { emoji: '🛡️', words: ['team', 'moderation', 'admin', 'staff', 'intern'] },
+  { emoji: '🛡️', words: ['team', 'moderation', 'admin', 'staff', 'intern', 'modchat', 'mod'] },
   { emoji: 'ℹ️', words: ['infos'] },
-  { emoji: '💬', words: ['allgemein', 'chat', 'general', 'talk', 'lounge'] }
+  { emoji: '💬', words: ['allgemein', 'chat', 'general', 'talk', 'lounge', 'kundenchat'] }
 ];
 
 const VOICE_KINDS = [
@@ -103,8 +115,15 @@ const PING_TOPICS = { giveaways: 'Giveaways', restocks: 'Restock', deals: 'Deals
 const EMOJI_RE = /(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}|‍|️|⃣)/gu;
 const DECOR_RE = /[┃|︱│｜•・»«>→⁠⎮❯❮✦✧★☆◆◇■□▪▫─━═~_:]/g;
 
+// Zierschriften (ᴘʀᴇɪꜱᴇ, 𝗣𝗥𝗘𝗜𝗦𝗘, Ｐｒｅｉｓｅ, ⓟⓡⓔⓘⓢⓔ …) → normale Buchstaben,
+// sonst erkennt der Bot die Kanäle nicht.
+const SMALL_CAPS = { ᴀ: 'a', ʙ: 'b', ᴄ: 'c', ᴅ: 'd', ᴇ: 'e', ꜰ: 'f', ɢ: 'g', ʜ: 'h', ɪ: 'i', ᴊ: 'j', ᴋ: 'k', ʟ: 'l', ᴍ: 'm', ɴ: 'n', ᴏ: 'o', ᴘ: 'p', ǫ: 'q', ʀ: 'r', ꜱ: 's', ᴛ: 't', ᴜ: 'u', ᴠ: 'v', ᴡ: 'w', ʏ: 'y', ᴢ: 'z' };
+function plainLetters(text) {
+  return String(text || '').normalize('NFKC').replace(/[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ]/g, ch => SMALL_CAPS[ch]);
+}
+
 function baseWords(name) {
-  return String(name || '')
+  return plainLetters(name)
     .replace(EMOJI_RE, ' ')
     .replace(DECOR_RE, ' ')
     .replace(/-/g, ' ')
@@ -123,6 +142,12 @@ function pickKind(kinds, words) {
   return kinds.find(k => k.words.some(w => words.includes(w))) || kinds[kinds.length - 1];
 }
 
+// Erstes Emoji im bisherigen Namen (z. B. „📺-our-ad“ → „📺“)
+function currentEmoji(name) {
+  const m = String(name || '').match(/\p{Extended_Pictographic}\uFE0F?/u);
+  return m ? m[0] : null;
+}
+
 function capitalize(word) {
   return word ? word[0].toUpperCase() + word.slice(1) : word;
 }
@@ -130,8 +155,10 @@ function capitalize(word) {
 function textChannelName(channel) {
   const words = translateWords(baseWords(channel.name));
   const name = (words.join('-') || 'kanal').replace(/-+/g, '-').slice(0, 90);
-  const kind = pickKind(CHANNEL_KINDS, words);
-  return `${kind.emoji}${SEP}${name}`;
+  // Unbekannte Kanäle behalten ihr bisheriges Emoji statt überall 💬
+  const kind = CHANNEL_KINDS.find(k => k.words.some(w => words.includes(w)));
+  const emoji = kind?.emoji || currentEmoji(channel.name) || '💬';
+  return `${emoji}${SEP}${name}`;
 }
 
 function voiceBase(channel) {
@@ -378,4 +405,4 @@ async function handleComponent(interaction) {
   return true;
 }
 
-module.exports = { definitions, handleCommand, handleComponent, buildPlan, planText };
+module.exports = { definitions, handleCommand, handleComponent, buildPlan, planText, textChannelName };
