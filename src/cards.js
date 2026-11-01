@@ -43,6 +43,7 @@ function text(content) {
  *   title: 'Elytra',
  *   body: 'Text …',
  *   thumbnail: 'https://…',        // Bild rechts neben Titel/Text
+ *   items: [{ text, button }],     // Zeilen mit Button rechts daneben
  *   blocks: ['Text', …],           // weitere Abschnitte, durch Linien getrennt
  *   footer: 'Bestellung #12',      // kleine Zeile unten (mit Zeitstempel)
  *   rows: [ActionRowBuilder, …],   // Buttons in der Karte
@@ -57,6 +58,7 @@ function card({
   body,
   thumbnail,
   blocks = [],
+  items = [],
   footer,
   timestamp = true,
   rows = [],
@@ -80,6 +82,18 @@ function card({
       );
     } else {
       container.addTextDisplayComponents(text(head));
+    }
+  }
+
+  // Einträge mit eigenem Button rechts daneben (z. B. Ticket-Kategorien)
+  if (items.length) {
+    container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
+    for (const item of items) {
+      container.addSectionComponents(
+        new SectionBuilder()
+          .addTextDisplayComponents(text(item.text))
+          .setButtonAccessory(item.button)
+      );
     }
   }
 
@@ -126,6 +140,22 @@ function cardText(message) {
   return parts.join('\n');
 }
 
+// Alle Buttons einer Nachricht finden – egal ob alte Button-Reihe oder Karte
+function collectButtons(message) {
+  const ids = [];
+  const urls = [];
+  const walk = list => {
+    for (const component of list || []) {
+      if (component.customId) ids.push(component.customId);
+      if (component.url) urls.push(component.url);
+      if (component.components) walk(component.components);
+      if (component.accessory) walk([component.accessory]);
+    }
+  };
+  walk(message?.components);
+  return { ids, urls };
+}
+
 function isCardMessage(message) {
   return Boolean(Number(message?.flags?.bitfield ?? message?.flags ?? 0) & MessageFlags.IsComponentsV2);
 }
@@ -134,5 +164,6 @@ module.exports = {
   card,
   cardText,
   isCardMessage,
+  collectButtons,
   emojiImageUrl
 };

@@ -22,12 +22,7 @@ module.exports = function createAdmin(ctx) {
 
   async function command(interaction) {
     if (interaction.commandName === 'website') {
-  const { embed, row } = buildWebsitePanel();
-
-  await interaction.channel.send({
-    embeds: [embed],
-    components: [row]
-  });
+  await interaction.channel.send(buildWebsitePanel());
 
   return interaction.reply({
     content: '✅ Website-Post gesendet!',
@@ -114,12 +109,7 @@ module.exports = function createAdmin(ctx) {
     }
 
     if (interaction.commandName === 'setuproles') {
-      const { embed, row } = buildRolesPanel();
-
-      await interaction.channel.send({
-        embeds: [embed],
-        components: [row]
-      });
+      await interaction.channel.send(buildRolesPanel());
 
       return interaction.reply({
         content: '✅ Rollen-Panel gesendet!',
@@ -165,12 +155,7 @@ module.exports = function createAdmin(ctx) {
     }
 
     if (interaction.commandName === 'setuptickets') {
-      const { embed, row } = buildTicketPanel();
-
-      await interaction.channel.send({
-        embeds: [embed],
-        components: [row]
-      });
+      await interaction.channel.send(buildTicketPanel());
 
       return interaction.reply({
         content: '✅ Ticket Panel gesendet!',

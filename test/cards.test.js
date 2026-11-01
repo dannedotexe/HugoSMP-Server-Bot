@@ -53,10 +53,23 @@ test('Regeln+Verifizierung und Bestell-Info: gültige Embeds mit echten Kanal-Li
   assert.ok(r.description.length < 4096);
   assert.match(r.description, /<#11>/);
   assert.match(r.description, /<#12>/);
-  assert.match(r.description, /\*\*#proofs\*\*/, 'fehlender Kanal als Text');
+  assert.match(r.description, /\*\*#bewertungen\*\*/, 'fehlender Kanal als Text');
   assert.equal(rules.row.toJSON().components[0].custom_id, 'verify_member');
   const info = buildOrderInfoPanel(guild);
   assert.match(JSON.stringify(info.embed.toJSON()), /<#13>/);
   assert.equal(info.row.toJSON().components.length, 2);
   assert.equal(buildOrderInfoPanel({ iconURL: () => null }).row.toJSON().components.length, 1);
+});
+
+test('Feste Panels als Karten: Buttons werden erkannt, Signatur stabil', () => {
+  const panels = require('../src/services/panels');
+  const { collectButtons } = require('../src/cards');
+  const { createComponent } = require(path.join(path.dirname(require.resolve('discord.js')), 'util', 'Components.js'));
+  const asMessage = p => ({ components: json(p).map(c => createComponent(c)) });
+  for (const [build, id] of [[panels.buildTicketPanel, 'create_support_ticket'], [panels.buildRolesPanel, 'role_giveaways'], [panels.buildPanel, 'gen_invite']]) {
+    const ids = collectButtons(asMessage(build())).ids;
+    assert.ok(ids.includes(id), id);
+  }
+  assert.ok(collectButtons(asMessage(panels.buildWebsitePanel())).urls.some(u => u.includes('hugosmpmarket')));
+  assert.equal(panels.panelDesignSignature(), panels.panelDesignSignature(), 'kein Zeitstempel → kein Dauer-Neuladen');
 });

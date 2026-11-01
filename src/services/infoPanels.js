@@ -27,7 +27,7 @@ function channelLink(guild, keyword, fallbackName = keyword) {
 function buildRulesVerifyPanel(guild, moneyRate) {
   const tickets = channelLink(guild, 'tickets');
   const info = channelLink(guild, 'bestellinfo', 'bestell-info');
-  const proofs = channelLink(guild, 'proofs');
+  const proofs = channelLink(guild, 'bewertungen');
   const invites = channelLink(guild, 'inviterewards', 'invite-rewards');
 
   const description = [
@@ -40,7 +40,7 @@ function buildRulesVerifyPanel(guild, moneyRate) {
     '• **Geduld:** Tickets werden schnellstmöglich bearbeitet. Unnötiges Pingen verzögert alles.',
     '',
     '### 💳 Handel & Sicherheit',
-    `• **Scamming:** Betrugsversuche führen zum permanenten Bann und einem Eintrag in ${proofs}.`,
+    `• **Scamming:** Betrugsversuche führen zum permanenten Bann und einem öffentlichen Eintrag in ${proofs}.`,
     '• **Vorkasse:** Erst wird vollständig bezahlt, dann werden die Items (z. B. *Gilded Blackstone* oder Ingame-Geld) übergeben.',
     '• **Keine Verzögerungen:** Stehen die Zahlungsinfos im Ticket, wird sofort bezahlt.',
     '• **Hinhalten:** Unnötiges Verzögern oder „Trolling“ beim Bezahlen wird mit Timeout oder Handelsausschluss bestraft.',
