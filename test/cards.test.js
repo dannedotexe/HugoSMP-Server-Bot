@@ -83,3 +83,19 @@ test('Feste Panels als Karten: Buttons werden erkannt, Signatur stabil', () => {
   assert.ok(collectButtons(asMessage(panels.buildWebsitePanel())).urls.some(u => u.includes('hugosmpmarket')));
   assert.equal(panels.panelDesignSignature(), panels.panelDesignSignature(), 'kein Zeitstempel → kein Dauer-Neuladen');
 });
+
+test('Eigene Emojis: Tausch in Embeds, Karten, Buttons – Code bleibt unverändert', () => {
+  const emojis = require('../src/emojis');
+  const { BrandEmbed, notice } = require('../src/theme');
+  emojis._ids.set('check', '1').set('ticket', '2').set('cross', '3');
+  const j = new BrandEmbed().setTitle('🎫 T').setDescription('✅ ok `🎫┃tickets`').addFields({ name: '❌', value: 'x' }).toJSON();
+  assert.equal(j.title, '<:hs_ticket:2> T');
+  assert.equal(j.description, '<:hs_check:1> ok `🎫┃tickets`');
+  assert.equal(j.fields[0].name, '<:hs_cross:3>');
+  assert.match(notice('Fehler', 'danger').toJSON().description, /^<:hs_cross:3> Fehler$/);
+  const b = new ButtonBuilder().setCustomId('a').setLabel('b').setStyle(ButtonStyle.Primary).setEmoji('✅').toJSON();
+  assert.equal(b.emoji.id, '1');
+  assert.match(cardText({ components: json(card({ title: '🎫 x' })) }), /<:hs_ticket:2>/);
+  emojis._ids.clear();
+  assert.equal(new BrandEmbed().setDescription('✅').toJSON().description, '✅', 'ohne Upload bleibt alles normal');
+});

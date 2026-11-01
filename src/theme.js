@@ -3,6 +3,7 @@
 // laufen über BrandEmbed, damit jede Nachricht gleich aussieht.
 
 const { EmbedBuilder } = require('discord.js');
+const { emojify, e } = require('./emojis');
 
 const BRAND_NAME = 'HugoSMP';
 
@@ -88,7 +89,40 @@ class BrandEmbed extends EmbedBuilder {
   setTone(tone) {
     return super.setColor(TONES[tone] ?? COLORS.primary);
   }
+
+  // Eigene Emojis statt normaler (Titel, Text, Felder)
+  setTitle(title) {
+    return super.setTitle(emojify(title));
+  }
+
+  setDescription(description) {
+    return super.setDescription(emojify(description));
+  }
+
+  addFields(...fields) {
+    return super.addFields(...fields.flat().map(emojifyField));
+  }
+
+  setFields(...fields) {
+    return super.setFields(...fields.flat().map(emojifyField));
+  }
+
+  toJSON() {
+    // Embeds, die als Rohdaten erstellt wurden (new BrandEmbed({ … }))
+    const json = super.toJSON();
+    if (json.title) json.title = emojify(json.title);
+    if (json.description) json.description = emojify(json.description);
+    if (json.fields) json.fields = json.fields.map(emojifyField);
+    return json;
+  }
 }
+
+function emojifyField(field) {
+  if (!field || typeof field !== 'object') return field;
+  return { ...field, name: emojify(field.name), value: emojify(field.value) };
+}
+
+const TONE_ICONS = { success: 'check', danger: 'cross', warning: 'warn' };
 
 // Kurze Statusmeldungen (Erfolg, Fehler, Hinweis) im einheitlichen Stil.
 const NOTICE_PREFIXES = [
@@ -101,7 +135,8 @@ const NOTICE_PREFIXES = [
 ];
 
 function notice(text, tone = 'primary') {
-  return new BrandEmbed().setTone(tone).setDescription(text);
+  const icon = TONE_ICONS[tone] ? e(TONE_ICONS[tone]) : '';
+  return new BrandEmbed().setTone(tone).setDescription(icon ? `${icon} ${text}` : text);
 }
 
 function noticeFromText(content) {

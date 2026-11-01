@@ -47,4 +47,60 @@ function buttonEmoji(name, fallback) {
   return id ? { id, name: `hs_${name}` } : fallback;
 }
 
-module.exports = { syncEmojis, e, buttonEmoji, _ids: ids };
+// Normale Emojis → eigene Emojis (nur wenn hochgeladen)
+const UNICODE_MAP = {
+  '✅': 'check', '✔️': 'check', '❌': 'cross', '⚠️': 'warn', '⚠': 'warn', '🚨': 'warn',
+  'ℹ️': 'info', '⏳': 'clock', '⏰': 'clock', '🕒': 'clock', '💰': 'euro', '💸': 'euro', '💶': 'money', '💵': 'money',
+  '🎫': 'ticket', '🎟️': 'ticket', '⭐': 'star', '🌟': 'star', '🎉': 'party', '🎊': 'party', '📌': 'pin',
+  '🔒': 'lock', '🔐': 'lock', '🔓': 'unlock', '🎨': 'palette', '📦': 'box', '📐': 'blueprint', '🏗️': 'blueprint',
+  '🛒': 'cart', '🛡️': 'shield', '🛡': 'shield', '📊': 'chart', '📈': 'chart', '💳': 'card', '📰': 'news',
+  '🌐': 'globe', '🔥': 'fire', '🎁': 'gift', '📋': 'clipboard', '📝': 'clipboard', '💬': 'chat', '🔍': 'search',
+  '🔎': 'search', '🔔': 'bell', '🔗': 'link', '🔨': 'hammer', '📜': 'rules', '📢': 'megaphone', '📣': 'megaphone',
+  '👋': 'wave', '🏷️': 'tag', '📨': 'mail', '📩': 'mail', '✉️': 'mail', '🏆': 'trophy', '🥇': 'trophy',
+  '🤝': 'handshake', '🤖': 'bot', '❓': 'question', '🧭': 'compass', '⚙️': 'settings', '🏠': 'home', '👀': 'eye',
+  '👁️': 'eye', '👑': 'crown', '⚔️': 'sword', '🗡️': 'sword', '⛏️': 'pickaxe', '❤️': 'heart', '💜': 'heart',
+  '➕': 'plus', '➖': 'minus', '🔄': 'refresh', '🔁': 'refresh', '📅': 'calendar', '📆': 'calendar',
+  '🚪': 'door', '🔇': 'mute', '👥': 'users', '👤': 'user', '🎰': 'dice', '🎲': 'dice', '🎧': 'support',
+  '✨': 'sparkle', '💡': 'info', '🔑': 'lock'
+};
+const UNICODE_RE = new RegExp(
+  Object.keys(UNICODE_MAP).sort((a, b) => b.length - a.length)
+    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+  'gu'
+);
+
+function swap(text) {
+  return text.replace(UNICODE_RE, match => {
+    const id = ids.get(UNICODE_MAP[match]);
+    return id ? `<:hs_${UNICODE_MAP[match]}:${id}>` : match;
+  });
+}
+
+// Text in `Code` bleibt unverändert (z. B. Kanalnamen in /umbenennen)
+function emojify(text) {
+  if (typeof text !== 'string' || !ids.size || !text) return text;
+  return text.split(/(```[\s\S]*?```|`[^`]*`)/).map((part, i) => (i % 2 ? part : swap(part))).join('');
+}
+
+// Unicode-Emoji → Button-Emoji ({ id } wenn vorhanden)
+function emojifyButton(emoji) {
+  if (typeof emoji !== 'string') return emoji;
+  const name = UNICODE_MAP[emoji] || UNICODE_MAP[emoji.replace(/\ufe0f/g, '')];
+  const id = name && ids.get(name);
+  return id ? { id, name: `hs_${name}` } : emoji;
+}
+
+// Alle Buttons des Bots: setEmoji('✅') nimmt automatisch das eigene Emoji
+let patched = false;
+function installButtonEmojis() {
+  if (patched) return;
+  patched = true;
+  const { ButtonBuilder } = require('discord.js');
+  const original = ButtonBuilder.prototype.setEmoji;
+  ButtonBuilder.prototype.setEmoji = function setEmoji(emoji) {
+    return original.call(this, emojifyButton(emoji));
+  };
+}
+installButtonEmojis();
+
+module.exports = { syncEmojis, e, buttonEmoji, emojify, emojifyButton, UNICODE_MAP, _ids: ids };
