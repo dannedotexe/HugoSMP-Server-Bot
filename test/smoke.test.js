@@ -27,6 +27,10 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
 
   const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
+  const page = await fetch(`${base}/dashboard`);
+  assert.equal(page.status, 200, 'Dashboard-Seite wird ausgeliefert');
+  assert.match(await page.text(), /<html/i);
+  assert.equal((await fetch(`${base}/assets/dashboard-icon.jpg`)).status, 200, 'Bilder werden ausgeliefert');
   assert.equal((await fetch(`${base}/api/stock`)).status, 200);
   assert.equal((await post('/api/dashboard/login', { password: 'falsch' })).status, 401);
   const { token } = await (await post('/api/dashboard/login', { password: 'testpasswort' })).json();

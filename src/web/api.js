@@ -89,7 +89,7 @@ module.exports = function createWebApi(ctx) {
   }));
 
   app.use(express.json({ limit: '16mb' }));
-  app.use('/assets', express.static(path.join(__dirname, 'assets')));
+  app.use('/assets', express.static(path.join(__dirname, '..', '..', 'assets')));
 
   // ── Dashboard-Login ── (src/web/auth.js)
   const { createDashboardToken, validDashboardToken, safeEqual, rateLimiter } = require('./auth');
@@ -277,7 +277,7 @@ module.exports = function createWebApi(ctx) {
 
   app.get('/dashboard', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(path.join(__dirname, 'dashboard.html'));
+    res.sendFile(path.join(__dirname, '..', '..', 'dashboard.html'));
   });
 
   app.get('/api/dashboard/status', (req, res) => {
