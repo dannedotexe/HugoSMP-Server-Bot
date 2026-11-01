@@ -106,3 +106,16 @@ test('Kanal-Suche findet auch Zierschrift (bestell-inғo)', () => {
   const guild = { channels: { cache: new Collection([['5', { id: '5', type: ChannelType.GuildText, name: '🛒 | bestell-inғo' }]]) } };
   assert.equal(findChannel(guild, 'bestellinfo')?.id, '5');
 });
+
+test('#tickets wird einmalig zu 🛒┃bestellen, Links folgen der ID', async () => {
+  const { Collection, ChannelType } = require('discord.js');
+  const ip = require('../src/services/infoPanels');
+  const store = require('../src/store');
+  const ch = { id: '77', type: ChannelType.GuildText, name: '🎫 | tickets', parentId: 'x', setName: async function (n) { this.name = n; } };
+  const guild = { id: '1', channels: { cache: new Collection([['77', ch]]) }, iconURL: () => null };
+  assert.equal(await ip.renameOrderChannel(guild), true);
+  assert.equal(ch.name, '🛒┃bestellen');
+  assert.equal(await ip.renameOrderChannel(guild), false, 'nur einmal');
+  assert.equal(ip.findChannel(guild, 'tickets').id, '77');
+  assert.equal(store.loadData().orderChannelId, '77');
+});
