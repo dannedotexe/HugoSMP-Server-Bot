@@ -190,22 +190,20 @@ async function createOrderTicket(interaction, cart) {
   const itemsText = priced.lines.map(l =>
     `${l.emoji || '•'} **${l.name}** × ${l.qty}${l.subtotal !== null ? ` — ${formatEuroValue(l.subtotal)}` : ''}`
   ).join('\n');
+  const totalText = priced.hasUnknownPrice ? 'Offen' : formatEuroValue(priced.total);
+  const info = data.paymentInfo?.[cart.payment];
 
+  // Alles in EINER Karte: Was, wie viel, wie bezahlen – plus Team-Buttons
   await ticket.send(card({
     tone: 'primary',
-    eyebrow: `Bestellung #${ticketOrderId}`,
-    title: `${e('cart', '🛒')} Neue Bestellung`,
-    body:
-      `Danke, <@${interaction.user.id}>! Das Team meldet sich gleich bei dir.\n` +
-      '-# Weitere Infos kannst du einfach hier in den Chat schreiben.',
-    thumbnail: interaction.user.displayAvatarURL({ size: 128 }),
-    blocks: [
+    eyebrow: `${e('cart', '🛒')} Bestellung #${ticketOrderId}`,
+    title: `Gesamt: ${totalText}`,
+    body: [
       itemsText,
-      [
-        `**Gesamt:** ${formatEuroValue(priced.total)}${priced.surcharge ? ` (inkl. ${Math.round(priced.surcharge * 100)} % Gebühr)` : ''}`,
-        `**Ingame-Name:** ${cart.ingame}`,
-        `**Zahlung:** ${payment.label}`
-      ].join('\n')
+      `-# ${payment.label}${priced.surcharge ? ` (inkl. ${Math.round(priced.surcharge * 100)} % Gebühr)` : ''} · Ingame: ${cart.ingame}`
+    ].join('\n'),
+    blocks: [
+      `${e('card', '💳')} **Bezahlen:** ${info || 'Das Team schickt dir gleich die Zahlungsdaten.'}`
     ],
     footer: `Bestellung #${ticketOrderId}`,
     rows: [tickets.buildOrderTicketButtons()],
@@ -221,7 +219,7 @@ async function createOrderTicket(interaction, cart) {
     username: interaction.user.username,
     category: 'Items & Geld',
     items: priced.lines.map(l => ({ name: l.name, quantity: l.qty, price: l.price })),
-    total: priced.hasUnknownPrice ? 'Offen' : formatEuroValue(priced.total),
+    total: totalText,
     payment: payment.label,
     ingame: cart.ingame,
     note: priced.surcharge ? `Inkl. ${Math.round(priced.surcharge * 100)} % ${payment.label}-Gebühr.` : 'Über den Warenkorb bestellt.'
@@ -229,24 +227,14 @@ async function createOrderTicket(interaction, cart) {
   invoice.fromCart = true;
   invoice.cartItems = priced.lines.map(l => ({ id: l.id, qty: l.qty }));
 
+  // Rechnung nur speichern (Dashboard), nicht nochmal als Nachricht schicken
   tickets.updateDashboardOrderMeta(ticket.id, {
     status: 'offen',
     invoice,
+    invoiceSentAt: Date.now(),
     ingame: cart.ingame,
     category: 'Items & Geld'
   });
-  await tickets.sendOrderInvoice(ticket, invoice, { automatic: true });
-
-  // Zahlungsinfos (mit /zahlungsinfo einstellbar)
-  const info = loadData().paymentInfo?.[cart.payment];
-  await ticket.send(card({
-    tone: 'warning',
-    eyebrow: `${e('card', '💳')} Bezahlen`,
-    title: `So bezahlst du mit ${payment.label}`,
-    body: info || 'Das Team schickt dir gleich die Zahlungsdaten hier in den Kanal.',
-    blocks: [`**Betrag:** ${formatEuroValue(priced.total)}\n-# Bitte erst bezahlen, wenn alles stimmt – dann geht es sofort los.`],
-    timestamp: false
-  })).catch(() => {});
 
   return ticket;
 }
