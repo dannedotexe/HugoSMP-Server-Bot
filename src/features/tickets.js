@@ -44,7 +44,7 @@ module.exports = function createTickets(ctx) {
     updateDashboardOrderMeta,
     addReview,
   } = ctx;
-  const { buildReviewSummaryEmbed, buildReviewSummaryCard, buildReviewCard, refreshReviewSummary } = require('../services/reviews');
+  const { buildReviewSummaryEmbed, buildReviewCard } = require('../services/reviews');
   const { card } = require('../cards');
   const { e } = require('../emojis');
 
@@ -943,7 +943,6 @@ module.exports = function createTickets(ctx) {
         item: purchasedItem,
         text
       });
-      refreshReviewSummary(reviewChannel).catch(() => {});
 
       try {
         const member = await interaction.guild.members.fetch(reviewer.id);
