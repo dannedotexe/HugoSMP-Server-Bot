@@ -33,3 +33,29 @@ test('Bewerten: Sterne-Buttons → Formular mit nur Textfeld, wenn die Bestellun
   await tickets.button({ customId: 'review_star_42_#0007_4', user: { id: '42' }, channel: { id: 'unbekannt' }, showModal: async m => { modal = m.toJSON(); } });
   assert.equal(modal.components.length, 2, 'unbekannte Bestellung → Feld „Was hast du gekauft?“');
 });
+
+test('Erinnerung nach 24 Std. nur einmal, nicht bei schon bewerteten Bestellungen', () => {
+  const r = require('../src/services/reviews');
+  r.trackReviewRequest('#0100', 'u1', 'c1');
+  r.trackReviewRequest('#0101', 'u2', 'c2');
+  const later = Date.now() + 25 * 60 * 60 * 1000;
+  assert.equal(r.dueReviewReminders(Date.now()).length, 0, 'nicht vor 24 Std.');
+  const due = r.dueReviewReminders(later, id => id === '#0101');
+  assert.deepEqual(due.map(d => d.orderId), ['#0100']);
+  r.markReviewReminded('#0100');
+  assert.equal(r.dueReviewReminders(later).filter(d => d.orderId === '#0100').length, 0);
+  r.buildReviewReminderCard('u1', '#0100').components.forEach(c => c.toJSON());
+});
+
+test('Team-Antwort erscheint unter der Bewertung', () => {
+  const r = require('../src/services/reviews');
+  const stats = require('../src/services/stats');
+  stats.addReview({ orderId: '#0200', userId: 'u9', username: 'kunde', stars: 5, text: 'top' });
+  const saved = r.setReviewReply('#0200', { text: 'Danke dir!', by: 'Chris', at: 1 });
+  assert.equal(saved.reply.text, 'Danke dir!');
+  const payload = r.buildReviewCard({ user: { id: 'u9', username: 'kunde' }, stars: 5, text: 'top', item: 'Elytra', orderId: '#0200', reply: saved.reply });
+  const json = JSON.stringify(payload.components.map(c => c.toJSON()));
+  assert.match(json, /Antwort vom Team/);
+  assert.match(json, /review_reply_#0200/);
+  assert.equal(r.setReviewReply('#9999', { text: 'x', by: 'y' }), null);
+});

@@ -43,15 +43,19 @@ module.exports = function createTickets(ctx) {
     sendOrderInvoice,
     updateDashboardOrderMeta,
     addReview,
+    GUILD_ID,
   } = ctx;
+  const reviewsService = require('../services/reviews');
   const { buildReviewSummaryEmbed, buildReviewCard } = require('../services/reviews');
   const { card } = require('../cards');
   const { e } = require('../emojis');
 
   // Was wurde bestellt? (aus der Rechnung der Bestellung in diesem Kanal)
-  function orderItemsText(channel) {
-    if (!channel) return '';
-    const invoice = getOrderDashboardMeta(loadData(), channel.id)?.invoice;
+  function orderItemsText(channel, orderId) {
+    const channelId = (channel && !channel.isDMBased?.() ? channel.id : null) ||
+      reviewsService.getReviewRequest(orderId)?.channelId;
+    if (!channelId) return '';
+    const invoice = getOrderDashboardMeta(loadData(), channelId)?.invoice;
     const text = invoice?.itemsText ||
       (invoice?.items || []).map(row => `${row.name} x${row.quantity}`).join(', ');
     return String(text || '').replace(/\n/g, ', ').slice(0, 100);
@@ -246,6 +250,7 @@ module.exports = function createTickets(ctx) {
       if (interaction.channel && getTicketType(interaction.channel) === 'bestellung') {
         updateDashboardOrderMeta(interaction.channel.id, { status: 'fertig', completedAt: Date.now(), reviewOrderId: orderId });
       }
+      reviewsService.trackReviewRequest(orderId, user.id, interaction.channel?.id);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -733,6 +738,29 @@ module.exports = function createTickets(ctx) {
       });
     }
 
+    // Team antwortet auf eine Bewertung
+    if (interaction.customId.startsWith('review_reply_')) {
+      if (!interaction.member || !isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Nur das Team kann auf Bewertungen antworten.', ephemeral: true });
+      }
+      const orderId = interaction.customId.slice('review_reply_'.length);
+      const existing = [...(loadData().reviews || [])].reverse().find(r => String(r.orderId) === orderId);
+      const input = new TextInputBuilder()
+        .setCustomId('reply')
+        .setLabel('Antwort an den Kunden')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('z. B. Danke dir, gerne wieder! 🙏')
+        .setRequired(true)
+        .setMaxLength(800);
+      if (existing?.reply?.text) input.setValue(existing.reply.text);
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId(`review_replymodal_${orderId}`)
+          .setTitle('Auf Bewertung antworten')
+          .addComponents(new ActionRowBuilder().addComponents(input))
+      );
+    }
+
     // Schritt 2: Sterne gewählt → kurzes Textfeld
     if (interaction.customId.startsWith('review_star_')) {
       const [, , buyerId, orderId, starsRaw] = interaction.customId.split('_');
@@ -744,7 +772,7 @@ module.exports = function createTickets(ctx) {
       }
 
       const stars = Math.max(1, Math.min(5, Number(starsRaw) || 5));
-      const knownItem = orderItemsText(interaction.channel);
+      const knownItem = orderItemsText(interaction.channel, orderId);
       const modal = new ModalBuilder()
         .setCustomId(`review_modal_${buyerId}_${orderId}_${stars}`)
         .setTitle(`Bewertung: ${'⭐'.repeat(stars)}`);
@@ -776,6 +804,36 @@ module.exports = function createTickets(ctx) {
   }
 
   async function modal(interaction) {
+    if (interaction.customId.startsWith('review_replymodal_')) {
+      if (!interaction.member || !isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Nur das Team kann auf Bewertungen antworten.', ephemeral: true });
+      }
+      const orderId = interaction.customId.slice('review_replymodal_'.length);
+      const review = reviewsService.setReviewReply(orderId, {
+        text: interaction.fields.getTextInputValue('reply').trim(),
+        by: getUserDisplayName(interaction.user, interaction.user.id),
+        at: Date.now()
+      });
+      if (!review) {
+        return interaction.reply({ content: '❌ Diese Bewertung wurde nicht gefunden.', ephemeral: true });
+      }
+      const payload = buildReviewCard({
+        user: { id: review.userId, username: review.username, avatarUrl: review.avatarUrl },
+        stars: review.stars,
+        text: review.text,
+        item: review.item,
+        orderId: review.orderId,
+        reply: review.reply
+      });
+      const message = interaction.message ||
+        await client.channels.cache.get(review.channelId)?.messages.fetch(review.messageId).catch(() => null);
+      if (!message) {
+        return interaction.reply({ content: '❌ Die Bewertungs-Nachricht wurde nicht gefunden.', ephemeral: true });
+      }
+      await message.edit({ components: payload.components, allowedMentions: { parse: [] } });
+      return interaction.reply({ content: '✅ Antwort steht jetzt unter der Bewertung.', ephemeral: true });
+    }
+
     if (interaction.customId.startsWith('pre_order_modal_')) {
       const catKey = interaction.customId.replace('pre_order_modal_', '');
       const catMap = {
@@ -930,7 +988,7 @@ module.exports = function createTickets(ctx) {
       // Neue Bewertungen: Sterne stecken in der ID; alte Formulare hatten ein Feld
       const field = id => { try { return interaction.fields.getTextInputValue(id); } catch { return null; } };
       const starsStr = parts[4] || field('stars');
-      const purchasedItem = field('purchased_item') || orderItemsText(interaction.channel) || '—';
+      const purchasedItem = field('purchased_item') || orderItemsText(interaction.channel, orderId) || '—';
       const text = field('text') || '';
       const stars = parseInt(starsStr);
 
@@ -948,7 +1006,9 @@ module.exports = function createTickets(ctx) {
         });
       }
 
-      const reviewChannel = interaction.guild.channels.cache.get(REVIEWS_CHANNEL_ID);
+      // Auch aus der Erinnerungs-DM heraus (dort gibt es keinen Server)
+      const guild = interaction.guild || client.guilds.cache.get(GUILD_ID);
+      const reviewChannel = guild?.channels.cache.get(REVIEWS_CHANNEL_ID);
 
       if (!reviewChannel) {
         return interaction.reply({
@@ -959,7 +1019,7 @@ module.exports = function createTickets(ctx) {
 
       const reviewer = interaction.user;
 
-      await reviewChannel.send(buildReviewCard({
+      const posted = await reviewChannel.send(buildReviewCard({
         user: reviewer,
         stars,
         text,
@@ -975,9 +1035,10 @@ module.exports = function createTickets(ctx) {
         item: purchasedItem,
         text
       });
+      reviewsService.setReviewMessage(orderId, reviewChannel.id, posted.id, reviewer.displayAvatarURL({ size: 128 }));
 
       try {
-        const member = await interaction.guild.members.fetch(reviewer.id);
+        const member = await guild.members.fetch(reviewer.id);
 
         if (!member.roles.cache.has(KUNDEN_ROLE_ID)) {
           await member.roles.add(KUNDEN_ROLE_ID);
@@ -987,6 +1048,14 @@ module.exports = function createTickets(ctx) {
       }
 
       markReviewedOrder(orderId);
+
+      // Aus der DM heraus gibt es kein Ticket zum Schließen
+      if (!interaction.guild || getTicketType(interaction.channel) !== 'bestellung') {
+        return interaction.reply({
+          content: '✅ **Danke für deine Bewertung!** Du hast die **Kunden-Rolle** erhalten.',
+          ephemeral: true
+        });
+      }
 
       const reviewDecisionId = `${interaction.channel.id}_${reviewer.id}`;
 
@@ -1033,8 +1102,8 @@ module.exports = function createTickets(ctx) {
   return {
     name: 'tickets',
     commands: ["getorder","adduser","close","fertig","bewertungen","bestellung"],
-    buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/, /^review_star_/],
-    modals: [/^pre_order_modal_/, /^order_form_modal$/, /^review_modal_/],
+    buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/, /^review_star_/, /^review_reply_/],
+    modals: [/^pre_order_modal_/, /^order_form_modal$/, /^review_modal_/, /^review_replymodal_/],
     command,
     button,
     modal,

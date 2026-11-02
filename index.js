@@ -199,6 +199,20 @@ const {
 const { recordEvent, addReview, getReviewSummary, getStats } = require('./src/services/stats');
 const ticketWait = require('./src/services/ticketWait');
 
+// Wer 24 Std. nach „fertig“ nicht bewertet hat, bekommt einmal eine DM
+function startReviewReminders() {
+  const reviews = require('./src/services/reviews');
+  const check = async () => {
+    for (const r of reviews.dueReviewReminders(Date.now(), hasReviewedOrder)) {
+      reviews.markReviewReminded(r.orderId);
+      const user = await client.users.fetch(r.userId).catch(() => null);
+      await user?.send(reviews.buildReviewReminderCard(r.userId, r.orderId)).catch(() => {});
+    }
+  };
+  setInterval(() => check().catch(() => {}), 60 * 60 * 1000);
+  check().catch(() => {});
+}
+
 // Erinnert das Team im Ticket-Log, wenn ein Kunde zu lange auf Antwort wartet
 function startTicketReminders() {
   const check = async () => {
@@ -334,6 +348,7 @@ client.once('ready', async () => {
   await require('./src/emojis').syncEmojis(client);
   require('./src/services/backup').startBackups();
   await require('./src/services/reviews').removeReviewSummary(client);
+  startReviewReminders();
   startTicketReminders();
   await updateStockPanel();
   await updateLeaderboard();
