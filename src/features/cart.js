@@ -26,7 +26,7 @@ const tickets = require('../services/tickets');
 const PAYMENTS = {
   paypal: { label: 'PayPal', emoji: '🅿️', surcharge: 0 },
   bitcoin: { label: 'Bitcoin', emoji: '🪙', surcharge: 0 },
-  paysafe: { label: 'Paysafecard', emoji: '💳', surcharge: 0.10 }
+  paysafe: { label: 'Paysafecard', emoji: '💳', surcharge: 0.20 }
 };
 
 const CART_TTL_MS = 30 * 60 * 1000;

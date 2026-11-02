@@ -64,9 +64,9 @@ test('Warenkorb: Item wählen, Menge, Zahlung, Name → Absenden möglich, Preis
   const c = carts.get('u1');
   const priced = priceCart(c);
   assert.equal(priced.base, 120, '20 × 0,50 + 110');
-  assert.equal(priced.total, 132, '+10 % Paysafecard');
+  assert.equal(priced.total, 144, '+20 % Paysafecard');
   const view = JSON.stringify(calls.update.components.map(x => x.toJSON()));
-  assert.match(view, /132,00 €/);
+  assert.match(view, /144,00 €/);
   assert.match(view, /"custom_id":"cart_submit"(?![^}]*"disabled":true)/, 'jetzt absendbar');
 });
 

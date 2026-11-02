@@ -116,7 +116,7 @@ function buildOrderInfoPanel(guild) {
     section(e('euro', '💸'), 'Zahlungsmethoden', [
       '**PayPal**',
       '**Bitcoin**',
-      '**Paysafecard** (+10 % wegen Gebühren)'
+      '**Paysafecard** (+20 % wegen Gebühren)'
     ]),
     '',
     `${e('warn', '⚠️')} **Unnötiges Drängeln im Ticket führt zur Bestrafung oder zum Ausschluss vom Handel.**`
