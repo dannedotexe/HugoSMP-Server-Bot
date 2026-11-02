@@ -93,7 +93,7 @@ function buildReviewCard({ user, stars, text, item, orderId }) {
     tone: stars >= 4 ? 'success' : stars === 3 ? 'warning' : 'danger',
     eyebrow: `Bewertung von ${user.username}`,
     title: `${'⭐'.repeat(stars)}  ${stars}/5`,
-    body: `>>> ${String(text).slice(0, 1500)}`,
+    body: `> ${String(text).slice(0, 1500).replace(/\n/g, '\n> ')}`,
     thumbnail: user.displayAvatarURL({ size: 128 }),
     blocks: [`**Kunde:** <@${user.id}>  ·  **Gekauft:** ${String(item || '—').slice(0, 100)}`],
     footer: `Bestellung ${orderId}`

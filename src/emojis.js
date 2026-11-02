@@ -51,7 +51,7 @@ function buttonEmoji(name, fallback) {
 const UNICODE_MAP = {
   '✅': 'check', '✔️': 'check', '❌': 'cross', '⚠️': 'warn', '⚠': 'warn', '🚨': 'warn',
   'ℹ️': 'info', '⏳': 'clock', '⏰': 'clock', '🕒': 'clock', '💰': 'euro', '💸': 'euro', '💶': 'money', '💵': 'money',
-  '🎫': 'ticket', '🎟️': 'ticket', '⭐': 'star', '🌟': 'star', '🎉': 'party', '🎊': 'party', '📌': 'pin',
+  '🎫': 'ticket', '🎟️': 'ticket', '🎉': 'party', '🎊': 'party', '📌': 'pin',
   '🔒': 'lock', '🔐': 'lock', '🔓': 'unlock', '🎨': 'palette', '📦': 'box', '📐': 'blueprint', '🏗️': 'blueprint',
   '🛒': 'cart', '🛡️': 'shield', '🛡': 'shield', '📊': 'chart', '📈': 'chart', '💳': 'card', '📰': 'news',
   '🌐': 'globe', '🔥': 'fire', '🎁': 'gift', '📋': 'clipboard', '📝': 'clipboard', '💬': 'chat', '🔍': 'search',
