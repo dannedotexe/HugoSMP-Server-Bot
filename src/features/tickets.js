@@ -48,6 +48,15 @@ module.exports = function createTickets(ctx) {
   const { card } = require('../cards');
   const { e } = require('../emojis');
 
+  // Was wurde bestellt? (aus der Rechnung der Bestellung in diesem Kanal)
+  function orderItemsText(channel) {
+    if (!channel) return '';
+    const invoice = getOrderDashboardMeta(loadData(), channel.id)?.invoice;
+    const text = invoice?.itemsText ||
+      (invoice?.items || []).map(row => `${row.name} x${row.quantity}`).join(', ');
+    return String(text || '').replace(/\n/g, ', ').slice(0, 100);
+  }
+
   function orderDoneCard(userId, orderId, row) {
     return card({
       tone: 'success',
@@ -708,38 +717,59 @@ module.exports = function createTickets(ctx) {
         });
       }
 
+      // Schritt 1: Sterne antippen (5 Buttons, nur für den Kunden sichtbar)
+      const starRow = new ActionRowBuilder().addComponents(
+        [1, 2, 3, 4, 5].map(n =>
+          new ButtonBuilder()
+            .setCustomId(`review_star_${buyerId}_${orderId}_${n}`)
+            .setLabel('⭐'.repeat(n))
+            .setStyle(n >= 4 ? ButtonStyle.Success : n === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        )
+      );
+      return interaction.reply({
+        content: '**Wie viele Sterne gibst du?**\n-# Danach schreibst du noch kurz, wie es war.',
+        components: [starRow],
+        ephemeral: true
+      });
+    }
+
+    // Schritt 2: Sterne gewählt → kurzes Textfeld
+    if (interaction.customId.startsWith('review_star_')) {
+      const [, , buyerId, orderId, starsRaw] = interaction.customId.split('_');
+      if (interaction.user.id !== buyerId) {
+        return interaction.reply({ content: '❌ Du darfst nur deine eigene Bestellung bewerten!', ephemeral: true });
+      }
+      if (hasReviewedOrder(orderId)) {
+        return interaction.reply({ content: '❌ Diese Bestellung wurde bereits bewertet!', ephemeral: true });
+      }
+
+      const stars = Math.max(1, Math.min(5, Number(starsRaw) || 5));
+      const knownItem = orderItemsText(interaction.channel);
       const modal = new ModalBuilder()
-        .setCustomId(`review_modal_${buyerId}_${orderId}`)
-        .setTitle('HugoSMP Market Bewertung');
-
-      const stars = new TextInputBuilder()
-        .setCustomId('stars')
-        .setLabel('Sterne (1-5)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('5')
-        .setRequired(true)
-        .setMaxLength(1);
-
-      const purchasedItem = new TextInputBuilder()
-        .setCustomId('purchased_item')
-        .setLabel('Was hast du gekauft?')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('z.B. 5M Money, Elytra, Ancient Debris...')
-        .setRequired(true)
-        .setMaxLength(100);
+        .setCustomId(`review_modal_${buyerId}_${orderId}_${stars}`)
+        .setTitle(`Bewertung: ${'⭐'.repeat(stars)}`);
 
       const text = new TextInputBuilder()
         .setCustomId('text')
-        .setLabel('Deine Bewertung')
+        .setLabel('Wie war deine Bestellung?')
         .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('War alles schnell, kein Scam...')
-        .setRequired(true);
+        .setPlaceholder('z. B. Schnell geliefert, alles korrekt!')
+        .setRequired(true)
+        .setMaxLength(1000);
+      modal.addComponents(new ActionRowBuilder().addComponents(text));
 
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(stars),
-        new ActionRowBuilder().addComponents(purchasedItem),
-        new ActionRowBuilder().addComponents(text)
-      );
+      // Gekauftes nur abfragen, wenn der Bot es nicht aus der Bestellung kennt
+      if (!knownItem) {
+        modal.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('purchased_item')
+            .setLabel('Was hast du gekauft?')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('z. B. 5M Money, Elytra')
+            .setRequired(true)
+            .setMaxLength(100)
+        ));
+      }
 
       return interaction.showModal(modal);
     }
@@ -897,9 +927,11 @@ module.exports = function createTickets(ctx) {
       const buyerId = parts[2];
       const orderId = parts[3] || 'Unbekannt';
 
-      const starsStr = interaction.fields.getTextInputValue('stars');
-      const purchasedItem = interaction.fields.getTextInputValue('purchased_item');
-      const text = interaction.fields.getTextInputValue('text');
+      // Neue Bewertungen: Sterne stecken in der ID; alte Formulare hatten ein Feld
+      const field = id => { try { return interaction.fields.getTextInputValue(id); } catch { return null; } };
+      const starsStr = parts[4] || field('stars');
+      const purchasedItem = field('purchased_item') || orderItemsText(interaction.channel) || '—';
+      const text = field('text') || '';
       const stars = parseInt(starsStr);
 
       if (isNaN(stars) || stars < 1 || stars > 5) {
@@ -1001,7 +1033,7 @@ module.exports = function createTickets(ctx) {
   return {
     name: 'tickets',
     commands: ["getorder","adduser","close","fertig","bewertungen","bestellung"],
-    buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/],
+    buttons: [/^create_support_ticket$/, /^ticket_cat_/, /^order_form$/, /^order_assign_self$/, /^close_ticket$/, /^ticket_close_yes_/, /^ticket_close_no_/, /^cancel_close_ticket$/, /^confirm_close_ticket$/, /^reopen_ticket$/, /^review_keep_open_/, /^review_close_ticket_/, /^bewerten_/, /^review_star_/],
     modals: [/^pre_order_modal_/, /^order_form_modal$/, /^review_modal_/],
     command,
     button,
