@@ -51,14 +51,30 @@ module.exports = function createTickets(ctx) {
   const { e } = require('../emojis');
 
   // Was wurde bestellt? (aus der Rechnung der Bestellung in diesem Kanal)
-  function orderItemsText(channel, orderId) {
-    const channelId = (channel && !channel.isDMBased?.() ? channel.id : null) ||
-      reviewsService.getReviewRequest(orderId)?.channelId;
-    if (!channelId) return '';
-    const invoice = getOrderDashboardMeta(loadData(), channelId)?.invoice;
-    const text = invoice?.itemsText ||
-      (invoice?.items || []).map(row => `${row.name} x${row.quantity}`).join(', ');
-    return String(text || '').replace(/\n/g, ', ').slice(0, 100);
+  // Was wurde gekauft? 1. Bestellung im Kanal, 2. gemerkter Bestell-Kanal,
+  // 3. letzte Bestellung des Kunden – der Kunde muss es nie selbst eintippen
+  function orderItemsText(channel, orderId, userId) {
+    const data = loadData();
+    const fromInvoice = invoice => String(
+      invoice?.itemsText || (invoice?.items || []).map(row => `${row.name} x${row.quantity}`).join(', ') || ''
+    ).replace(/\s*-\s*[\d.,]+\s*€/g, '').replace(/\n/g, ', ').slice(0, 100);
+
+    const channelIds = [
+      channel && !channel.isDMBased?.() ? channel.id : null,
+      reviewsService.getReviewRequest(orderId)?.channelId
+    ].filter(Boolean);
+    for (const id of channelIds) {
+      const text = fromInvoice(getOrderDashboardMeta(data, id)?.invoice);
+      if (text) return text;
+    }
+    if (userId) {
+      const latest = Object.values(data.dashboardOrderMeta || {})
+        .filter(meta => meta?.invoice?.ownerId === userId)
+        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0];
+      const text = fromInvoice(latest?.invoice);
+      if (text) return text;
+    }
+    return '';
   }
 
   function orderDoneCard(userId, orderId, row) {
@@ -260,7 +276,9 @@ module.exports = function createTickets(ctx) {
           .setEmoji('⭐')
       );
 
-      return interaction.reply(orderDoneCard(user.id, orderId, row));
+      // Als eigene Nachricht senden → kein „… verwendet /fertig“ über der Karte
+      await interaction.channel.send(orderDoneCard(user.id, orderId, row));
+      return interaction.reply({ content: `✅ Bestellung für ${user} als fertig markiert.`, ephemeral: true });
     }
   }
 
@@ -772,7 +790,6 @@ module.exports = function createTickets(ctx) {
       }
 
       const stars = Math.max(1, Math.min(5, Number(starsRaw) || 5));
-      const knownItem = orderItemsText(interaction.channel, orderId);
       const modal = new ModalBuilder()
         .setCustomId(`review_modal_${buyerId}_${orderId}_${stars}`)
         .setTitle(`Bewertung: ${'⭐'.repeat(stars)}`);
@@ -785,19 +802,6 @@ module.exports = function createTickets(ctx) {
         .setRequired(true)
         .setMaxLength(1000);
       modal.addComponents(new ActionRowBuilder().addComponents(text));
-
-      // Gekauftes nur abfragen, wenn der Bot es nicht aus der Bestellung kennt
-      if (!knownItem) {
-        modal.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('purchased_item')
-            .setLabel('Was hast du gekauft?')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('z. B. 5M Money, Elytra')
-            .setRequired(true)
-            .setMaxLength(100)
-        ));
-      }
 
       return interaction.showModal(modal);
     }
@@ -988,7 +992,7 @@ module.exports = function createTickets(ctx) {
       // Neue Bewertungen: Sterne stecken in der ID; alte Formulare hatten ein Feld
       const field = id => { try { return interaction.fields.getTextInputValue(id); } catch { return null; } };
       const starsStr = parts[4] || field('stars');
-      const purchasedItem = field('purchased_item') || orderItemsText(interaction.channel, orderId) || '—';
+      const purchasedItem = field('purchased_item') || orderItemsText(interaction.channel, orderId, buyerId) || '—';
       const text = field('text') || '';
       const stars = parseInt(starsStr);
 
