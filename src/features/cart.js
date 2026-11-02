@@ -16,7 +16,7 @@ const {
   TextInputStyle,
   MessageFlags
 } = require('discord.js');
-const { STAFF_ROLE_IDS, TICKET_CATEGORY_ID, STOCK_ITEMS } = require('../config');
+const { STAFF_ROLE_IDS, TICKET_CATEGORY_ID, TICKET_LOG_CHANNEL_ID, STOCK_ITEMS } = require('../config');
 const { loadData, saveData, getNextTicketOrderId, markOrderFormSubmitted } = require('../store');
 const { parsePriceNumber, formatEuroValue, cleanUsername, cleanShortText } = require('../util');
 const { card } = require('../cards');
@@ -165,6 +165,57 @@ function existingOrderTicket(interaction) {
 const ephemeralCard = payload => ({ ...payload, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 const updateCard = payload => ({ components: payload.components });
 
+// ── Bezahlen ──
+const BTC_RE = /\b(bc1[a-z0-9]{20,90}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\b/;
+
+// Bitcoin-Adressen als `Code` → am Handy mit langem Tippen kopierbar
+function formatPaymentInfo(info) {
+  if (!info) return '';
+  return String(info).replace(BTC_RE, match => `\`${match}\``);
+}
+
+function paypalLink(info, total) {
+  const m = String(info || '').match(/paypal\.me\/([A-Za-z0-9_.-]+)/i);
+  if (!m) return null;
+  const amount = Number(total) > 0 ? `/${Number(total).toFixed(2)}EUR` : '';
+  return `https://paypal.me/${m[1]}${amount}`;
+}
+
+function buildPayRow(method, info, total) {
+  const row = new ActionRowBuilder();
+  const link = method === 'paypal' ? paypalLink(info, total) : null;
+  if (link) {
+    row.addComponents(
+      new ButtonBuilder().setLabel(`Mit PayPal bezahlen (${formatEuroValue(total)})`).setStyle(ButtonStyle.Link).setURL(link)
+    );
+  }
+  if (method === 'paysafe') {
+    row.addComponents(
+      new ButtonBuilder().setCustomId('pay_psc').setLabel('Paysafecard-Code senden').setEmoji('💳').setStyle(ButtonStyle.Primary)
+    );
+  } else {
+    row.addComponents(
+      new ButtonBuilder().setCustomId('pay_done').setLabel('Ich habe bezahlt').setEmoji('✅').setStyle(ButtonStyle.Success)
+    );
+  }
+  return row;
+}
+
+// Nachricht im Kanal: „Zahlung gemeldet“ mit Bestätigen-Button fürs Team
+function paymentReportCard(userId, detail) {
+  return card({
+    tone: 'warning',
+    eyebrow: `${e('euro', '💸')} Zahlung gemeldet`,
+    title: 'Das Team prüft deine Zahlung',
+    body: `<@${userId}> hat bezahlt${detail ? ` (${detail})` : ''}. Sobald sie angekommen ist, geht es los.`,
+    rows: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('pay_confirm').setLabel('Zahlung erhalten (Team)').setEmoji('✅').setStyle(ButtonStyle.Success)
+    )],
+    mention: STAFF_ROLE_IDS.slice(0, 2).map(id => `<@&${id}>`).join(' '),
+    allowedMentions: { roles: STAFF_ROLE_IDS.slice(0, 2) }
+  });
+}
+
 // ── Bestell-Kanal erstellen ──
 async function createOrderTicket(interaction, cart) {
   const data = loadData();
@@ -191,9 +242,10 @@ async function createOrderTicket(interaction, cart) {
     `${l.emoji || '•'} **${l.name}** × ${l.qty}${l.subtotal !== null ? ` — ${formatEuroValue(l.subtotal)}` : ''}`
   ).join('\n');
   const totalText = priced.hasUnknownPrice ? 'Offen' : formatEuroValue(priced.total);
-  const info = data.paymentInfo?.[cart.payment];
+  const info = formatPaymentInfo(data.paymentInfo?.[cart.payment]);
+  const payRow = buildPayRow(cart.payment, data.paymentInfo?.[cart.payment], priced.total);
 
-  // Alles in EINER Karte: Was, wie viel, wie bezahlen – plus Team-Buttons
+  // Alles in EINER Karte: Was, wie viel, wie bezahlen – plus Buttons
   await ticket.send(card({
     tone: 'primary',
     eyebrow: `${e('cart', '🛒')} Bestellung #${ticketOrderId}`,
@@ -203,10 +255,10 @@ async function createOrderTicket(interaction, cart) {
       `-# ${payment.label}${priced.surcharge ? ` (inkl. ${Math.round(priced.surcharge * 100)} % Gebühr)` : ''} · Ingame: ${cart.ingame}`
     ].join('\n'),
     blocks: [
-      `${e('card', '💳')} **Bezahlen:** ${info || 'Das Team schickt dir gleich die Zahlungsdaten.'}`
+      `${e('card', '💳')} **So bezahlst du ${totalText} mit ${payment.label}:**\n${info || 'Das Team schickt dir gleich die Zahlungsdaten.'}\n-# Danach auf **„Ich habe bezahlt“** tippen.`
     ],
     footer: `Bestellung #${ticketOrderId}`,
-    rows: [tickets.buildOrderTicketButtons()],
+    rows: [payRow, tickets.buildOrderTicketButtons()],
     mention: `<@${interaction.user.id}> ${STAFF_ROLE_IDS.slice(0, 2).map(id => `<@&${id}>`).join(' ')}`,
     allowedMentions: { users: [interaction.user.id], roles: STAFF_ROLE_IDS.slice(0, 2) }
   }));
@@ -323,6 +375,63 @@ module.exports = function createCart() {
   async function button(interaction) {
     if (interaction.customId === 'ticket_cat_items_geld') return start(interaction);
 
+    if (['pay_done', 'pay_psc'].includes(interaction.customId)) {
+      const ownerId = tickets.getTicketOwnerId(interaction.channel);
+      if (interaction.user.id !== ownerId) {
+        return interaction.reply({ content: '❌ Das kann nur der Kunde dieser Bestellung.', ephemeral: true });
+      }
+      const meta = tickets.getOrderDashboardMeta(loadData(), interaction.channel.id);
+      if (['bezahlt', 'fertig'].includes(meta.status)) {
+        return interaction.reply({ content: 'ℹ️ Deine Zahlung ist schon bestätigt.', ephemeral: true });
+      }
+      if (interaction.customId === 'pay_psc') {
+        return interaction.showModal(
+          new ModalBuilder().setCustomId('pay_psc_modal').setTitle('Paysafecard-Code')
+            .addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('code')
+                .setLabel('16-stelliger Code')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('1234 5678 9012 3456')
+                .setRequired(true)
+                .setMinLength(16)
+                .setMaxLength(24)
+            ))
+        );
+      }
+      if (meta.paymentReportedAt && Date.now() - meta.paymentReportedAt < 10 * 60 * 1000) {
+        return interaction.reply({ content: 'ℹ️ Schon gemeldet – das Team prüft gerade.', ephemeral: true });
+      }
+      tickets.updateDashboardOrderMeta(interaction.channel.id, { paymentReportedAt: Date.now() });
+      await interaction.channel.send(paymentReportCard(interaction.user.id));
+      return interaction.reply({ content: '✅ Danke! Das Team prüft deine Zahlung und meldet sich gleich.', ephemeral: true });
+    }
+
+    if (interaction.customId === 'pay_confirm') {
+      if (!interaction.member || !tickets.isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Nur das Team kann Zahlungen bestätigen.', ephemeral: true });
+      }
+      const channel = interaction.channel;
+      const before = tickets.getOrderDashboardMeta(loadData(), channel.id).status;
+      tickets.updateDashboardOrderMeta(channel.id, { status: before === 'fertig' ? 'fertig' : 'bezahlt', paymentConfirmedAt: Date.now() });
+      await interaction.update({
+        components: card({
+          tone: 'success',
+          eyebrow: `${e('check', '✅')} Zahlung erhalten`,
+          title: 'Zahlung bestätigt – deine Items kommen gleich!',
+          body: `-# Bestätigt von ${interaction.user.username}`,
+          timestamp: true
+        }).components,
+        allowedMentions: { parse: [] }
+      });
+      if (before !== 'bezahlt' && before !== 'fertig') {
+        const { buildStatusChangeCard } = require('../services/orderStatus');
+        const orderId = `#${String(tickets.getTicketOrderId(channel)).replace(/^#/, '')}`;
+        await channel.send(buildStatusChangeCard(orderId, 'bezahlt', tickets.getTicketOwnerId(channel))).catch(() => {});
+      }
+      return;
+    }
+
     const cart = getCart(interaction.user.id);
 
     if (interaction.customId === 'cart_clear') {
@@ -386,6 +495,30 @@ module.exports = function createCart() {
   }
 
   async function modal(interaction) {
+    if (interaction.customId === 'pay_psc_modal') {
+      const code = interaction.fields.getTextInputValue('code').replace(/\D/g, '');
+      if (!/^\d{16}$/.test(code)) {
+        return interaction.reply({ content: '❌ Ein Paysafecard-Code hat genau **16 Ziffern**.', ephemeral: true });
+      }
+      // Code nur fürs Team (Ticket-Log), im Kanal nur die letzten 4 Ziffern
+      const log = interaction.client.channels.cache.get(TICKET_LOG_CHANNEL_ID);
+      const orderId = String(tickets.getTicketOrderId(interaction.channel)).replace(/^#/, '');
+      const sent = await log?.send(card({
+        tone: 'warning',
+        eyebrow: `${e('card', '💳')} Paysafecard-Code`,
+        title: `Bestellung #${orderId}`,
+        body: `\`${code.match(/.{4}/g).join(' ')}\`\nVon <@${interaction.user.id}> in <#${interaction.channel.id}>`,
+        mention: STAFF_ROLE_IDS.slice(0, 2).map(id => `<@&${id}>`).join(' '),
+        allowedMentions: { roles: STAFF_ROLE_IDS.slice(0, 2) }
+      })).then(() => true).catch(() => false);
+      if (!sent) {
+        return interaction.reply({ content: '❌ Code konnte nicht weitergeleitet werden – bitte schick ihn hier in den Kanal.', ephemeral: true });
+      }
+      tickets.updateDashboardOrderMeta(interaction.channel.id, { paymentReportedAt: Date.now() });
+      await interaction.channel.send(paymentReportCard(interaction.user.id, `Paysafecard •••• ${code.slice(-4)}`));
+      return interaction.reply({ content: '✅ Code ist sicher beim Team angekommen. Es prüft ihn gleich.', ephemeral: true });
+    }
+
     if (interaction.customId.startsWith('cart_payinfo_')) {
       const method = interaction.customId.slice('cart_payinfo_'.length);
       if (!PAYMENTS[method]) return;
@@ -434,9 +567,9 @@ module.exports = function createCart() {
     name: 'cart',
     commands: ['zahlungsinfo'],
     command,
-    buttons: [/^ticket_cat_items_geld$/, /^cart_(clear|ingame|submit)$/],
+    buttons: [/^ticket_cat_items_geld$/, /^cart_(clear|ingame|submit)$/, /^pay_(done|psc|confirm)$/],
     selects: [/^cart_(add|payment)$/],
-    modals: [/^cart_ingame_modal$/, /^cart_qty_/, /^cart_payinfo_/],
+    modals: [/^cart_ingame_modal$/, /^cart_qty_/, /^cart_payinfo_/, /^pay_psc_modal$/],
     button,
     select,
     modal
@@ -444,4 +577,4 @@ module.exports = function createCart() {
 };
 
 module.exports.PAYMENTS = PAYMENTS;
-module.exports._internals = { getCart, priceCart, buildCartView, carts };
+module.exports._internals = { getCart, priceCart, buildCartView, carts, paypalLink, formatPaymentInfo, buildPayRow };
