@@ -93,3 +93,33 @@ test('/zahlungsinfo ohne Text öffnet ein Textfeld, Speichern klappt', async () 
   assert.match(reply.content, /Gespeichert/);
   assert.equal(store.loadData().paymentInfo.paypal, 'paypal.me/Hugo\nFreunde & Familie');
 });
+
+test('Bezahlen: PayPal-Link mit Betrag, Bitcoin kopierbar, „Ich habe bezahlt“ und Bestätigen', async () => {
+  const { paypalLink, formatPaymentInfo, buildPayRow } = require('../src/features/cart')._internals;
+  assert.equal(paypalLink('paypal.me/HugoIrlTrade\nFreunde', 7.5), 'https://paypal.me/HugoIrlTrade/7.50EUR');
+  assert.equal(paypalLink('an x@y.de', 7.5), null);
+  assert.match(formatPaymentInfo('Adresse: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh'), /`bc1q[^`]+`/);
+  const row = buildPayRow('paypal', 'paypal.me/Hugo', 12).toJSON().components;
+  assert.equal(row[0].url, 'https://paypal.me/Hugo/12.00EUR');
+  assert.equal(row[1].custom_id, 'pay_done');
+  assert.equal(buildPayRow('paysafe', '', 12).toJSON().components[0].custom_id, 'pay_psc');
+
+  const tickets = require('../src/services/tickets');
+  const cart = require('../src/features/cart')();
+  const sent = [];
+  const channel = { id: 'payc', topic: 'owner:700000000000000007;type:bestellung;order:0009', send: async p => { sent.push(p); return {}; } };
+  tickets.updateDashboardOrderMeta('payc', { status: 'offen' });
+  let reply = null;
+  await cart.button({ customId: 'pay_done', user: { id: 'fremd' }, channel, reply: async r => { reply = r; } });
+  assert.match(reply.content, /nur der Kunde/);
+  await cart.button({ customId: 'pay_done', user: { id: '700000000000000007' }, channel, reply: async r => { reply = r; } });
+  assert.match(reply.content, /Danke/);
+  assert.match(JSON.stringify(sent[0].components.map(c => c.toJSON())), /pay_confirm/);
+
+  let updated = null;
+  const staff = { roles: { cache: { has: () => false } }, permissions: { has: () => true } };
+  await cart.button({ customId: 'pay_confirm', user: { id: 's1', username: 'Chris' }, member: staff, channel, update: async u => { updated = u; } });
+  assert.ok(updated);
+  assert.equal(tickets.getOrderDashboardMeta(store.loadData(), 'payc').status, 'bezahlt');
+  assert.match(JSON.stringify(sent[1].components.map(c => c.toJSON())), /Bezahlt/, 'Kunde sieht Status-Update');
+});
