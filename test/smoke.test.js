@@ -42,6 +42,6 @@ test('Bot startet, Dashboard-Login und öffentliche API funktionieren', async (t
   assert.match(token, /^\d{13}\./);
   assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
   assert.equal((await fetch(`${base}/api/dashboard/stock`, { headers: { authorization: 'Bearer testpasswort' } })).status, 401);
-  assert.match(out, /SELFTEST features=8 missing=-/, out);
+  assert.match(out, /SELFTEST features=9 missing=-/, out);
   assert.doesNotMatch(out, /TypeError|ReferenceError|SyntaxError/, out);
 });
