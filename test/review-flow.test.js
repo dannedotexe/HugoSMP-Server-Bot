@@ -28,10 +28,10 @@ test('Bewerten: Sterne-Buttons → Formular mit nur Textfeld, wenn die Bestellun
   let modal = null;
   await tickets.button({ customId: 'review_star_42_#0007_5', user: { id: '42' }, channel: { id: 'chan1' }, showModal: async m => { modal = m.toJSON(); } });
   assert.equal(modal.custom_id, 'review_modal_42_#0007_5');
-  assert.equal(modal.components.length, 1, 'nur Textfeld – Gekauftes kennt der Bot');
+  assert.equal(modal.components.length, 1, 'nur Textfeld');
 
   await tickets.button({ customId: 'review_star_42_#0007_4', user: { id: '42' }, channel: { id: 'unbekannt' }, showModal: async m => { modal = m.toJSON(); } });
-  assert.equal(modal.components.length, 2, 'unbekannte Bestellung → Feld „Was hast du gekauft?“');
+  assert.equal(modal.components.length, 1, 'nie „Was hast du gekauft?“ – macht der Bot');
 });
 
 test('Erinnerung nach 24 Std. nur einmal, nicht bei schon bewerteten Bestellungen', () => {
