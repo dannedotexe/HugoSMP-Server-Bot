@@ -694,6 +694,7 @@ async function sendOrderReviewRequest(channel, ownerId, orderId) {
     completedAt: Date.now(),
     reviewOrderId
   });
+  require('./reviews').trackReviewRequest(reviewOrderId, ownerId, channel.id);
 
   return reviewOrderId;
 }

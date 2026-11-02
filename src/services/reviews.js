@@ -87,17 +87,101 @@ function buildReviewSummaryCard(summary = getReviewSummary(), guildIcon = null) 
   });
 }
 
-// Eine einzelne Bewertung als Karte (im Bewertungs-Kanal)
-function buildReviewCard({ user, stars, text, item, orderId }) {
+// Eine einzelne Bewertung als Karte (im Bewertungs-Kanal), optional mit Team-Antwort
+function buildReviewCard({ user, stars, text, item, orderId, reply = null }) {
+  const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  const replyRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`review_reply_${orderId}`)
+      .setLabel(reply ? 'Antwort ändern' : 'Antworten (Team)')
+      .setEmoji('💬')
+      .setStyle(ButtonStyle.Secondary)
+  );
   return card({
     tone: stars >= 4 ? 'success' : stars === 3 ? 'warning' : 'danger',
     eyebrow: `Bewertung von ${user.username}`,
     title: `${'⭐'.repeat(stars)}  ${stars}/5`,
     body: `> ${String(text).slice(0, 1500).replace(/\n/g, '\n> ')}`,
-    thumbnail: user.displayAvatarURL({ size: 128 }),
-    blocks: [`**Kunde:** <@${user.id}>  ·  **Gekauft:** ${String(item || '—').slice(0, 100)}`],
+    thumbnail: user.avatarUrl || user.displayAvatarURL?.({ size: 128 }) || null,
+    blocks: [
+      `**Kunde:** <@${user.id}>  ·  **Gekauft:** ${String(item || '—').slice(0, 100)}`,
+      reply ? `${e('chat', '💬')} **Antwort vom Team** (${reply.by})\n${String(reply.text).slice(0, 1000)}` : null
+    ],
+    rows: [replyRow],
     footer: `Bestellung ${orderId}`
   });
+}
+
+// ── Bewertungs-Erinnerung (einmal nach 24 Std. per DM) ──
+const REMIND_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function requests(data = loadData()) {
+  if (!data.reviewRequests || typeof data.reviewRequests !== 'object') data.reviewRequests = {};
+  return data.reviewRequests;
+}
+
+function trackReviewRequest(orderId, userId, channelId) {
+  if (!orderId || !userId) return;
+  const data = loadData();
+  requests(data)[orderId] = { userId, channelId: channelId || null, at: Date.now(), remindedAt: null };
+  saveData(data);
+}
+
+function getReviewRequest(orderId) {
+  return requests()[orderId] || null;
+}
+
+function dueReviewReminders(now = Date.now(), isReviewed = () => false) {
+  return Object.entries(requests())
+    .filter(([orderId, r]) => !r.remindedAt && now - r.at >= REMIND_AFTER_MS && !isReviewed(orderId))
+    .map(([orderId, r]) => ({ orderId, ...r }));
+}
+
+function markReviewReminded(orderId) {
+  const data = loadData();
+  const r = requests(data)[orderId];
+  if (r) {
+    r.remindedAt = Date.now();
+    saveData(data);
+  }
+}
+
+function buildReviewReminderCard(userId, orderId) {
+  const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`bewerten_${userId}_${orderId}`)
+      .setLabel('Jetzt bewerten')
+      .setEmoji('⭐')
+      .setStyle(ButtonStyle.Primary)
+  );
+  return card({
+    tone: 'warning',
+    eyebrow: '⭐ Kurze Bitte',
+    title: 'Wie war deine Bestellung?',
+    body: `Deine Bestellung **${orderId}** bei HugoSMP Market ist fertig. Eine kurze Bewertung hilft uns sehr – dauert nur 10 Sekunden!\n-# Danach bekommst du die **Kunden-Rolle**.`,
+    rows: [row],
+    footer: `Bestellung ${orderId}`,
+    timestamp: false
+  });
+}
+
+// Antwort vom Team speichern
+function setReviewReply(orderId, reply) {
+  const data = loadData();
+  const review = [...(data.reviews || [])].reverse().find(r => String(r.orderId) === String(orderId));
+  if (!review) return null;
+  review.reply = reply;
+  saveData(data);
+  return review;
+}
+
+function setReviewMessage(orderId, channelId, messageId, avatarUrl) {
+  const data = loadData();
+  const review = [...(data.reviews || [])].reverse().find(r => String(r.orderId) === String(orderId));
+  if (!review) return;
+  Object.assign(review, { channelId, messageId, avatarUrl });
+  saveData(data);
 }
 
 // Übersicht im Bewertungs-Kanal ist abgeschafft: alte Nachricht einmalig löschen
@@ -113,6 +197,13 @@ async function removeReviewSummary(client) {
 }
 
 module.exports = {
+  trackReviewRequest,
+  getReviewRequest,
+  dueReviewReminders,
+  markReviewReminded,
+  buildReviewReminderCard,
+  setReviewReply,
+  setReviewMessage,
   removeReviewSummary,
   buildReviewSummaryCard,
   buildReviewCard,
