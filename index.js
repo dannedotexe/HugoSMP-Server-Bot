@@ -729,7 +729,7 @@ let features = null;
 function getFeatures() {
   if (!features) {
     const ctx = buildCtx();
-    features = ['giveaways', 'admin', 'roles', 'tickets', 'shop', 'invites', 'moderation', 'welcome']
+    features = ['giveaways', 'admin', 'roles', 'cart', 'tickets', 'shop', 'invites', 'moderation', 'welcome']
       .map((name) => require(`./src/features/${name}`)(ctx));
   }
   return features;
@@ -741,9 +741,11 @@ async function handleInteraction(interaction) {
     if (interaction.isChatInputCommand()) return f.commands?.includes(interaction.commandName);
     if (interaction.isButton()) return f.buttons?.some((r) => r.test(interaction.customId));
     if (interaction.isModalSubmit()) return f.modals?.some((r) => r.test(interaction.customId));
+    if (interaction.isStringSelectMenu()) return f.selects?.some((r) => r.test(interaction.customId));
     return false;
   });
   if (!feature) return;
+  if (interaction.isStringSelectMenu()) return feature.select(interaction);
   if (interaction.isChatInputCommand()) return feature.command(interaction);
   if (interaction.isButton()) return feature.button(interaction);
   if (interaction.isModalSubmit()) return feature.modal(interaction);

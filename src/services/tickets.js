@@ -650,6 +650,18 @@ async function getDashboardOrderDetails(channelId) {
   };
 }
 
+// Warenkorb-Bestellung fertig → Bestand automatisch abziehen (genau einmal)
+function deductStockOnDone(data, meta) {
+  if (meta?.status !== 'fertig' || meta.stockDeductedAt || !meta.invoice?.fromCart) return false;
+  data.stock = data.stock || {};
+  for (const { id, qty } of meta.invoice.cartItems || []) {
+    if (!id || !(qty > 0)) continue;
+    data.stock[id] = Math.max(0, Number(data.stock[id] || 0) - qty);
+  }
+  meta.stockDeductedAt = Date.now();
+  return true;
+}
+
 function updateDashboardOrderMeta(channelId, patch) {
   const data = loadData();
   data.dashboardOrderMeta = data.dashboardOrderMeta || {};
@@ -659,7 +671,9 @@ function updateDashboardOrderMeta(channelId, patch) {
     updatedAt: Date.now()
   };
   trackOrderMeta(data, channelId, data.dashboardOrderMeta[channelId]);
+  const deducted = deductStockOnDone(data, data.dashboardOrderMeta[channelId]);
   saveData(data);
+  if (deducted) require('./stock').updateStockPanel().catch(() => {});
   return data.dashboardOrderMeta[channelId];
 }
 

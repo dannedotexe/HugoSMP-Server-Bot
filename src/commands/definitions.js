@@ -148,6 +148,28 @@ function buildCommandDefinitions() {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('zahlungsinfo')
+      .setDescription('Zahlungsdaten festlegen, die Kunden nach der Bestellung sehen')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addStringOption(opt =>
+        opt.setName('methode')
+          .setDescription('Zahlungsart')
+          .setRequired(true)
+          .addChoices(
+            { name: 'PayPal', value: 'paypal' },
+            { name: 'Bitcoin', value: 'bitcoin' },
+            { name: 'Paysafecard', value: 'paysafe' }
+          )
+      )
+      .addStringOption(opt =>
+        opt.setName('text')
+          .setDescription('z. B. „PayPal an x@y.de | Freunde & Familie“ – „-“ löscht')
+          .setRequired(true)
+          .setMaxLength(1000)
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('bestellung')
       .setDescription('Zeigt den Status deiner Bestellungen')
       .toJSON(),
