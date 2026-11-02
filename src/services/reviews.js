@@ -100,7 +100,20 @@ function buildReviewCard({ user, stars, text, item, orderId }) {
   });
 }
 
+// Übersicht im Bewertungs-Kanal ist abgeschafft: alte Nachricht einmalig löschen
+async function removeReviewSummary(client) {
+  const data = loadData();
+  const id = data.reviewSummaryMessageId;
+  if (!id) return;
+  const { REVIEWS_CHANNEL_ID } = require('../config');
+  const channel = client.channels.cache.get(REVIEWS_CHANNEL_ID);
+  await channel?.messages?.delete(id).catch(() => {});
+  data.reviewSummaryMessageId = null;
+  saveData(data);
+}
+
 module.exports = {
+  removeReviewSummary,
   buildReviewSummaryCard,
   buildReviewCard,
   buildReviewSummaryEmbed,

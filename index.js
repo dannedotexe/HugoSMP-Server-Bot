@@ -333,6 +333,7 @@ client.once('ready', async () => {
 
   await require('./src/emojis').syncEmojis(client);
   require('./src/services/backup').startBackups();
+  await require('./src/services/reviews').removeReviewSummary(client);
   startTicketReminders();
   await updateStockPanel();
   await updateLeaderboard();
