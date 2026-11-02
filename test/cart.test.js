@@ -82,3 +82,14 @@ test('Lager wird bei „fertig“ genau einmal abgezogen (nur Warenkorb-Bestellu
   tickets.updateDashboardOrderMeta('ch2', { status: 'fertig', invoice: { items: [{ id: 'money', quantity: 50 }] } });
   assert.equal(store.loadData().stock.money, 80, 'alte Freitext-Bestellungen ändern das Lager nicht');
 });
+
+test('/zahlungsinfo ohne Text öffnet ein Textfeld, Speichern klappt', async () => {
+  const cart = require('../src/features/cart')();
+  let modal = null;
+  await cart.command({ commandName: 'zahlungsinfo', options: { getString: k => (k === 'methode' ? 'paypal' : null) }, showModal: async m => { modal = m.toJSON(); } });
+  assert.equal(modal.custom_id, 'cart_payinfo_paypal');
+  let reply = null;
+  await cart.modal({ customId: 'cart_payinfo_paypal', user: { id: 'x' }, fields: { getTextInputValue: () => 'paypal.me/Hugo\nFreunde & Familie' }, reply: async r => { reply = r; } });
+  assert.match(reply.content, /Gespeichert/);
+  assert.equal(store.loadData().paymentInfo.paypal, 'paypal.me/Hugo\nFreunde & Familie');
+});

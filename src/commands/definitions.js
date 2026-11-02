@@ -163,8 +163,8 @@ function buildCommandDefinitions() {
       )
       .addStringOption(opt =>
         opt.setName('text')
-          .setDescription('z. B. „PayPal an x@y.de | Freunde & Familie“ – „-“ löscht')
-          .setRequired(true)
+          .setDescription('Optional – leer lassen öffnet ein Textfeld')
+          .setRequired(false)
           .setMaxLength(1000)
       )
       .toJSON(),

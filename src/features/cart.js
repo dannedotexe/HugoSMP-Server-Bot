@@ -247,7 +247,26 @@ module.exports = function createCart() {
     const raw = interaction.options.getString('text');
     const data = loadData();
     data.paymentInfo = data.paymentInfo || {};
-    if (!raw || raw.trim() === '-') {
+
+    // Ohne Text: Fenster mit großem Textfeld (am Handy viel einfacher)
+    if (!raw) {
+      const input = new TextInputBuilder()
+        .setCustomId('info')
+        .setLabel(`Zahlungsdaten für ${PAYMENTS[method].label}`)
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('z. B. paypal.me/DeinName\nBitte „Freunde & Familie“ wählen\n(leer lassen = löschen)')
+        .setRequired(false)
+        .setMaxLength(1000);
+      if (data.paymentInfo[method]) input.setValue(data.paymentInfo[method]);
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId(`cart_payinfo_${method}`)
+          .setTitle('Zahlungsinfo')
+          .addComponents(new ActionRowBuilder().addComponents(input))
+      );
+    }
+
+    if (raw.trim() === '-') {
       delete data.paymentInfo[method];
       saveData(data);
       return interaction.reply({ content: `✅ Zahlungsinfo für **${PAYMENTS[method].label}** entfernt.`, ephemeral: true });
@@ -367,6 +386,23 @@ module.exports = function createCart() {
   }
 
   async function modal(interaction) {
+    if (interaction.customId.startsWith('cart_payinfo_')) {
+      const method = interaction.customId.slice('cart_payinfo_'.length);
+      if (!PAYMENTS[method]) return;
+      const text = interaction.fields.getTextInputValue('info').trim().slice(0, 1000);
+      const data = loadData();
+      data.paymentInfo = data.paymentInfo || {};
+      if (text) data.paymentInfo[method] = text;
+      else delete data.paymentInfo[method];
+      saveData(data);
+      return interaction.reply({
+        content: text
+          ? `✅ Gespeichert. So sehen Kunden das bei **${PAYMENTS[method].label}**:\n>>> ${text}`
+          : `✅ Zahlungsinfo für **${PAYMENTS[method].label}** entfernt.`,
+        ephemeral: true
+      });
+    }
+
     const cart = getCart(interaction.user.id);
 
     if (interaction.customId === 'cart_ingame_modal') {
@@ -400,7 +436,7 @@ module.exports = function createCart() {
     command,
     buttons: [/^ticket_cat_items_geld$/, /^cart_(clear|ingame|submit)$/],
     selects: [/^cart_(add|payment)$/],
-    modals: [/^cart_ingame_modal$/, /^cart_qty_/],
+    modals: [/^cart_ingame_modal$/, /^cart_qty_/, /^cart_payinfo_/],
     button,
     select,
     modal
