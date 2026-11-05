@@ -30,6 +30,7 @@ const PAYMENTS = {
 };
 
 const CART_TTL_MS = 30 * 60 * 1000;
+const MIN_ORDER_EUR = 10; // Mindestbestellwert (Warenwert ohne Gebühren)
 const carts = new Map(); // userId → { items: [{ id, qty }], payment, ingame, at }
 
 function getCart(userId) {
@@ -77,8 +78,13 @@ function priceCart(cart, data = loadData()) {
   return { lines, base, surcharge, total, hasUnknownPrice: lines.some(l => l.subtotal === null) };
 }
 
+function meetsMinimum(cart) {
+  const priced = priceCart(cart);
+  return priced.hasUnknownPrice || priced.base >= MIN_ORDER_EUR;
+}
+
 function isReady(cart) {
-  return cart.items.length > 0 && Boolean(cart.payment) && Boolean(cart.ingame);
+  return cart.items.length > 0 && Boolean(cart.payment) && Boolean(cart.ingame) && meetsMinimum(cart);
 }
 
 // ── Ansicht des Warenkorbs ──
@@ -96,9 +102,12 @@ function buildCartView(userId) {
   const totalLine = priced.lines.length
     ? [
       priced.surcharge ? `-# + ${Math.round(priced.surcharge * 100)} % Paysafecard-Gebühr` : null,
-      `**Gesamt: ${formatEuroValue(priced.total)}**${priced.hasUnknownPrice ? ' (+ Preis auf Anfrage)' : ''}`
+      `**Gesamt: ${formatEuroValue(priced.total)}**${priced.hasUnknownPrice ? ' (+ Preis auf Anfrage)' : ''}`,
+      !priced.hasUnknownPrice && priced.base < MIN_ORDER_EUR
+        ? `${e('warn', '⚠️')} Mindestbestellwert **${formatEuroValue(MIN_ORDER_EUR)}** – es fehlen noch **${formatEuroValue(MIN_ORDER_EUR - priced.base)}**`
+        : null
     ].filter(Boolean).join('\n')
-    : null;
+    : `-# Mindestbestellwert: ${formatEuroValue(MIN_ORDER_EUR)}`;
 
   const infoLines = [
     `${e('user', '👤')} **Ingame-Name:** ${cart.ingame ? cart.ingame : '*fehlt noch*'}`,
@@ -148,7 +157,11 @@ function buildCartView(userId) {
     body: options.length ? null : '⚠️ Gerade ist leider alles ausverkauft.',
     blocks: [itemLines, totalLine, infoLines],
     rows,
-    footer: isReady(cart) ? 'Alles bereit – jetzt absenden!' : 'Gleiches Item nochmal wählen = Menge ändern',
+    footer: isReady(cart)
+      ? 'Alles bereit – jetzt absenden!'
+      : cart.items.length && !meetsMinimum(cart)
+        ? `Mindestbestellwert ${formatEuroValue(MIN_ORDER_EUR)}`
+        : 'Gleiches Item nochmal wählen = Menge ändern',
     timestamp: false
   });
 }
@@ -577,4 +590,5 @@ module.exports = function createCart() {
 };
 
 module.exports.PAYMENTS = PAYMENTS;
+module.exports.MIN_ORDER_EUR = MIN_ORDER_EUR;
 module.exports._internals = { getCart, priceCart, buildCartView, carts, paypalLink, formatPaymentInfo, buildPayRow };

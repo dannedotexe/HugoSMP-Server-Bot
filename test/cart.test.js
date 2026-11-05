@@ -123,3 +123,34 @@ test('Bezahlen: PayPal-Link mit Betrag, Bitcoin kopierbar, „Ich habe bezahlt�
   assert.equal(tickets.getOrderDashboardMeta(store.loadData(), 'payc').status, 'bezahlt');
   assert.match(JSON.stringify(sent[1].components.map(c => c.toJSON())), /Bezahlt/, 'Kunde sieht Status-Update');
 });
+
+test('Mindestbestellwert 10 €: darunter kein Absenden, Hinweis wie viel fehlt', () => {
+  const { carts, buildCartView } = require('../src/features/cart')._internals;
+  const data = store.loadData();
+  data.stockItems = [{ id: 'money', name: '1M Money', price: '0,20 €', emoji: '💰' }];
+  data.stock = { money: 500 };
+  store.saveData(data);
+  carts.set('min1', { items: [{ id: 'money', qty: 20 }], payment: 'paypal', ingame: 'Steve', at: Date.now() });
+  let view = JSON.stringify(buildCartView('min1').components.map(c => c.toJSON()));
+  assert.match(view, /es fehlen noch \*\*6,00 €\*\*/);
+  assert.match(view, /"custom_id":"cart_submit"[^}]*"disabled":true/);
+  carts.get('min1').items[0].qty = 50;
+  view = JSON.stringify(buildCartView('min1').components.map(c => c.toJSON()));
+  assert.doesNotMatch(view, /es fehlen noch/);
+  assert.match(view, /"custom_id":"cart_submit"(?![^}]*"disabled":true)/);
+});
+
+test('Lager-Panel: Verfügbares oben, Ausverkauftes gesammelt unten', () => {
+  const { buildStockEmbed } = require('../src/services/stock');
+  const data = store.loadData();
+  data.stockItems = [
+    { id: 'money', name: '1M Money', price: '0,20 €', emoji: '💰' },
+    { id: 'elytra', name: 'Elytra', price: '110 €', emoji: '🪽' },
+    { id: 'mace', name: 'Mace', price: '1,50 €', emoji: '🔨' }
+  ];
+  data.stock = { money: 562, elytra: 0, mace: 3 };
+  store.saveData(data);
+  const d = buildStockEmbed().toJSON().description;
+  assert.match(d, /Auf Lager[\s\S]*1M Money[\s\S]*\*\*562\*\* verfügbar[\s\S]*nur noch 3[\s\S]*Ausverkauft[\s\S]*Elytra/);
+  assert.equal(buildStockEmbed().toJSON().title, 'Lagerbestand', 'Erkennung im Kanal bleibt');
+});

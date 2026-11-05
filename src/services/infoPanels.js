@@ -100,7 +100,8 @@ function buildOrderInfoPanel(guild) {
     section(e('box', '🔍'), '1. Bestand prüfen & Ticket öffnen', [
       `Schau in ${stock}, ob dein Item da ist.`,
       `Öffne ein Ticket in ${tickets} oder unten per Button.`,
-      'Gib an: **Ingame-Name**, **Item & Menge**, **Zahlungsmethode**.'
+      'Gib an: **Ingame-Name**, **Item & Menge**, **Zahlungsmethode**.',
+      'Mindestbestellwert: **10 €**.'
     ]),
     '',
     section(e('card', '💳'), '2. Bezahlen', [

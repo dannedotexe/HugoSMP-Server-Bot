@@ -68,7 +68,7 @@ function buildTicketPanel() {
     thumbnail: client.guilds.cache.first()?.iconURL({ size: 256 }) || null,
     blocks: [
       [
-        `${e('clipboard', '1️⃣')} **Formular ausfüllen** – Item, Menge, Ingame-Name, Zahlung`,
+        `${e('clipboard', '1️⃣')} **Warenkorb füllen** – ab 10 € Bestellwert`,
         `${e('card', '2️⃣')} **Bezahlen** – die Infos bekommst du im Bestell-Kanal`,
         `${e('box', '3️⃣')} **Erhalten** – die Items kommen per /orders`
       ].join('\n')
@@ -122,7 +122,7 @@ const PANEL_DETECTORS = [
 
 // Erhöhen, wenn sich die Erkennung ändert, damit alle Kanäle neu
 // durchsucht werden, auch ohne Design-Änderung.
-const PANEL_REFRESH_REVISION = 11;
+const PANEL_REFRESH_REVISION = 12;
 
 function isStockMessage(message) {
   const title = message.embeds?.[0]?.title || '';
