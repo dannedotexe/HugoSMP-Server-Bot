@@ -49,7 +49,7 @@ const HELP_CATEGORIES = [
     emoji: '⚙️',
     description: 'Panels, Einstellungen und Bot-Verwaltung',
     commands: [
-      'config', 'setuptickets', 'setupverify', 'setupbestellinfo', 'zahlungsinfo', 'setuproles', 'setupinviterewards',
+      'config', 'ankündigung', 'setuptickets', 'setupverify', 'setupbestellinfo', 'zahlungsinfo', 'setuproles', 'setupinviterewards',
       'setupleaderboard', 'setupstock', 'setupstockpanel', 'botstatus', 'setinvites',
       'embed', 'say', 'dashboard', 'version', 'aktualisieren', 'serverstruktur', 'umbenennen'
     ]

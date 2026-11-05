@@ -446,6 +446,10 @@ client.on('messageCreate', async message => {
 client.on('guildMemberAdd', async member => {
   if (!member.user.bot) recordEvent('joins');
   await coreCommands.applyAutoRoles(member);
+  // Neue Mitglieder bekommen die Ankündigungs-Pings (News) standardmäßig – abwählbar in #ping-claim
+  if (!member.user.bot && PING_ROLES.news && member.guild.roles.cache.has(PING_ROLES.news)) {
+    await member.roles.add(PING_ROLES.news, 'Standard: Ankündigungen').catch(e => console.error('news role error:', e.message));
+  }
 
   try {
     const accountAge = Date.now() - member.user.createdTimestamp;
@@ -729,7 +733,7 @@ let features = null;
 function getFeatures() {
   if (!features) {
     const ctx = buildCtx();
-    features = ['giveaways', 'admin', 'roles', 'cart', 'tickets', 'shop', 'invites', 'moderation', 'welcome']
+    features = ['giveaways', 'admin', 'roles', 'announce', 'cart', 'tickets', 'shop', 'invites', 'moderation', 'welcome']
       .map((name) => require(`./src/features/${name}`)(ctx));
   }
   return features;
