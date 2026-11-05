@@ -153,15 +153,32 @@ function buildStockEmbed() {
   const data = loadData();
 
   const items = data.stockItems || STOCK_ITEMS;
-  const lines = items.map(item => {
-    const amount = data.stock[item.id] ?? 0;
+  const amountOf = item => Number(data.stock?.[item.id] ?? 0);
+  const inStock = items.filter(item => amountOf(item) > 0);
+  const soldOut = items.filter(item => amountOf(item) <= 0);
 
-    return `${item.emoji} **${item.name}** · ${item.price}\n${stockStatusText(amount)}`;
-  }).join('\n\n');
+  // Verfügbares groß und grün oben, Ausverkauftes klein gesammelt unten
+  const parts = [];
+  if (inStock.length) {
+    parts.push(
+      '### 🟢 Auf Lager',
+      ...inStock.map(item => {
+        const amount = amountOf(item);
+        const badge = amount <= 5 ? `🟡 **nur noch ${amount}**` : `**${amount}** verfügbar`;
+        return `${item.emoji || '•'} **${item.name}** · ${item.price}\n> ${badge}`;
+      })
+    );
+  } else {
+    parts.push('### 🔴 Gerade ist alles ausverkauft', '-# Schalte die **Restock**-Benachrichtigung an, dann sagen wir Bescheid.');
+  }
+  if (soldOut.length && inStock.length) {
+    parts.push('', '**🔴 Ausverkauft**', `-# ${soldOut.map(item => item.name).join(' · ')}`);
+  }
 
   return new BrandEmbed()
     .setTitle('Lagerbestand')
-    .setDescription(lines)
+    .setTone(inStock.length ? 'success' : 'muted')
+    .setDescription(parts.join('\n'))
     .setFooter({ text: 'Live-Bestand · zuletzt aktualisiert' })
     .setTimestamp();
 }
