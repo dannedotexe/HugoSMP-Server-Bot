@@ -148,6 +148,17 @@ function buildCommandDefinitions() {
       .toJSON(),
 
     new SlashCommandBuilder()
+      .setName('ankündigung')
+      .setDescription('Ankündigung als Karte in #ankündigungen posten')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+      .addBooleanOption(opt =>
+        opt.setName('benachrichtigen')
+          .setDescription('News-Rolle pingen (Standard: ja)')
+          .setRequired(false)
+      )
+      .toJSON(),
+
+    new SlashCommandBuilder()
       .setName('zahlungsinfo')
       .setDescription('Zahlungsdaten festlegen, die Kunden nach der Bestellung sehen')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
