@@ -172,7 +172,7 @@ function buildStockEmbed() {
     parts.push('### 🔴 Gerade ist alles ausverkauft', '-# Schalte die **Restock**-Benachrichtigung an, dann sagen wir Bescheid.');
   }
   if (soldOut.length && inStock.length) {
-    parts.push('', '**🔴 Ausverkauft**', `-# ${soldOut.map(item => item.name).join(' · ')}`);
+    parts.push('', '**🔴 Ausverkauft**', ...soldOut.map(item => `-# ${item.emoji || '•'} ${item.name} · ${item.price}`));
   }
 
   return new BrandEmbed()
